@@ -55,6 +55,7 @@ import Layout from '../layouts/Layout.astro';
           <div id="hand"></div>
           <div class="me-meta"><span id="ledger-me"></span></div>
           <div class="pile" id="pile-me"></div>
+          <div class="bubble" id="bubble-me"></div>
         </div>
       </div>
 
@@ -199,6 +200,9 @@ import Layout from '../layouts/Layout.astro';
   }
   #seat-left .bubble { left: 6px; border-top-left-radius: 2px; }
   #seat-right .bubble { right: 6px; border-top-right-radius: 2px; }
+  #bubble-me { top: auto; bottom: calc(100% + 8px); left: 50%; margin: 0;
+    transform: translate(-50%, 4px); border-bottom-left-radius: 2px; }
+  #bubble-me.show { transform: translate(-50%, 0); }
   .bubble.show { opacity: 1; transform: translateY(0); }
 
   .center-top { text-align: center; flex: 1; }

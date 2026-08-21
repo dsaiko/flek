@@ -637,9 +637,10 @@ export class TableUI {
     const text = bubbleText(a, state);
     if (!text) return;
     const seat = a.seat;
-    if (seat === this.opts.humanSeat) return;
-    const pos = seat === this.seatAt('left') ? 'left' : 'right';
-    const el = $(this.root, `#seat-${pos} .bubble`);
+    const el =
+      seat === this.opts.humanSeat
+        ? $(this.root, '#bubble-me')
+        : $(this.root, `#seat-${seat === this.seatAt('left') ? 'left' : 'right'} .bubble`);
     el.innerHTML = text;
     el.classList.add('show');
     const prev = this.bubbleTimers.get(seat);
