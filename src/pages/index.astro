@@ -243,6 +243,10 @@ import Layout from '../layouts/Layout.astro';
   .card-btn:disabled { cursor: default; filter: drop-shadow(0 2px 5px rgba(0,0,0,.3)) grayscale(.35) brightness(.82); }
   .card-btn:not(:disabled):hover { z-index: 3; position: relative; }
   .card-btn:not(:disabled):hover img { transform: translateY(-14px); }
+  /* historické skeny jsou tmavší — výraznější kontrast hratelné × nehratelné */
+  #table.pattern-history .card-btn:disabled { filter: drop-shadow(0 2px 5px rgba(0,0,0,.3)) grayscale(.55) brightness(.68); }
+  #table.pattern-history .card-btn:not(:disabled) img { filter: brightness(1.05); }
+  #table.pattern-history .card-btn:not(:disabled):hover img { filter: brightness(1.14); }
   .card-btn.selected img { transform: translateY(-18px); outline: 3px solid #ffd75e; border-radius: 6px; }
 
   /* blokace interakcí během animací */

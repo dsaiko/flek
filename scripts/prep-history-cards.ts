@@ -59,6 +59,8 @@ async function processCard(file: string): Promise<{ file: string; w: number; h: 
 
   const out = join(OUT, file.replace(/\.png$/i, '.webp'));
   const result = await sharp(meta.data)
+    // skeny jsou samy o sobě tmavé — projasnit pro obrazovku
+    .modulate({ brightness: 1.14, saturation: 1.06 })
     .composite([
       { input: edgeShade, blend: 'multiply' },
       { input: mask, blend: 'dest-in' },

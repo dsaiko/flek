@@ -103,6 +103,7 @@ export class TableUI {
     if (phase.name !== 'discard-talon') this.selected.clear();
 
     this.root.classList.remove('animating');
+    this.root.classList.toggle('pattern-history', this.opts.pattern() === 'history');
     this.renderOpponents(v, reveal);
     this.renderCenter(v, state);
     this.renderHand(v, legal, reveal);
