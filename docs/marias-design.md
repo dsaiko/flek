@@ -570,15 +570,18 @@ jen `src/scripts/main.ts` + `src/lib/ui/`.
 
 0. ✅ **Karty**: historická sada stažena (`cards/history/`), moderní sada navržena, iterována
    s uživatelem a schválena (`cards/modern/` + `cards/modern-en/`, generátor `scripts/gen-cards.ts`)
-1. **Revize tohoto dokumentu** ← průběžně; implementace enginu až po odsouhlasení
-2. **Skeleton**: git init, Astro projekt, Makefile (+ Makefile.local, S3_BUCKET=flek.saiko.cz),
-   Layout z mars, prázdná stránka, `make deploy-s3-dryrun`
-3. **Engine**: cards → types → engine/legal/tricks → talon/fleks → obě aukce → scoring/sazby
-   → view; průběžně `scripts/verify.ts`; pravidla čerpat z PDF ČSM
+1. ✅ **Revize dokumentu** — průběžně; fixpoint review zapracována (§11)
+2. ✅ **Skeleton**: Astro, Makefile s guardem, Layout z mars, assets pipeline, verify
+3. ✅ **Engine**: obě varianty kompletní (aukce, fleky+proti, sehrávka, scoring dle ČSM);
+   self-play fuzz 120 her, replay determinismus. Zbývá: reveal karty „z lidu" ve veřejné
+   historii, závazek „dvě sedmy" (typy připraveny, za configem)
 4. **Ověření originálu**: DOSBox (brew install dosbox-x), hrát FLEK!/RE!, zdokumentovat flow,
-   sazby a žebříček licitace → `docs/original-notes.md`, doladit presety v `sazby.ts`
-5. **AI**: heuristiky → determinizace → ISMCTS → worker; self-play testy
-6. **UI**: SVG karty → stůl a interakce → animace → zúčtování/konto → nastavení → fullscreen → mobil
+   sazby → `docs/original-notes.md`, doladit preset SAZBY_FLEK
+5. ✅ **AI**: heuristiky (IQ prahy) + determinizace + ISMCTS (max^n, delta reward) + bezstavový
+   worker s watchdogem a fallbackem. Zbývá: doladění síly (noHigherThan constraints, lepší playout)
+6. ✅ **UI — první hratelná verze**: stůl, interakce všech fází, bubliny (základ hlášek),
+   zúčtování, nastavení (varianta/IQ/vzor), autosave+resume, fullscreen, Playwright smoke test.
+   Zbývá: animace karet, zvuky (§5.7), plné hlášky (§5.8), mince/bank, klávesnice, mobil polish
 7. **Obsah**: bilingvální stránka dle §5.6 (tribute Otci + Pivoňka FLEK!, pravidla, dohledat
    a sepsat historii mariáše), zvuky (§5.7), hlášky obou sad (§5.8), EN překlady pravidel, README
    (vzor mars: EN + Česky, „independent tribute", odkazy), LICENSE (MIT; originál zůstává
