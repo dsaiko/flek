@@ -11,7 +11,7 @@ import { legalActions } from '../rules/legal';
 import { trickWinner } from '../rules/tricks';
 import type { GameState, HandResult, PlayerAction, PlayerView, Seat } from '../rules/types';
 import { view } from '../rules/view';
-import { backSrc, cardName, cardSrc, suitIcon, type Pattern } from './cardAssets';
+import { backSrc, cardName, cardSrc, suitIcon, suitName, type Pattern } from './cardAssets';
 import { aiNames, compLabel, currentLang, flekName, fmtMoney, t } from './i18n';
 
 export interface TableCallbacks {
@@ -450,7 +450,12 @@ export class TableUI {
         fleks: t('fleks'),
         tricks: t('yourTurn'),
       };
-      el.textContent = hint[v.phase.name] ?? t('yourTurn');
+      let text = hint[v.phase.name] ?? t('yourTurn');
+      // zvolený trumf připomenout už při odhozu a ohlášení
+      if ((v.phase.name === 'discard-talon' || v.phase.name === 'declare') && v.phase.standing.trump !== null) {
+        text += ` · ${t('trump')}: ${suitName(v.phase.standing.trump)}`;
+      }
+      el.textContent = text;
       el.classList.add('me-turn');
     } else {
       const actor = this.currentActorName(v);
