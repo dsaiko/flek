@@ -8,9 +8,12 @@ projito po snímcích 2026-08-21. Doplní se pozorováním v DOSBoxu.
 - **Jen vlastní ruka je vidět** (vějíř dole, mírně překryté karty). Protihráči nemají
   zobrazené ruce vůbec — existují jen skrze **barevné bubliny** (ovály) vlevo/vpravo nahoře.
 - **Zvolená trumfová karta**: leží **lícem dolů** uprostřed nahoře, dokud se soupeři
-  nevyjádří (Dobrá/Špatná); pak se otočí a po celou hru stojí **lícem vzhůru
-  na stojánku vpravo nahoře** (připomínka trumfu).
-- **Talon**: rub(y) viditelné na stole vpravo.
+  nevyjádří (Dobrá/Špatná); pak se **otočí uprostřed** (reveal).
+- **Talon / odkládací místo vpravo nahoře** (oprava po diskusi s uživatelem):
+  vpravo nahoře leží **odhozené karty rubem** (talon); po otočení trumfu na nich
+  chvíli leží otočená trumfová karta; později místo překrývají další ruby
+  (nejspíš štychy aktéra) — přesné chování ověřit v DOSBoxu.
+  Bubliny „Poslouchám, pánové" se ukazují u tohoto místa (patří aktérovi).
 - **Kontrakt badge**: bílý box „hra ♣" (se symbolem trumfové barvy) pod trumfovou kartou;
   betl jako červený box „BETL" uprostřed; kilo jako box „**100 ♞**".
 - **Hlášky (20/40)**: malý bílý box „20" se objeví u zahrané karty.
@@ -66,7 +69,7 @@ projito po snímcích 2026-08-21. Doplní se pozorováním v DOSBoxu.
 
 ## Nápady k převzetí (zatím neimplementovat — potvrzeno uživatelem „správný směr")
 
-- trumfová karta vystavená po celou hru (stojánek vpravo nahoře) + badge hra/barva
+- otočení trumfové karty uprostřed stolu + badge hra/barva; talon jako viditelné odkládací místo
 - boxy bodů („70"/„20") a box hlášky „20" u karty
 - přehled štychů po konci hry (kaskády lícem nahoru + otočený talon)
 - vyúčtovací box ve stylu FLEK! + sarkastické komentáře
