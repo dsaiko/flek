@@ -4,6 +4,7 @@ node_modules/
 # build výstupy
 dist/
 .astro/
+public/cards/
 
 # lokální konfigurace (deploy — AWS profil, bucket; viz Makefile)
 Makefile.local

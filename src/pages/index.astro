@@ -1,0 +1,85 @@
+---
+import Layout from '../layouts/Layout.astro';
+---
+<Layout
+  titleCs="Flek! · Mariáš"
+  titleEn="Flek! · Mariáš — Czech card game"
+  descriptionCs="Flek! — online mariáš. Pocta hrám FLEK! a RE! od Pivoňka Software (MS-DOS, 1991–93)."
+  descriptionEn="Flek! — Mariáš, the classic Czech card game online. A tribute to FLEK! and RE! by Pivoňka Software (MS-DOS, 1991–93)."
+>
+  <main>
+    <section class="hero">
+      <p class="kicker">FLEK!.EXE · 1992 → 2026</p>
+      <h1>Flek!</h1>
+      <p class="lead">
+        <span class="cs">Online mariáš — pocta hrám <strong>FLEK!</strong> a <strong>RE!</strong> Ing. Jaroslava Pivoňky.</span>
+        <span class="en">Mariáš, the classic Czech card game — a tribute to <strong>FLEK!</strong> and <strong>RE!</strong> by Ing. Jaroslav Pivoňka.</span>
+      </p>
+    </section>
+
+    <section class="table-placeholder">
+      <div class="fan" aria-hidden="true">
+        <img src="/cards/modern/DH.svg" alt="" width="120" />
+        <img src="/cards/modern/KL.svg" alt="" width="120" />
+        <img src="/cards/modern/TB.svg" alt="" width="120" />
+        <img src="/cards/modern/UA.svg" alt="" width="120" />
+      </div>
+      <p class="wip">
+        <span class="cs">Hra je ve výstavbě — brzy si zde zahrajete volený i licitovaný mariáš.</span>
+        <span class="en">The game is under construction — chosen and auction mariáš are coming soon.</span>
+      </p>
+    </section>
+
+    <footer>
+      <p>
+        <span class="cs">© 2026 Dušan Saiko · nezávislá pocta hrám FLEK! a RE! (Pivoňka Software) ·</span>
+        <span class="en">© 2026 Dušan Saiko · an independent tribute to FLEK! and RE! (Pivoňka Software) ·</span>
+        <a href="https://github.com/dsaiko/flek">GitHub</a>
+      </p>
+    </footer>
+  </main>
+</Layout>
+
+<style is:global>
+  :root {
+    --table: #1e5c38;
+    --ink: #1f2430;
+    --muted: #6b7280;
+  }
+  body {
+    margin: 0;
+    color: var(--ink);
+    font: 16px/1.55 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: linear-gradient(160deg, #f6f7f4, #eef1ea);
+    min-height: 100vh;
+  }
+  main { max-width: 960px; margin: 0 auto; padding: 84px 20px 40px; }
+
+  .hero { text-align: center; }
+  .kicker {
+    font: 600 13px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+    letter-spacing: 3px; color: var(--muted); margin: 0 0 10px;
+  }
+  .hero h1 { font-size: 56px; margin: 0 0 10px; letter-spacing: -1px; }
+  .lead { color: var(--muted); max-width: 560px; margin: 0 auto; }
+
+  .table-placeholder {
+    margin: 40px auto; padding: 48px 24px 32px; border-radius: 20px;
+    background: radial-gradient(ellipse at 50% 30%, #2a7548, var(--table) 75%);
+    box-shadow: inset 0 0 60px rgba(0,0,0,.25), 0 10px 30px rgba(17,24,39,.15);
+    text-align: center;
+  }
+  .fan { display: flex; justify-content: center; }
+  .fan img {
+    border-radius: 8px; box-shadow: 0 4px 14px rgba(0,0,0,.35);
+    margin: 0 -14px; transition: transform .15s;
+  }
+  .fan img:nth-child(1) { transform: rotate(-9deg) translateY(8px); }
+  .fan img:nth-child(2) { transform: rotate(-3deg); }
+  .fan img:nth-child(3) { transform: rotate(3deg); }
+  .fan img:nth-child(4) { transform: rotate(9deg) translateY(8px); }
+  .wip { color: #dcefe2; margin: 30px 0 0; font-size: 15px; }
+
+  footer { text-align: center; color: var(--muted); font-size: 13px; margin-top: 30px; }
+  footer a { color: inherit; }
+</style>

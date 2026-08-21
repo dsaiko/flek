@@ -1,0 +1,102 @@
+---
+interface Props {
+  titleCs: string;
+  titleEn: string;
+  descriptionCs: string;
+  descriptionEn: string;
+}
+
+const { titleCs, titleEn, descriptionCs, descriptionEn } = Astro.props;
+const GOATCOUNTER = 'https://saiko-flek.goatcounter.com/count';
+---
+<!doctype html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content={descriptionCs} />
+  <meta name="theme-color" content="#1e5c38" />
+  <link rel="canonical" href={new URL('/', Astro.site)} />
+  <script is:inline>
+    (function(){var l='cs';try{var q=(location.search.match(/[?&]lang=(cs|en)/)||[])[1];
+     if(q)l=q;else if(localStorage.getItem('lang')==='en')l='en';}catch(e){}
+     window.__lang=l;document.documentElement.classList.add('lang-'+l);})();
+  </script>
+  <title>{titleCs}</title>
+  <style is:global>
+    * { box-sizing: border-box; }
+    .lang-cs .en, .lang-en .cs { display: none; }
+
+    .home-link, .langpill {
+      position: fixed; top: 18px; z-index: 30;
+      background: rgba(255,255,255,.94); border: 1px solid #e5e7eb;
+      box-shadow: 0 2px 10px rgba(17,24,39,.08); backdrop-filter: blur(10px);
+    }
+    .home-link {
+      left: 18px; display: inline-flex; align-items: center; gap: 7px;
+      color: #374151; border-radius: 999px; padding: 8px 16px;
+      font: 600 14px/1.2 system-ui, sans-serif; text-decoration: none;
+    }
+    .home-link:hover { background: #f9fafb; }
+    .home-link .arrow { transition: transform .12s; }
+    .home-link:hover .arrow { transform: translateX(-3px); }
+
+    .langpill { right: 18px; display: flex; gap: 4px; border-radius: 999px; padding: 4px; }
+    .langpill button {
+      display: flex; align-items: center; justify-content: center; width: 36px; height: 27px;
+      border: 0; background: none; border-radius: 999px; cursor: pointer; padding: 0;
+      opacity: .45; transition: opacity .12s, background .12s;
+    }
+    .langpill button:hover { opacity: .8; background: #f3f4f6; }
+    .langpill button.on { opacity: 1; background: #eef2ff; }
+    .langpill svg { display: block; border-radius: 2px; box-shadow: 0 0 0 1px rgba(0,0,0,.06); }
+  </style>
+</head>
+<body data-title-cs={titleCs} data-title-en={titleEn} data-description-cs={descriptionCs} data-description-en={descriptionEn}>
+  <a class="home-link" href="https://www.saiko.cz/"><span class="arrow">←</span><span class="cs">PROJEKTY</span><span class="en">PROJECTS</span></a>
+
+  <div class="langpill" role="group" aria-label="Language / Jazyk">
+    <button data-lang="cs" title="Čeština" aria-label="Čeština">
+      <svg width="24" height="16" viewBox="0 0 6 4" xmlns="http://www.w3.org/2000/svg">
+        <rect width="6" height="2" fill="#fff"/><rect width="6" height="2" y="2" fill="#d7141a"/>
+        <path d="M0,0 L3,2 L0,4 Z" fill="#11457e"/>
+      </svg>
+    </button>
+    <button data-lang="en" title="English" aria-label="English">
+      <svg width="24" height="16" viewBox="0 0 60 30" xmlns="http://www.w3.org/2000/svg">
+        <clipPath id="gb-a"><rect width="60" height="30"/></clipPath>
+        <clipPath id="gb-b"><path d="M30,15 h30 v15 z v15 h-30 z h-30 v-15 z v-15 h30 z"/></clipPath>
+        <g clip-path="url(#gb-a)">
+          <rect width="60" height="30" fill="#012169"/>
+          <path d="M0,0 L60,30 M60,0 L0,30" stroke="#fff" stroke-width="6"/>
+          <path d="M0,0 L60,30 M60,0 L0,30" clip-path="url(#gb-b)" stroke="#C8102E" stroke-width="4"/>
+          <path d="M30,0 v30 M0,15 h60" stroke="#fff" stroke-width="10"/>
+          <path d="M30,0 v30 M0,15 h60" stroke="#C8102E" stroke-width="6"/>
+        </g>
+      </svg>
+    </button>
+  </div>
+
+  <slot />
+
+  <script is:inline>
+    (function(){
+      var d=document.body.dataset;
+      var TITLES={cs:d.titleCs,en:d.titleEn},DESCRIPTIONS={cs:d.descriptionCs,en:d.descriptionEn};
+      function apply(l){
+        document.documentElement.classList.remove('lang-cs','lang-en');
+        document.documentElement.classList.add('lang-'+l);document.documentElement.lang=l;
+        document.title=TITLES[l]||TITLES.cs;
+        var meta=document.querySelector('meta[name="description"]');
+        if(meta)meta.setAttribute('content',DESCRIPTIONS[l]||DESCRIPTIONS.cs);
+        document.querySelectorAll('.langpill button').forEach(function(b){b.classList.toggle('on',b.dataset.lang===l);});
+        try{localStorage.setItem('lang',l);}catch(e){} window.__lang=l;
+      }
+      document.querySelectorAll('.langpill button').forEach(function(b){b.addEventListener('click',function(){apply(b.dataset.lang);});});
+      apply(window.__lang||'cs');
+    })();
+  </script>
+
+  {GOATCOUNTER && <script is:inline async src="//gc.zgo.at/count.js" data-goatcounter={GOATCOUNTER}></script>}
+</body>
+</html>

@@ -53,6 +53,13 @@ async function processCard(file: string): Promise<{ file: string; w: number; h: 
 
 mkdirSync(OUT, { recursive: true });
 const files = readdirSync(SRC).filter((f) => /\.png$/i.test(f)).sort();
+
+// rychlá cesta: už vygenerováno (přegenerování vynutí `--force`)
+const existing = readdirSync(OUT).filter((f) => /\.webp$/i.test(f));
+if (existing.length === files.length && !process.argv.includes('--force')) {
+  console.log(`OK: ${existing.length} karet už existuje v ${OUT} (přegenerování: --force)`);
+  process.exit(0);
+}
 if (files.length !== 32) {
   console.warn(`Pozor: očekáváno 32 karet, nalezeno ${files.length}`);
 }

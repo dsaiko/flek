@@ -2,29 +2,31 @@
   "name": "flek",
   "version": "1.0.0",
   "description": "Flek! — online mariáš · tribute to FLEK!/RE! by Pivoňka Software",
-  "main": "index.js",
-  "directories": {
-    "doc": "docs"
-  },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "dev": "astro dev",
+    "build": "astro check && astro build",
+    "preview": "astro preview",
+    "check": "astro check",
+    "verify": "tsx scripts/verify.ts",
+    "cards": "tsx scripts/gen-cards.ts && tsx scripts/gen-cards.ts en",
+    "assets": "tsx scripts/prep-history-cards.ts && tsx scripts/assets.ts"
   },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/dsaiko/flek.git"
   },
-  "keywords": [],
   "author": "Dusan Saiko",
   "license": "MIT",
   "type": "module",
-  "bugs": {
-    "url": "https://github.com/dsaiko/flek/issues"
-  },
-  "homepage": "https://github.com/dsaiko/flek#readme",
   "private": "true",
   "devDependencies": {
+    "@astrojs/check": "^0.9.10",
+    "@types/node": "^26.2.0",
     "sharp": "^0.35.3",
     "tsx": "^4.23.12",
-    "typescript": "^7.0.2"
+    "typescript": "^6.0.3"
+  },
+  "dependencies": {
+    "astro": "^7.2.4"
   }
 }
