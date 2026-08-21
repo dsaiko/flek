@@ -82,6 +82,23 @@ export class TableUI {
       return true;
     }
 
+    // „z lidu": otočená karta se ukazuje všem — chvíli ji vystav uprostřed
+    if (a?.type === 'choose-trump' && a.card === 'from-people' && prev.unseen.length > 0) {
+      const flipped = prev.unseen[0];
+      const trickEl = $(this.root, '#trick');
+      this.root.classList.add('animating');
+      trickEl.innerHTML = '';
+      const img = document.createElement('img');
+      img.src = cardSrc(flipped, this.opts.pattern());
+      img.alt = cardName(flipped);
+      img.className = 'played pos-me win';
+      trickEl.appendChild(img);
+      const statusEl = $(this.root, '#status');
+      statusEl.textContent = `${t('fromPeople')}: ${cardName(flipped)}`;
+      await sleep(this.reducedMotion() ? 900 : 1800);
+      return false; // pokračuj běžným překreslením
+    }
+
     // dohraný štych → pauza, zvýraznění vítězné karty, odlet do paklu vítěze
     if (a?.type === 'play' && prev.phase.name === 'tricks' && prev.contract) {
       const prevTrick = prev.phase.trick;
