@@ -117,11 +117,15 @@ Tři čistě oddělené vrstvy, konvence z mars/tsp:
 ```
 
 Multiplayer-ready principy:
-- engine = **čistý reducer** `(stav, akce) → stav`, deterministický, bez vedlejších efektů
+- engine = **čistý reducer** `(stav, akce) → stav`, deterministický, bez vedlejších efektů;
+  **i rozdání je akce** (`deal` se seedem) — v enginu není žádná nesledovaná náhoda
 - hráči komunikují **jen serializovatelnými akcemi** (plain JSON)
 - skryté informace řeší **projekce pohledu** `view(state, seat)` — přesně to, co by později
   posílal server vzdálenému klientovi
-- replay = `history.reduce(apply, dealtState)` — základ pro rekonstrukci, ladění i budoucí síť
+- replay **celého zápasu** = `history.reduce(apply, initialState)` — historie obsahuje
+  i `deal` akce se seedy, takže je rekonstruovatelné vše od první hry
+- orchestrace zápasu (smyčka tahů, plánování AI, autosave) žije v **`src/lib/match/`** —
+  čistá vrstva bez DOM; `main.ts` ji jen napojuje na UI. Budoucí server použije tutéž vrstvu.
 
 ## 5. Detailní návrh
 
@@ -142,15 +146,28 @@ type Card = number;                        // 0..31 = suit*8 + rank
 ```ts
 type Variant  = 'voleny' | 'licitovany';
 type GameMode = 'hra' | 'betl' | 'durch';
-interface Contract { mode: GameMode; trump: Suit | null; sedma: boolean; kilo: boolean; declarer: Seat; }
 type Seat = 0 | 1 | 2;
+
+interface Contract {
+  mode: GameMode;
+  trump: Suit | null;
+  declarer: Seat;
+  sedma: Seat | null;    // kdo hlásil sedmu — aktér, NEBO obránce (sedma proti)
+  kilo: Seat | null;     // kdo hlásil kilo — aktér, NEBO obránce (sto proti)
+}
+
 type FlekTarget = 'hra' | 'sedma' | 'kilo' | 'betl' | 'durch';
 
 interface FlekState {
   levels: Partial<Record<FlekTarget, number>>;      // 0=nic, 1=flek, 2=re... multiplikátor = 2^level
   lastRaiser: Partial<Record<FlekTarget, Seat>>;    // zvyšovat smí jen druhá strana
-  awaiting: Seat[];                                 // kdo se ještě musí vyjádřit
+  toAct: Seat;                                      // kdo mluví
+  passed: Seat[];                                   // kdo od posledního zvýšení řekl „dobrá"
 }
+// Sémantika: `flek{target}` zvyšuje jednu komponentu (a maže `passed`); `good` = pas na
+// VŠECHNY aktuálně otevřené komponenty. Fáze končí, když všechna oprávněná sedadla
+// pasovala od posledního zvýšení. Oprávnění: na komponentu smí zvyšovat jen strana,
+// která na ní nezvyšovala naposled (obránci fleky, aktér re, ...).
 ```
 
 **GameState** — vše plain JSON (žádné třídy, Map, funkce) → bezpečné přes worker i budoucí síť:
@@ -158,24 +175,31 @@ interface FlekState {
 ```ts
 interface GameState {
   variant: Variant;
-  config: RulesConfig;               // sazby + house-rule přepínače (§5.3)
+  config: RulesConfig;               // sazby + house-rule přepínače (§5.3); IMMUTABLE —
+                                     // změna nastavení se projeví až příští `deal` akcí
   dealer: Seat;
+  seed: number;                      // seed aktuálního rozdání (z poslední `deal` akce)
   hands: [Card[], Card[], Card[]];   // autoritativní; skrývá se přes view()
   talon: Card[];                     // aktuální 2 skryté karty (po odhozu)
-  originalTalon: Card[];             // co aktér zvedl (pro view logiku)
-  history: PlayerAction[];           // úplný log akcí (replay)
-  ledger: [number, number, number];  // konto, zero-sum
+  talonKnowledge: [Card[], Card[], Card[]]; // které karty talonu/odhozu KTERÉ sedadlo vidělo
+                                     // (aktér svůj odhoz; při převzetí talonu dle configu)
+  history: PlayerAction[];           // úplný log akcí vč. `deal` (replay celého zápasu)
+  handResults: HandResult[];         // archiv odehraných her (statistika, zúčtovací přehled)
+  ledger: [number, number, number];  // konto, zero-sum; odvozené z handResults, drženo pro rychlost
   handNo: number;
-  contract: Contract | null;
+  contract: Contract | null;         // finální kontrakt; během aukce je autoritativní phase.standing
   phase: Phase;                      // discriminated union ↓
 }
+
+// částečný kontrakt během aukce (než padne finální declare)
+interface Standing { declarer: Seat; mode: GameMode | null; trump: Suit | null; }
 
 type Phase =
   | { name: 'choose-trump' }                                    // jen volený
   | { name: 'bidding'; bids: Bid[]; toAct: Seat; best: BidLevel | null }  // jen licitovaný
-  | { name: 'discard-talon'; declarer: Seat }
-  | { name: 'declare'; declarer: Seat }
-  | { name: 'takeover'; toAct: Seat; standing: Contract }       // jen volený
+  | { name: 'discard-talon'; standing: Standing }               // trumf/mód známý ⇒ validace odhozu
+  | { name: 'declare'; standing: Standing }
+  | { name: 'takeover'; toAct: Seat; standing: Standing }       // jen volený
   | { name: 'fleks'; fleks: FlekState }
   | { name: 'tricks'; trickNo: number; leader: Seat; toAct: Seat;
       trick: { seat: Seat; card: Card }[];
@@ -184,20 +208,25 @@ type Phase =
   | { name: 'scored'; result: HandResult };
 ```
 
-**PlayerAction** union:
+**PlayerAction** union (vč. systémové akce `deal` — reducer tak pokrývá celý zápas):
 
 ```ts
 type PlayerAction =
+  | { type: 'deal'; seed: number; config?: RulesConfig }              // systémová; nové rozdání
   | { type: 'choose-trump'; seat: Seat; card: Card | 'from-people' }  // z ruky / z lidu
   | { type: 'bid'; seat: Seat; bid: BidLevel | 'pass' }               // licitovaný
   | { type: 'discard'; seat: Seat; cards: [Card, Card] }
   | { type: 'declare'; seat: Seat; mode: GameMode; sedma: boolean; kilo: boolean }
   | { type: 'takeover'; seat: Seat; claim: 'betl' | 'durch' | 'good' }
-  | { type: 'flek'; seat: Seat; target: FlekTarget }
+  | { type: 'flek'; seat: Seat; target: FlekTarget }                  // vč. sedma/kilo proti dle oprávnění
   | { type: 'good'; seat: Seat }
   | { type: 'play'; seat: Seat; card: Card; announceMarriage: boolean }
   | { type: 'ack-score'; seat: Seat };
 ```
+
+„Z lidu" je **deterministické**: karta = první karta forhontova druhého (neprohlédnutého)
+balíčku, který je dán seedem rozdání — reducer zůstává čistý, žádná dodatečná náhoda;
+otočená karta se objeví ve veřejné historii (reveal pro všechny).
 
 Hláška je **explicitní flag na akci play** (hlásí se při zahrání K/svrška s partnerskou kartou
 stále v ruce) — engine validuje nárok, ale nehlásí automaticky: je to rozhodnutí hráče
@@ -210,16 +239,26 @@ interface PlayerView {
   seat: Seat;
   hand: Card[];
   handCounts: [number, number, number];
-  talonKnown: Card[] | null;        // originalTalon jen pro toho, kdo ho zvedl
-  contract; phase; ledger; dealer; config; ...
+  talonKnown: Card[];               // = state.talonKnowledge[seat] — co JÁ vím o talonu/odhozu
+                                    // (vlastní odhoz vč. převzatého talonu dle configu)
+  contract; phase; ledger; dealer; config; handResults; ...
   publicHistory: PublicAction[];    // historie s redigovanými skrytými payloady
 }
 function view(state: GameState, seat: Seat): PlayerView;
+
+// PublicAction = tentýž union jako PlayerAction, se skrytými payloady nahrazenými:
+//   deal          → { type: 'deal' }                          (seed se neprozrazuje)
+//   discard       → { type: 'discard'; seat }                 (karty ne)
+//   choose-trump  → karta veřejná (z ruky ukázaná / z lidu otočená)
+//   ostatní akce jsou veřejné beze změny
+type PublicAction = ...;            // definováno v types.ts vedle PlayerAction
 ```
 
-Redakce: cizí ruce → jen počty; `discard` bez karet; karta „z lidu" po otočení veřejná;
-zahrané karty a hlášky veřejné. **AI worker dostává výhradně `PlayerView`, nikdy `GameState`** —
-fér hra je vynucená typem, ne dobrou vůlí.
+Redakce: cizí ruce → jen počty; talon jen dle `talonKnowledge[seat]` (při převzetí betlem/durchem
+vidí původní i nový aktér přesně to, co fyzicky viděli — řídí `config.talonOnTakeover`).
+**AI worker dostává výhradně `PlayerView`, nikdy `GameState`** — fér hra je vynucená typem.
+**`legalActions` je definováno nad `PlayerView`** (viz §5.3), takže AI používá tentýž zdroj
+pravdy jako engine a nemusí si žádný stav dopočítávat.
 
 ### 5.2 Stavový stroj
 
@@ -258,31 +297,52 @@ takeover (soupeři po řadě:                 │
 Divergence variant je omezená na moduly `auction-voleny.ts` a `auction-licitovany.ts`;
 zbytek fází je sdílený kód parametrizovaný `variant`/`config`.
 
+**Rozdání (kanonicky, provádí `apply` na akci `deal`)**: seedované míchání → forhont 7 karet,
+ostatní 2× po 5, forhont dalších 5 (celkem 12, z prvních 7 volí trumf), ostatní zbylé karty
+do 10 — aktér po zvednutí drží 12 a **2 odhazuje do talonu**, všichni pak mají 10.
+Pořadí balíčků je fixní konstanta (stabilní replay).
+
 ### 5.3 Pravidla a scoring (`src/lib/rules/`)
 
-- **`legalActions(state, seat)` = jediný zdroj pravdy legality.** `apply` validuje členstvím
-  v `legalActions`, nikdy nederivuje pravidla podruhé → UI (aktivní tlačítka), AI (akční prostor)
-  i validace se nemohou rozejít.
+- **`legalActions(view: PlayerView)` = jediný zdroj pravdy legality.** Definováno nad
+  POHLEDEM, ne nad GameState — legalita vlastních akcí závisí jen na veřejném stavu + vlastní
+  ruce, takže tutéž funkci volá UI (aktivní tlačítka), AI ve workeru (akční prostor) i engine:
+  `apply(state, action)` validuje členstvím v `legalActions(view(state, action.seat))`,
+  nikdy nederivuje pravidla podruhé → nikdo se nemůže rozejít. (Systémová akce `deal` je
+  legální jen ve fázi `scored` / na startu zápasu.)
 - Legalita ve štychu (`tricks.ts`): (1) urči aktuálně vítěznou kartu; (2) máš-li barvu výnosu,
   musíš ji ctít a přebít vítěznou kartu, pokud přebít lze a máš čím (po přebití trumfem už
   barvu jen ctíš); (3) bez barvy povinný trumf, vítězí-li trumf, povinnost přetrumfnout;
   (4) bez obojího cokoliv. Betl/durch: bod 2 s přirozeným pořadím, bez bodu 3.
 - **Invarianty v `apply`** (levné, vždy zapnuté): konzervace všech 32 karet; velikosti rukou
   dle fáze; talon = 2 karty bez es/desítek; flek zvyšuje jen strana, která nezvyšovala naposled;
-  hláška jen s partnerskou kartou v ruce; ledger zero-sum.
+  hláška jen s partnerskou kartou v ruce; ledger zero-sum a rovný sumě `handResults`.
+- **Chování při selhání invariantu**: ve verify/dev → throw (fail fast). V produkci →
+  `console.error` s replay historií (serializovaná do zprávy, ať ji hráč může nahlásit),
+  dialog s omluvou a nabídkou „rozdat znovu" (stav je nedůvěryhodný; konto se zachová
+  z posledního validního `handResults`).
 
 **Scoring** (`scoring.ts` + `sazby.ts`):
 
 ```ts
 interface Sazby {
-  hra: 1; sedma: 2; tichaSedma: 1; kilo: 4; ticheKilo: 2; betl: 10; durch: 20;  // dle ČSM
+  // všechna pole jsou number — uvedené hodnoty jsou DEFAULTY presetu ČSM, ne literální typy
+  hra: number;        // 1
+  sedma: number;      // 2
+  tichaSedma: number; // 1
+  kilo: number;       // 4
+  ticheKilo: number;  // 2
+  betl: number;       // 10
+  durch: number;      // 20
   kiloScaling: 'double' | 'linear';   // za každých 10 bodů nad/pod 100
-  cervenyMultiplier: 2;               // jen barevné hry (hra/sedma/kilo)
+  cervenyMultiplier: number;          // 2; jen barevné hry (hra/sedma/kilo)
   maxFlekLevel: number;               // 5 = kalhoty, 6 = kajzr
   talonForbidsTrump: boolean;         // house rules — defaulty dle originálu/ČSM
   talonOnTakeover: 'retake' | 'keep';
   countMarriagesIntoKilo: boolean;
 }
+// sazby.ts exportuje pojmenované presety: SAZBY_CSM (výchozí), SAZBY_FLEK (podle originálu,
+// doladí se empiricky ve fázi 4); RulesConfig = { sazby: Sazby } + případné další přepínače
 ```
 
 - `scoreTricks(state)` → body stran (esa + desítky + poslední štych) + hlášky + flagy
@@ -310,9 +370,15 @@ z `publicHistory`:
 - `noHigherThan[seat][suit]` — nepřebil, ač přebít musel ⇒ nemá vyšší
 - `noTrump[seat]` — netrumfnul, ač musel
 - hláška ⇒ držel partnerskou kartu (sledovat spotřebu)
-- talon: aktér ho zná přesně; ostatní ho vzorkují z neviděných karet s omezením bez es/desítek —
-  reálná informační asymetrie
-- rejection sampling s omezeným počtem pokusů, fallback greedy most-constrained-first
+- talon: aktér ho zná přesně (`talonKnown`); ostatní ho vzorkují z neviděných karet s omezením
+  bez es/desítek — reálná informační asymetrie
+- **derivace omezení nesmí duplikovat pravidla**: přebíjecí povinnosti počítá přes sdílené
+  helpery exportované z `rules/tricks.ts` (vítězná karta štychu, „čím lze přebít") —
+  legalita štychu žije v enginu jednou
+- **vzorkování s garantovaným ukončením**: rejection sampling (≤50 pokusů) → greedy
+  most-constrained-first → pokud ani to (teoreticky) neuspěje, postupně uvolňuj nejslabší
+  odvozená omezení (`noHigherThan` → `noTrump` → `voids`) a zaloguj; konzervace karet drží
+  vždy z konstrukce (rozdává se z poolu neviděných karet)
 
 **Vyhledávání:** single-tree ISMCTS — každá iterace: nová determinizace u kořene → sestup UCB1
 omezený na akce legální v této determinizaci → expanze → playout levnou politikou → back-propagace
@@ -324,8 +390,8 @@ fleky, sedmu i kilo). Budget ~1500 ms dle obtížnosti, práce po chuncích ~200
 
 ```ts
 type ToWorker =
-  | { type: 'configure'; difficulty: 'easy' | 'normal' | 'hard'; seed: number }
-  | { type: 'think'; requestId: number; view: PlayerView; budgetMs: number }
+  | { type: 'think'; requestId: number; view: PlayerView; budgetMs: number;
+      difficulty: 'easy' | 'normal' | 'hard'; seed: number }   // vše per-request, žádný configure
   | { type: 'cancel'; requestId: number };
 
 type FromWorker =
@@ -334,10 +400,18 @@ type FromWorker =
   | { type: 'error'; requestId: number; message: string };
 ```
 
-Worker je **bezstavový** (vše potřebné nese `view`) → triviálně korektní, restartovatelný,
-identický s budoucím server-side AI procesem. Jeden worker pro obě AI (myslí sekvenčně);
-`requestId` řeší zrušení a opožděné odpovědi. I heuristická rozhodnutí jdou přes worker —
-jedna cesta kódu.
+Worker je **skutečně bezstavový** — každý `think` nese vše (view, budget, obtížnost i seed),
+mezi requesty se nic nedrží → triviálně korektní, restartovatelný, reprodukovatelný (seed
+per tah je odvozený od seedu rozdání + čísla tahu), identický s budoucím server-side AI
+procesem. Jeden worker pro obě AI (myslí sekvenčně).
+
+**Odolnost proti selhání workeru** (match controller, §4):
+- **watchdog**: neodpoví-li worker do `budgetMs + 2 s`, `terminate()` → nový worker → retry 1×
+- **fallback**: selže-li i retry (nebo Worker API chybí), tah spočítá heuristika na hlavním
+  vlákně — `lib/ai/heuristics.ts` je čistá knihovna, jde importovat přímo; hra se nikdy nezasekne
+- **opožděný tah**: přijatý `move` s `requestId` ≠ aktuálně čekaný se zahodí (po `cancel`,
+  po restartu workeru, po novém rozdání); `apply` navíc každý tah validuje, takže zastaralý
+  tah nemůže poškodit stav
 
 ### 5.5 UI (`src/scripts/main.ts`, `src/lib/ui/`)
 
@@ -368,8 +442,11 @@ jedna cesta kódu.
     (historická ~0.63, moderní 62/106 ≈ 0.585) — řeší CSS per sada, engine se o vzhled nestará.
 - Stůl: vlastní ruka dole vějířem, protihráči rubem vlevo/vpravo nahoře, střed = štych,
   kontextový panel akcí (volba trumfu, licitace, fleky, hláška), zúčtovací obrazovka s rozpadem
-  po komponentách, konto hráčů (localStorage)
-- **Fullscreen** (Fullscreen API), responzivní vč. mobilu
+  po komponentách, konto hráčů (persistence viz §5.9)
+- **Fullscreen** (Fullscreen API); na iOS Safari (kde Fullscreen API pro ne-video prvky není)
+  fallback „maximalizovaný" CSS režim přes celý viewport; responzivní vč. mobilu
+- **Přístupnost**: kompletní ovládání klávesnicí (šipky + Enter — pocta ovládání DOS
+  originálu!), viditelný fokus, `prefers-reduced-motion` → animace karet se vypnou/zkrátí
 - Nastavení: varianta volený/licitovaný, obtížnost AI, rychlost animací, zvuky (jemné, volitelné)
 - Stránka podle mars vzoru: `Layout.astro` (lang-pill CZ/EN, meta, GoatCounter), nahoře hrací
   stůl, pod ním obsahové sekce (viz §5.6)
@@ -394,6 +471,8 @@ Pod hracím stolem, bilingválně CZ/EN:
   **míchání**, **rozdávání**, položení karty, sebrání štychu, flek/re (důraz), výhra/prohra
 - Zdroj: CC0 samply (freesound.org) nebo vlastní nahrávky skutečných karet; krátké, tiché,
   bez hudby; implementace Web Audio API, soubory v `public/sounds/`, licence zdokumentovat
+- **Autoplay policy**: AudioContext se odemyká prvním uživatelským gestem (klik na „Rozdat")
+  — do té doby se zvuky tiše zahazují, žádná chyba v konzoli
 
 ### 5.8 Mariášové hlášky (table talk)
 
@@ -409,6 +488,18 @@ Dvě sady, přepínatelné v nastavení (výchozí **slušná**; „hospodská" 
   držet v mezích (bez vulgarit na hraně, spíš hospodská jadrnost)
 - Texty v datovém souboru (`src/lib/ui/tableTalk.ts`), CZ + EN ekvivalenty
   (EN spíš neutrální herní hlášky — folklor je nepřeložitelný, možno nechat české s vysvětlivkou)
+
+### 5.9 Persistence a obnova
+
+- **Autosave**: match controller po každém `apply` uloží celý serializovaný `GameState`
+  do localStorage v obálce `{ v: 1, state }` (verze schématu kvůli budoucím migracím).
+  Reload/pád tabu/mobilní eviction → dialog „Pokračovat v rozehrané hře?" a obnova stavu.
+- **Jediný vlastník konta = GameState** (`ledger` + `handResults`); localStorage je jen
+  persistovaná kopie celého stavu, žádná druhá pravda. Nevalidní/nečitelný záznam
+  (jiná verze, poškozený JSON) → zahodit a začít nový zápas, konto z posledního
+  validního stavu je pryč jen v tomto krajním případě.
+- Nastavení UI (jazyk, vzor karet, zvuky, obtížnost) v samostatném klíči — nezávislé na zápase;
+  herní config (sazby, house-rules) je součástí GameState a mění se jen `deal` akcí.
 
 ## 6. Struktura projektu
 
@@ -433,6 +524,8 @@ src/
       talon.ts  fleks.ts  scoring.ts  sazby.ts  view.ts
     ai/
       heuristics.ts  determinize.ts  ismcts.ts  playout.ts
+    match/                      # orchestrace zápasu: smyčka tahů, AiPlayer + watchdog,
+                                # autosave/resume (§5.9) — bez DOM, sdílené s budoucím serverem
     ui/                         # karty, stůl, dialogy (bez herní logiky)
   worker/
     messages.ts  ai.worker.ts
@@ -477,7 +570,12 @@ jen `src/scripts/main.ts` + `src/lib/ui/`.
    - CloudFront distribuce s aliasem `flek.saiko.cz`, default root object `index.html`
    - **DNS**: Route 53 zóna `saiko.cz` — A/AAAA alias `flek` → CloudFront distribuce
    - Makefile: `S3_BUCKET=flek.saiko.cz`, sync do kořene bucketu (vlastní bucket ⇒ `--delete`
-     v kořeni je zde v pořádku, na rozdíl od guardu v mars/tsp Makefile)
+     v kořeni je zde v pořádku, na rozdíl od guardu v mars/tsp Makefile). **Guard**: deploy
+     cíle tvrdě assertují `S3_BUCKET == "flek.saiko.cz"` — `--delete` v kořeni nesmí nikdy
+     mířit na jiný (sdílený) bucket, ani překlepem v Makefile.local
+   - Pořadí uploadu: nejdřív hashované assety, `index.html` jako poslední — minimalizuje okno
+     nekonzistence; plná atomicita/rollback se pro statický web tohoto typu neřeší
+     (rollback = `git revert` + redeploy)
    - `make all && make deploy`, GitHub repo **`flek`** (popis: „Flek! — online mariáš · tribute
      to FLEK!/RE! by Pivoňka Software", topics: marias, card-game, czech, ms-dos, tribute)
 
@@ -532,3 +630,48 @@ Před deployem `make build && make preview` + `make deploy-s3-dryrun`.
 5. Hlášky (§5.8): rozsah hospodské sady — jak drsná smí být?
 6. ✅ Název: **„Flek!"** (titulek webu „Flek! · Mariáš"), GitHub repo **`flek`**,
    web **`flek.saiko.cz`** (vlastní subdoména, DNS v Route 53) — rozhodnuto s uživatelem
+
+## 11. Fixpoint review — validace nálezů (2026-08-21)
+
+Design prošel multi-agentní revizí (fixpoint, 4 revizoři × 3 lens, 92 nálezů, 52 zamítl už
+judge). Zbylých 40 otevřených jsem validoval — **oprávněné zapracovány do §4–§8 výše**,
+neoprávněné zamítnuty:
+
+### Zapracováno (oprávněné)
+
+| Téma | Nálezy | Řešení |
+|---|---|---|
+| Rozdání mimo reducer, replay jen v rámci hry, seed nikde | i2, i12, i44, i48, i61, i55 | `deal` je akce se seedem v historii; `seed` v GameState; config immutable, mění se `deal` akcí |
+| Chybí archiv odehraných her | i37 | `handResults: HandResult[]` v GameState, ledger z něj odvozený |
+| AI nemůže volat `legalActions(GameState)` | i3, i14, i17 | `legalActions(view: PlayerView)` — jeden zdroj pravdy pro UI, AI i apply |
+| Talon knowledge per hráč (převzetí, vlastní odhoz) | i13, i36, i84 | `talonKnowledge: [Card[],Card[],Card[]]`, view vydává vlastní položku |
+| Legalita odhozu potřebuje trumf/mód před `declare` | i45 | fáze `discard-talon`/`declare`/`takeover` nesou `Standing` (částečný kontrakt) |
+| Fleky: `good` bez cíle vs. per-komponentové žebříčky | i34 | definována sémantika: `good` = pas na vše otevřené; fáze končí, když všichni oprávnění pasovali od posledního zvýšení |
+| Contract neumí sedmu/sto proti | i35 | `sedma/kilo: Seat \| null` (držitel závazku, i obránce) |
+| „Z lidu" = náhoda v čistém reduceru | i18, i83 | deterministicky: první karta forhontova neprohlédnutého balíčku ze seedu; reveal veřejný |
+| Zaseknutí hry při pádu/hangu workeru; stale move | i62, i80, i85 | watchdog (budget+2 s) → respawn → retry 1× → heuristický fallback na main threadu; stale `requestId` se zahazuje |
+| Worker „bezstavový", ale configure drží stav | i26 | `configure` zrušen, difficulty+seed per `think`; seed tahu odvozen od seedu rozdání |
+| Determinizer duplikuje pravidla; fallback bez záruk | i5, i63 | sdílené helpery z `tricks.ts`; ukončení garantováno postupným uvolňováním omezení + log |
+| Rozehraná hra se ztrácí reloadem; ledger dvojí pravda | i64, i81, i39 | §5.9: autosave GameState `{v, state}` po každém apply, resume dialog; jediný vlastník konta = GameState |
+| Orchestrace v DOM vrstvě proti multiplayer cíli | i1 | `src/lib/match/` — čistý match controller, main.ts jen binding |
+| `PublicAction` nespecifikován | i21 | definován v types.ts (redakce `deal`/`discard`, reveal choose-trump) |
+| `Sazby` literální typy vs. presety | i42 | pole jsou `number`, hodnoty = defaulty; presety `SAZBY_CSM`, `SAZBY_FLEK` |
+| Duplicita contract/declarer ve fázích | i10 | fáze nesou jen `Standing`; `contract` se plní až po `declare` |
+| Nekonzistentní popis rozdávání | i51 | kanonický popis v §5.2 |
+| Chování při selhání invariantu | i65 | dev throw; prod log s replayem + dialog „rozdat znovu" |
+| `--delete` s operátorským prefixem | i74 | deploy cíle assertují `S3_BUCKET == "flek.saiko.cz"` |
+| Web Audio autoplay | i86 | odemknutí prvním gestem (§5.7) |
+| Klávesnice + reduced-motion | i89 | §5.5 — plné ovládání klávesnicí (pocta originálu), `prefers-reduced-motion` |
+| iOS Safari fullscreen | i90 | CSS fallback „maximalizovaný režim" (§5.5) |
+
+### Zamítnuto (s odůvodněním)
+
+- **i75** (atomic release/rollback pro S3 sync): nepřiměřené pro statický tribute web —
+  hashované assety + upload `index.html` naposled okno nekonzistence prakticky eliminují;
+  rollback = git revert + redeploy. Zapracována jen levná mitigace pořadí uploadu.
+- **i9, i41** (rehosting PDF pravidel bez práv / dvojí kopie bez synchronizace): **zastaralé** —
+  review běžela nad starší verzí dokumentu; mezitím rozhodnuto PDF neredistribuovat vůbec
+  (§3.1: jen odkazy na zdroj ČSM, vlastní texty vlastními slovy).
+
+Zamítnutí judge (52 nálezů) jsem přezkoumal namátkou a souhlasím s nimi — typicky duplicity,
+spekulace bez konkrétního selhání, nebo restaty už zdokumentovaných rozhodnutí.
