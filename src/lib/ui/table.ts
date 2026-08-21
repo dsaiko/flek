@@ -56,26 +56,33 @@ export class TableUI {
     this.prevState = state;
     this.chain = this.chain.then(async () => {
       try {
-        await this.playTransitions(prev, state);
+        const handled = await this.playTransitions(prev, state);
+        if (!handled) this.renderNow(state);
       } catch (e) {
         console.error(e);
+        this.renderNow(state);
       }
-      this.renderNow(state);
     });
   }
 
-  private async playTransitions(prev: GameState | null, state: GameState): Promise<void> {
-    if (!prev) return;
+  /** Vrací true, když přechod sám vykreslil finální stav. */
+  private async playTransitions(prev: GameState | null, state: GameState): Promise<boolean> {
+    if (!prev) return false;
     const a = state.history[state.history.length - 1];
 
-    // rozdání → karty letí od balíčku
+    // rozdání po vzoru FLEK!: karty se v ruce objevují postupně
     if (a?.type === 'deal') {
-      this.showLastActionBubble(state); // ať bublina nečeká
-      await this.animateDeal();
-      return;
+      this.renderNow(state, true);
+      if (!this.reducedMotion()) {
+        this.root.classList.add('animating');
+        const n = state.hands[this.opts.humanSeat].length;
+        await sleep(n * REVEAL_STEP_MS + 350);
+        this.root.classList.remove('animating');
+      }
+      return true;
     }
 
-    // dohraný štych → pauza, zvýraznění vítězné karty, odlet k vítězi
+    // dohraný štych → pauza, zvýraznění vítězné karty, odlet do paklu vítěze
     if (a?.type === 'play' && prev.phase.name === 'tricks' && prev.contract) {
       const prevTrick = prev.phase.trick;
       if (prevTrick.length === 2) {
@@ -84,10 +91,11 @@ export class TableUI {
         await this.animateTrickEnd(full, winner);
       }
     }
+    return false;
   }
 
   /** Okamžité plné překreslení. */
-  private renderNow(state: GameState): void {
+  private renderNow(state: GameState, reveal = false): void {
     const me = this.opts.humanSeat;
     const v = view(state, me);
     const legal = legalActions(v);
@@ -95,9 +103,10 @@ export class TableUI {
     if (phase.name !== 'discard-talon') this.selected.clear();
 
     this.root.classList.remove('animating');
-    this.renderOpponents(v);
+    this.renderOpponents(v, reveal);
     this.renderCenter(v, state);
-    this.renderHand(v, legal);
+    this.renderHand(v, legal, reveal);
+    this.renderPiles(v);
     this.renderActions(v, legal);
     this.renderStatus(v, legal);
     this.renderResult(v);
@@ -138,25 +147,6 @@ export class TableUI {
     await sleep(430);
   }
 
-  private async animateDeal(): Promise<void> {
-    if (this.reducedMotion()) return;
-    this.root.classList.add('animating');
-    const overlay = document.createElement('div');
-    overlay.className = 'deal-anim';
-    const targets = ['me', 'left', 'right'];
-    for (let i = 0; i < 18; i += 1) {
-      const img = document.createElement('img');
-      img.src = backSrc();
-      img.alt = '';
-      img.className = `deal-card to-${targets[i % 3]}`;
-      img.style.animationDelay = `${i * 45}ms`;
-      overlay.appendChild(img);
-    }
-    this.root.appendChild(overlay);
-    await sleep(1000);
-    overlay.remove();
-  }
-
   // ── protihráči ─────────────────────────────────────────────────────────────
 
   private seatAt(pos: 'left' | 'right'): Seat {
@@ -164,7 +154,7 @@ export class TableUI {
     return ((me + (pos === 'left' ? 1 : 2)) % 3) as Seat;
   }
 
-  private renderOpponents(v: PlayerView): void {
+  private renderOpponents(v: PlayerView, reveal = false): void {
     for (const pos of ['left', 'right'] as const) {
       const seat = this.seatAt(pos);
       const box = $(this.root, `#seat-${pos}`);
@@ -179,11 +169,48 @@ export class TableUI {
         img.src = backSrc();
         img.alt = '';
         img.className = 'back';
+        if (reveal && !this.reducedMotion()) {
+          img.classList.add('reveal');
+          img.style.animationDelay = `${i * REVEAL_STEP_MS}ms`;
+        }
         backs.appendChild(img);
       }
     }
     const meLedger = this.root.querySelector<HTMLElement>('#ledger-me');
     if (meLedger) meLedger.textContent = `${t('you')}: ${fmtLedger(v.ledger[this.opts.humanSeat])}`;
+  }
+
+  // ── pakle vybraných štychů ──────────────────────────────────────────────────
+
+  private renderPiles(v: PlayerView): void {
+    const tricksOf: [number, number, number] = [0, 0, 0];
+    if (v.phase.name === 'tricks') {
+      for (const s of [0, 1, 2] as Seat[]) tricksOf[s] = v.phase.won[s].length / 3;
+    }
+    const targets: [Seat, string][] = [
+      [this.opts.humanSeat, '#pile-me'],
+      [this.seatAt('left'), '#pile-left'],
+      [this.seatAt('right'), '#pile-right'],
+    ];
+    for (const [seat, sel] of targets) {
+      const el = $(this.root, sel);
+      el.innerHTML = '';
+      const n = tricksOf[seat];
+      for (let i = 0; i < n; i += 1) {
+        const img = document.createElement('img');
+        img.src = backSrc();
+        img.alt = '';
+        // ledabylý hospodský pakl: deterministické natočení po štychu
+        img.style.transform = `rotate(${((i * 47) % 24) - 12}deg) translate(${(i % 3) * 3}px, ${(i % 2) * 2}px)`;
+        el.appendChild(img);
+      }
+      if (n > 0) {
+        const count = document.createElement('span');
+        count.className = 'pile-count';
+        count.textContent = `${n}×`;
+        el.appendChild(count);
+      }
+    }
   }
 
   // ── střed stolu ────────────────────────────────────────────────────────────
@@ -232,7 +259,7 @@ export class TableUI {
 
   // ── ruka ───────────────────────────────────────────────────────────────────
 
-  private renderHand(v: PlayerView, legal: PlayerAction[]): void {
+  private renderHand(v: PlayerView, legal: PlayerAction[], reveal = false): void {
     const handEl = $(this.root, '#hand');
     handEl.innerHTML = '';
     const phase = v.phase;
@@ -257,7 +284,11 @@ export class TableUI {
       // jemný vějíř: natočení + pokles ke krajům (transform na buttonu,
       // hover/selected zdvih řeší CSS na <img>, aby se nepřepisovaly)
       const off = i - (n - 1) / 2;
-      btn.style.transform = `rotate(${(off * 3).toFixed(1)}deg) translateY(${(off * off * 1.6).toFixed(1)}px)`;
+      btn.style.transform = `rotate(${(off * 3).toFixed(1)}deg) translateY(${(off * off * 1.4).toFixed(1)}px)`;
+      if (reveal && !this.reducedMotion()) {
+        btn.classList.add('reveal');
+        btn.style.animationDelay = `${i * REVEAL_STEP_MS}ms`;
+      }
       const img = document.createElement('img');
       img.src = cardSrc(c, this.opts.pattern());
       img.alt = cardName(c);
@@ -462,6 +493,8 @@ export class TableUI {
 }
 
 // ── pomocné formátování ────────────────────────────────────────────────────
+
+const REVEAL_STEP_MS = 90;
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 

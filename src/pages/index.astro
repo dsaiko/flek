@@ -26,6 +26,7 @@ import Layout from '../layouts/Layout.astro';
             <div class="seat-name"></div>
             <div class="backs"></div>
             <div class="seat-ledger"></div>
+            <div class="pile" id="pile-left"></div>
             <div class="bubble"></div>
           </div>
           <div class="center-top">
@@ -36,6 +37,7 @@ import Layout from '../layouts/Layout.astro';
             <div class="seat-name"></div>
             <div class="backs"></div>
             <div class="seat-ledger"></div>
+            <div class="pile" id="pile-right"></div>
             <div class="bubble"></div>
           </div>
         </div>
@@ -46,6 +48,7 @@ import Layout from '../layouts/Layout.astro';
           <div id="actions"></div>
           <div id="hand"></div>
           <div class="me-meta"><span id="ledger-me"></span></div>
+          <div class="pile" id="pile-me"></div>
         </div>
 
         <div id="result" class="overlay">
@@ -104,8 +107,8 @@ import Layout from '../layouts/Layout.astro';
 
 <style is:global>
   :root {
-    --table: #1e5c38;
-    --table-light: #2a7548;
+    --table: #24507c;
+    --table-light: #2f6499;
     --ink: #1f2430;
     --muted: #6b7280;
     --card-w: clamp(52px, 8.5vw, 92px);
@@ -157,15 +160,33 @@ import Layout from '../layouts/Layout.astro';
 
   .opp-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
   .seatbox { position: relative; min-width: 140px; }
-  .seat-name { color: #dcefe2; font-weight: 700; font-size: 14px; margin-bottom: 4px; }
-  .seat-ledger { color: #a8cdb4; font-size: 12px; margin-top: 2px; }
-  .backs { display: flex; }
-  .backs .back { width: calc(var(--card-w) * .45); border-radius: 4px; margin-right: calc(var(--card-w) * -.28);
-    box-shadow: 0 1px 4px rgba(0,0,0,.4); }
+  .seat-name { color: #e3eefa; font-weight: 700; font-size: 14px; margin-bottom: 4px; }
+  .seat-ledger { color: #a9c4dd; font-size: 12px; margin-top: 2px; }
+  .backs { display: flex; padding-top: 6px; }
+  .backs .back { width: calc(var(--card-w) * .62); border-radius: 5px; margin-right: calc(var(--card-w) * -.4);
+    box-shadow: 0 2px 6px rgba(0,0,0,.45); }
   .backs .back:last-child { margin-right: 0; }
   #seat-right .backs { justify-content: flex-end; flex-direction: row-reverse; }
-  #seat-right .backs .back { margin-right: 0; margin-left: calc(var(--card-w) * -.28); }
+  #seat-right .backs .back { margin-right: 0; margin-left: calc(var(--card-w) * -.4); }
   #seat-right { text-align: right; }
+
+  /* pakl vybraných štychů */
+  .pile { position: relative; height: calc(var(--card-w) * .55); margin-top: 10px; min-width: calc(var(--card-w) * .8); }
+  .pile img {
+    position: absolute; width: calc(var(--card-w) * .38); border-radius: 4px;
+    box-shadow: 0 1px 4px rgba(0,0,0,.45); top: 0;
+  }
+  #pile-left img { left: 0; }
+  #pile-right img { right: 0; }
+  .pile .pile-count {
+    position: absolute; top: 50%; transform: translateY(-50%);
+    color: #cfe3f5; font-size: 12px; font-weight: 700;
+  }
+  #pile-left .pile-count { left: calc(var(--card-w) * .8); }
+  #pile-right .pile-count { right: calc(var(--card-w) * .8); }
+  #pile-me { position: absolute; right: 16px; bottom: 12px; margin: 0; }
+  #pile-me img { right: 0; }
+  #pile-me .pile-count { right: calc(var(--card-w) * .75); }
 
   .bubble {
     position: absolute; top: 100%; margin-top: 8px; max-width: 180px;
@@ -179,19 +200,29 @@ import Layout from '../layouts/Layout.astro';
   .bubble.show { opacity: 1; transform: translateY(0); }
 
   .center-top { text-align: center; flex: 1; }
-  #status { color: #eaf6ee; font-size: 15px; min-height: 22px; }
+  #status { color: #eaf2f9; font-size: 15px; min-height: 22px; }
   #status.me-turn { font-weight: 700; color: #ffe9a8; }
-  #contract-info { color: #bcd9c6; font-size: 13px; min-height: 18px; margin-top: 2px; }
-
-  #trick {
-    flex: 1; display: flex; align-items: center; justify-content: center; gap: 10px;
-    min-height: calc(var(--card-w) * 1.85);
+  #contract-info { min-height: 24px; margin-top: 6px; }
+  #contract-info:not(:empty) {
+    display: inline-block; background: #fffdf2; color: #2b2b33;
+    font-weight: 700; font-size: 14px; padding: 5px 14px; border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,.35); border: 1px solid #d9d2ba;
   }
-  #trick .played { width: var(--card-w); border-radius: 6px; box-shadow: 0 4px 14px rgba(0,0,0,.35); }
-  #trick .played.pos-left { transform: rotate(-7deg) translateY(-4px); }
-  #trick .played.pos-right { transform: rotate(7deg) translateY(-4px); }
 
-  .me-row { text-align: center; }
+  /* štych: karty leží podle sedadel — levý soupeř vlevo, pravý vpravo, já dole */
+  #trick {
+    flex: 1; position: relative;
+    min-height: calc(var(--card-w) * 2.1);
+  }
+  #trick .played {
+    position: absolute; left: 50%; top: 50%;
+    width: var(--card-w); border-radius: 6px; box-shadow: 0 4px 14px rgba(0,0,0,.35);
+  }
+  #trick .played.pos-left  { transform: translate(calc(-50% - var(--card-w) * 1.15), -64%) rotate(-6deg); }
+  #trick .played.pos-right { transform: translate(calc(-50% + var(--card-w) * 1.15), -64%) rotate(6deg); }
+  #trick .played.pos-me    { transform: translate(-50%, -30%); }
+
+  .me-row { text-align: center; position: relative; padding-bottom: 6px; }
   #actions { min-height: 40px; display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-bottom: 8px; }
   .action-btn {
     font: 600 14px/1 inherit; padding: 9px 16px; border-radius: 999px; border: 0;
@@ -201,7 +232,7 @@ import Layout from '../layouts/Layout.astro';
   .action-btn:disabled { opacity: .45; cursor: default; }
   .action-btn:not(:disabled):hover { filter: brightness(1.05); }
 
-  #hand { display: flex; justify-content: center; align-items: flex-end; padding: 10px 0 6px; }
+  #hand { display: flex; justify-content: center; align-items: flex-end; padding: 10px 0 6px; overflow: visible; }
   .card-btn {
     background: none; border: 0; padding: 0; cursor: pointer;
     margin: 0 calc(var(--card-w) * -.17);
@@ -220,30 +251,23 @@ import Layout from '../layouts/Layout.astro';
   /* dohraný štych: zvýraznění vítězné karty a odlet k vítězi */
   #trick .played { transition: transform .42s ease-in, opacity .42s ease-in; }
   #trick .played.win { outline: 3px solid #ffd75e; box-shadow: 0 0 22px rgba(255,215,94,.55); }
-  #trick .played.fly-left { transform: translate(-46vw, -22vh) rotate(-18deg) scale(.5); opacity: 0; }
-  #trick .played.fly-right { transform: translate(46vw, -22vh) rotate(18deg) scale(.5); opacity: 0; }
-  #trick .played.fly-me { transform: translate(0, 34vh) rotate(6deg) scale(.5); opacity: 0; }
+  #trick .played.fly-me { transform: translate(calc(-50% + 40vw), 26vh) rotate(10deg) scale(.4); opacity: 0; }
+  #trick .played.fly-left { transform: translate(calc(-50% - 42vw), -22vh) rotate(-14deg) scale(.4); opacity: 0; }
+  #trick .played.fly-right { transform: translate(calc(-50% + 42vw), -22vh) rotate(14deg) scale(.4); opacity: 0; }
 
-  /* rozdávání: karty létají od balíčku ke hráčům */
-  .deal-anim { position: absolute; inset: 0; pointer-events: none; z-index: 8; overflow: hidden; border-radius: 20px; }
-  .deal-anim .deal-card {
-    position: absolute; left: 50%; top: 40%;
-    width: calc(var(--card-w) * .62); border-radius: 5px;
-    box-shadow: 0 3px 10px rgba(0,0,0,.4);
-    opacity: 0;
-    /* longhandy záměrně — shorthand `animation` bez jména minifier odstraní */
-    animation-duration: 480ms;
+  /* rozdávání po vzoru FLEK!: karty se v ruce objevují postupně */
+  .card-btn.reveal, .backs .back.reveal {
+    animation-name: card-in;
+    animation-duration: 200ms;
     animation-timing-function: ease-out;
-    animation-fill-mode: forwards;
+    animation-fill-mode: backwards; /* před svým časem je karta skrytá */
   }
-  .deal-anim .to-me { animation-name: deal-me; }
-  .deal-anim .to-left { animation-name: deal-left; }
-  .deal-anim .to-right { animation-name: deal-right; }
-  @keyframes deal-me { 0% { opacity: 1; transform: translate(-50%, 0) rotate(0); } 100% { opacity: .9; transform: translate(-50%, 34vh) rotate(8deg); } }
-  @keyframes deal-left { 0% { opacity: 1; transform: translate(-50%, 0) rotate(0); } 100% { opacity: .9; transform: translate(calc(-50% - 44vw), -26vh) rotate(-16deg); } }
-  @keyframes deal-right { 0% { opacity: 1; transform: translate(-50%, 0) rotate(0); } 100% { opacity: .9; transform: translate(calc(-50% + 44vw), -26vh) rotate(16deg); } }
+  @keyframes card-in {
+    0% { opacity: 0; }
+    100% { opacity: 1; }
+  }
 
-  .me-meta { color: #a8cdb4; font-size: 13px; margin-top: 6px; }
+  .me-meta { color: #a9c4dd; font-size: 13px; margin-top: 6px; }
 
   .overlay {
     position: absolute; inset: 0; display: none; align-items: center; justify-content: center;
