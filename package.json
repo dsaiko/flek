@@ -1,0 +1,30 @@
+{
+  "name": "flek",
+  "version": "1.0.0",
+  "description": "Flek! — online mariáš · tribute to FLEK!/RE! by Pivoňka Software",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dsaiko/flek.git"
+  },
+  "keywords": [],
+  "author": "Dusan Saiko",
+  "license": "MIT",
+  "type": "module",
+  "bugs": {
+    "url": "https://github.com/dsaiko/flek/issues"
+  },
+  "homepage": "https://github.com/dsaiko/flek#readme",
+  "private": "true",
+  "devDependencies": {
+    "sharp": "^0.35.3",
+    "tsx": "^4.23.12",
+    "typescript": "^7.0.2"
+  }
+}
