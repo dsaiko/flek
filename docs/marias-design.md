@@ -359,6 +359,13 @@ jedna cesta kódu.
     názvy souborů shodné (`<RANK><SUIT>.svg`, RANK: 7 8 9 T U O K D, SUIT: A B H L)
   - ⚠️ **V aplikaci zobrazit informace o licenci a původu karet** (historický vzor: PD, zdroj
     Commons/Gallica, tiskař Kratochvíl 1860; moderní: MIT) — např. v patičce/dialogu „O hře"
+  - **Asset pipeline** (rozhodnuto): moderní sada = **SVG přímo** (vektor, ~5 kB/karta, ostré
+    v každém zoomu — nerastrovat); historická sada = originální PNG skeny zůstávají v gitu
+    v plné velikosti (~100 MB, zdrojová data), pro web je skript `scripts/prep-history-cards.ts`
+    (sharp, implementace ve fázi UI) ořízne od pozadí skeneru, sjednotí velikost, zaoblí rohy
+    a zkomprimuje do **WebP** (~50 kB/karta) do `public/cards/history/`. Historická sada nemá
+    rub — vygenerovat dobově laděný, nebo sdílet rub moderní sady. Poměry stran se liší
+    (historická ~0.63, moderní 62/106 ≈ 0.585) — řeší CSS per sada, engine se o vzhled nestará.
 - Stůl: vlastní ruka dole vějířem, protihráči rubem vlevo/vpravo nahoře, střed = štych,
   kontextový panel akcí (volba trumfu, licitace, fleky, hláška), zúčtovací obrazovka s rozpadem
   po komponentách, konto hráčů (localStorage)
