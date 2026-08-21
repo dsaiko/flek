@@ -631,8 +631,13 @@ Před deployem `make build && make preview` + `make deploy-s3-dryrun`.
 
 ## 10. Otevřené otázky k revizi
 
-1. Přesný **žebříček licitace** v RE! (vč. červených variant) — ověřit proti PDF licitovaného
-   mariáše a proti originálu v DOSBoxu; výše uvedený je předběžný
+1. ✅ **Žebříček licitace** ověřen proti PDF ČSM (soutěžní licitovaný mariáš, čl. I):
+   sedma < sedma červená < sto < sto a sedma < sto červených < sto a sedma červených
+   < betl < durch < dvě sedmy < dvě sedmy a sto < dvě sedmy červená < dvě sedmy červená a sto.
+   Sazebník licitovaného (násobky hry): sedma 2×, sto 4×, **betl 15×, durch 30×, dvě sedmy 40×**,
+   tichá sedma 1×, omyl 6× — jiné poměry než volený (betl 10×, durch 20×) ⇒ preset per varianta.
+   Závazek **dvě sedmy** (trumfová 7 poslední + pomocná 7 předposlední štych) je v typech,
+   v1 za config přepínačem `enableDveSedmy`. Chování originálu RE! stále ověřit v DOSBoxu.
 2. Defaulty house-rules (`talonForbidsTrump`, `talonOnTakeover`, `countMarriagesIntoKilo`,
    `maxFlekLevel` — kajzr ano/ne) — navrhnout podle chování originálu, vše zůstane konfigurovatelné
 3. Jednotky konta: desetihaléře jako ČSM pravidla / Kč / abstraktní body?
