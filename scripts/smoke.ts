@@ -17,6 +17,7 @@ mkdirSync(outDir, { recursive: true });
 
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1200, height: 900 }, deviceScaleFactor: 2 });
+page.setDefaultTimeout(8000); // kliky mohou čekat na konec animací
 page.on('dialog', (d) => void d.dismiss());
 page.on('console', (msg) => {
   if (msg.type() === 'error') console.log('CONSOLE ERROR:', msg.text());
@@ -33,7 +34,7 @@ await page.screenshot({ path: join(outDir, 'smoke-1-deal.png'), clip: await tabl
 
 // hraj: klikej na primární tlačítka a hratelné karty, dokud se hra hýbe
 let shots = 2;
-for (let i = 0; i < 120; i += 1) {
+for (let i = 0; i < 200; i += 1) {
   await page.waitForTimeout(350);
 
   const status = await page.textContent('#status');

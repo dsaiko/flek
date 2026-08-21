@@ -201,18 +201,47 @@ import Layout from '../layouts/Layout.astro';
   .action-btn:disabled { opacity: .45; cursor: default; }
   .action-btn:not(:disabled):hover { filter: brightness(1.05); }
 
-  #hand { display: flex; justify-content: center; padding: 6px 0 2px; }
+  #hand { display: flex; justify-content: center; align-items: flex-end; padding: 10px 0 6px; }
   .card-btn {
     background: none; border: 0; padding: 0; cursor: pointer;
     margin: 0 calc(var(--card-w) * -.17);
-    transition: transform .12s;
+    transform-origin: 50% 120%;
     filter: drop-shadow(0 3px 8px rgba(0,0,0,.35));
   }
-  .card-btn img { width: var(--card-w); border-radius: 6px; display: block; }
+  .card-btn img { width: var(--card-w); border-radius: 6px; display: block; transition: transform .13s; }
   .card-btn:disabled { cursor: default; filter: drop-shadow(0 2px 5px rgba(0,0,0,.3)) grayscale(.35) brightness(.82); }
-  .card-btn:not(:disabled):hover { transform: translateY(-12px); z-index: 3; position: relative; }
-  .card-btn.selected { transform: translateY(-16px); }
-  .card-btn.selected img { outline: 3px solid #ffd75e; border-radius: 6px; }
+  .card-btn:not(:disabled):hover { z-index: 3; position: relative; }
+  .card-btn:not(:disabled):hover img { transform: translateY(-14px); }
+  .card-btn.selected img { transform: translateY(-18px); outline: 3px solid #ffd75e; border-radius: 6px; }
+
+  /* blokace interakcí během animací */
+  #table.animating .card-btn, #table.animating .action-btn { pointer-events: none; }
+
+  /* dohraný štych: zvýraznění vítězné karty a odlet k vítězi */
+  #trick .played { transition: transform .42s ease-in, opacity .42s ease-in; }
+  #trick .played.win { outline: 3px solid #ffd75e; box-shadow: 0 0 22px rgba(255,215,94,.55); }
+  #trick .played.fly-left { transform: translate(-46vw, -22vh) rotate(-18deg) scale(.5); opacity: 0; }
+  #trick .played.fly-right { transform: translate(46vw, -22vh) rotate(18deg) scale(.5); opacity: 0; }
+  #trick .played.fly-me { transform: translate(0, 34vh) rotate(6deg) scale(.5); opacity: 0; }
+
+  /* rozdávání: karty létají od balíčku ke hráčům */
+  .deal-anim { position: absolute; inset: 0; pointer-events: none; z-index: 8; overflow: hidden; border-radius: 20px; }
+  .deal-anim .deal-card {
+    position: absolute; left: 50%; top: 40%;
+    width: calc(var(--card-w) * .62); border-radius: 5px;
+    box-shadow: 0 3px 10px rgba(0,0,0,.4);
+    opacity: 0;
+    /* longhandy záměrně — shorthand `animation` bez jména minifier odstraní */
+    animation-duration: 480ms;
+    animation-timing-function: ease-out;
+    animation-fill-mode: forwards;
+  }
+  .deal-anim .to-me { animation-name: deal-me; }
+  .deal-anim .to-left { animation-name: deal-left; }
+  .deal-anim .to-right { animation-name: deal-right; }
+  @keyframes deal-me { 0% { opacity: 1; transform: translate(-50%, 0) rotate(0); } 100% { opacity: .9; transform: translate(-50%, 34vh) rotate(8deg); } }
+  @keyframes deal-left { 0% { opacity: 1; transform: translate(-50%, 0) rotate(0); } 100% { opacity: .9; transform: translate(calc(-50% - 44vw), -26vh) rotate(-16deg); } }
+  @keyframes deal-right { 0% { opacity: 1; transform: translate(-50%, 0) rotate(0); } 100% { opacity: .9; transform: translate(calc(-50% + 44vw), -26vh) rotate(16deg); } }
 
   .me-meta { color: #a8cdb4; font-size: 13px; margin-top: 6px; }
 

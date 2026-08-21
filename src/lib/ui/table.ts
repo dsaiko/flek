@@ -8,6 +8,7 @@
 
 import { pointsOf, rankOf, suitOf, KRAL, SVRSEK, card as mkCard, type Card } from '../cards';
 import { legalActions } from '../rules/legal';
+import { trickWinner } from '../rules/tricks';
 import type { GameState, HandResult, PlayerAction, PlayerView, Seat } from '../rules/types';
 import { view } from '../rules/view';
 import { backSrc, cardName, cardSrc, SUIT_SYMBOL, type Pattern } from './cardAssets';
@@ -37,6 +38,8 @@ export class TableUI {
   private readonly opts: TableOptions;
   private selected = new Set<Card>();
   private bubbleTimers = new Map<Seat, ReturnType<typeof setTimeout>>();
+  private prevState: GameState | null = null;
+  private chain: Promise<void> = Promise.resolve();
 
   constructor(root: HTMLElement, opts: TableOptions, cb: TableCallbacks) {
     this.root = root;
@@ -44,14 +47,54 @@ export class TableUI {
     this.cb = cb;
   }
 
-  /** Kompletní překreslení podle stavu. */
+  /**
+   * Překreslení podle stavu. Přechody hodné animace (rozdání, dohraný štych)
+   * se serializují do fronty — stavy se nikdy nepřeskočí, jen pozdrží.
+   */
   render(state: GameState): void {
+    const prev = this.prevState;
+    this.prevState = state;
+    this.chain = this.chain.then(async () => {
+      try {
+        await this.playTransitions(prev, state);
+      } catch (e) {
+        console.error(e);
+      }
+      this.renderNow(state);
+    });
+  }
+
+  private async playTransitions(prev: GameState | null, state: GameState): Promise<void> {
+    if (!prev) return;
+    const a = state.history[state.history.length - 1];
+
+    // rozdání → karty letí od balíčku
+    if (a?.type === 'deal') {
+      this.showLastActionBubble(state); // ať bublina nečeká
+      await this.animateDeal();
+      return;
+    }
+
+    // dohraný štych → pauza, zvýraznění vítězné karty, odlet k vítězi
+    if (a?.type === 'play' && prev.phase.name === 'tricks' && prev.contract) {
+      const prevTrick = prev.phase.trick;
+      if (prevTrick.length === 2) {
+        const full = [...prevTrick, { seat: a.seat, card: a.card }];
+        const winner = trickWinner(full, prev.contract.trump, prev.contract.mode);
+        await this.animateTrickEnd(full, winner);
+      }
+    }
+  }
+
+  /** Okamžité plné překreslení. */
+  private renderNow(state: GameState): void {
     const me = this.opts.humanSeat;
     const v = view(state, me);
     const legal = legalActions(v);
     const phase = v.phase;
     if (phase.name !== 'discard-talon') this.selected.clear();
 
+    this.root.classList.remove('animating');
     this.renderOpponents(v);
     this.renderCenter(v, state);
     this.renderHand(v, legal);
@@ -59,6 +102,59 @@ export class TableUI {
     this.renderStatus(v, legal);
     this.renderResult(v);
     this.showLastActionBubble(state);
+  }
+
+  // ── animace ────────────────────────────────────────────────────────────────
+
+  private reducedMotion(): boolean {
+    return window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+  }
+
+  private async animateTrickEnd(full: { seat: Seat; card: Card }[], winner: Seat): Promise<void> {
+    const trickEl = $(this.root, '#trick');
+    this.root.classList.add('animating');
+
+    // vykresli kompletní štych se zvýrazněným vítězem
+    trickEl.innerHTML = '';
+    const imgs: HTMLImageElement[] = [];
+    for (const p of full) {
+      const img = document.createElement('img');
+      img.src = cardSrc(p.card, this.opts.pattern());
+      img.alt = cardName(p.card);
+      img.className = `played pos-${this.posOf(p.seat)}${p.seat === winner ? ' win' : ''}`;
+      trickEl.appendChild(img);
+      imgs.push(img);
+    }
+    const statusEl = $(this.root, '#status');
+    statusEl.textContent = `${currentLang() === 'en' ? 'Trick' : 'Štych'}: ${this.nameOf(winner)}`;
+    statusEl.classList.remove('me-turn');
+
+    if (this.reducedMotion()) {
+      await sleep(900);
+      return;
+    }
+    await sleep(1250);
+    for (const img of imgs) img.classList.add(`fly-${this.posOf(winner)}`);
+    await sleep(430);
+  }
+
+  private async animateDeal(): Promise<void> {
+    if (this.reducedMotion()) return;
+    this.root.classList.add('animating');
+    const overlay = document.createElement('div');
+    overlay.className = 'deal-anim';
+    const targets = ['me', 'left', 'right'];
+    for (let i = 0; i < 18; i += 1) {
+      const img = document.createElement('img');
+      img.src = backSrc();
+      img.alt = '';
+      img.className = `deal-card to-${targets[i % 3]}`;
+      img.style.animationDelay = `${i * 45}ms`;
+      overlay.appendChild(img);
+    }
+    this.root.appendChild(overlay);
+    await sleep(1000);
+    overlay.remove();
   }
 
   // ── protihráči ─────────────────────────────────────────────────────────────
@@ -152,18 +248,23 @@ export class TableUI {
       for (const c of v.hand) playable.add(c);
     }
 
-    for (const c of v.hand) {
+    const n = v.hand.length;
+    v.hand.forEach((c, i) => {
       const btn = document.createElement('button');
       btn.className = 'card-btn';
       btn.disabled = !playable.has(c);
       if (this.selected.has(c)) btn.classList.add('selected');
+      // jemný vějíř: natočení + pokles ke krajům (transform na buttonu,
+      // hover/selected zdvih řeší CSS na <img>, aby se nepřepisovaly)
+      const off = i - (n - 1) / 2;
+      btn.style.transform = `rotate(${(off * 3).toFixed(1)}deg) translateY(${(off * off * 1.6).toFixed(1)}px)`;
       const img = document.createElement('img');
       img.src = cardSrc(c, this.opts.pattern());
       img.alt = cardName(c);
       btn.appendChild(img);
       btn.addEventListener('click', () => this.onCardClick(c, v));
       handEl.appendChild(btn);
-    }
+    });
   }
 
   private onCardClick(c: Card, v: PlayerView): void {
@@ -361,6 +462,8 @@ export class TableUI {
 }
 
 // ── pomocné formátování ────────────────────────────────────────────────────
+
+const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
 const fmtLedger = (n: number): string => (n > 0 ? `+${n}` : String(n));
 
