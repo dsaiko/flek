@@ -460,9 +460,19 @@ Pod hracím stolem, bilingválně CZ/EN:
    odkaz na retrogames.cz, „independent tribute" disclaimer po vzoru mars)
 2. **Pravidla mariáše** — **odkazy na oficiální dokumenty ČSM u zdroje** (neredistribuujeme,
    viz §3.1), vlastní přehled pravidel přímo na stránce + EN verze vlastními slovy (`docs/rules/`)
-3. **Historie mariáše** — 📚 K DOHLEDÁNÍ během fáze obsahu: původ (z německých her a francouzské
-   *mariage* — odtud hláška K+svršek „svatba"), rozšíření v českých hospodách v 19. století,
-   Český svaz mariáše, turnajová scéna; sepsat vlastní text s odkazy na zdroje
+3. **Historie mariáše** — podklady zjištěny (2026-08-21), sepsat vlastní text ve fázi obsahu:
+   - mariáš **nemá mezinárodní jméno** — i anglické zdroje užívají „Mariáš"; patří do rodiny
+     **„marriage group"** (ace-ten hry s hláškou krále + svrška/dámy)
+   - předchůdce: hra **Mariage**, poprvé doložena **1715 v Lipsku**, v 18. stol. populární
+     v Rakousku; název = fonetický přepis fr. *mariage* (svatba = hláška K+Q)
+   - příbuzné hry: **Sixty-Six / Schnapsen**, maďarské **Ulti**
+   - česká podoba se ustálila v 19. století; kolem 1900 dominantní hospodská hra v Čechách;
+     dnes nejpopulárnější karetní hra v ČR a na Slovensku; Český svaz mariáše, turnajová scéna
+   - EN terminologie figur: Unter→Jack, Ober→Queen (odpovídá naší EN sadě karet)
+   - zdroje pro odkazy: [pagat.com/marriage/marias.html](https://www.pagat.com/marriage/marias.html),
+     Wikipedia [Mariáš](https://en.wikipedia.org/wiki/Mari%C3%A1%C5%A1),
+     [Marriage group](https://en.wikipedia.org/wiki/Marriage_group),
+     [Mariage (card game)](https://en.wikipedia.org/wiki/Mariage_(card_game))
 4. **Technická karta** — jak přepis funguje (engine, fér AI vs. původní „koukání do karet")
 
 ### 5.7 Zvuky
