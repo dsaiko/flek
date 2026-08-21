@@ -162,7 +162,7 @@ import Layout from '../layouts/Layout.astro';
   .seatbox { position: relative; min-width: 140px; }
   .seat-name { color: #e3eefa; font-weight: 700; font-size: 14px; margin-bottom: 4px; }
   .seat-ledger { color: #a9c4dd; font-size: 12px; margin-top: 2px; }
-  .backs { display: flex; padding-top: 6px; }
+  .backs { display: flex; padding-top: 6px; min-height: calc(var(--card-w) * 1.12); } /* výška rubu — řádek nesmí kolabovat */
   .backs .back { width: calc(var(--card-w) * .62); border-radius: 5px; margin-right: calc(var(--card-w) * -.4);
     box-shadow: 0 2px 6px rgba(0,0,0,.45); }
   .backs .back:last-child { margin-right: 0; }
@@ -232,7 +232,9 @@ import Layout from '../layouts/Layout.astro';
   .action-btn:disabled { opacity: .45; cursor: default; }
   .action-btn:not(:disabled):hover { filter: brightness(1.05); }
 
-  #hand { display: flex; justify-content: center; align-items: flex-end; padding: 10px 0 6px; overflow: visible; }
+  /* pevná výška ruky — stůl se nesmí zmenšovat s ubývajícími kartami */
+  #hand { display: flex; justify-content: center; align-items: flex-end; padding: 10px 0 6px; overflow: visible;
+    min-height: calc(var(--card-w) * 1.85); }
   .card-btn {
     background: none; border: 0; padding: 0; cursor: pointer;
     margin: 0 calc(var(--card-w) * -.17);
