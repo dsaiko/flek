@@ -21,7 +21,7 @@ const OUT = join(ROOT, 'public', 'cards', 'history');
 
 const TARGET_HEIGHT = 720; // dost pro HiDPI zobrazení karty ~180 px na výšku
 const CORNER_RADIUS_PCT = 0.045; // poměr rádiusu rohu k šířce karty
-const INSET_PCT = 0.022; // dodatečný vnitřní ořez — odstraní bílé hrany skenu po trimu
+const INSET_PCT = 0.01; // jemný vnitřní ořez — nechá přirozený okraj papíru
 const WEBP_QUALITY = 82;
 
 async function processCard(file: string): Promise<{ file: string; w: number; h: number; kb: number }> {
@@ -42,15 +42,27 @@ async function processCard(file: string): Promise<{ file: string; w: number; h: 
   const meta = await resized.toBuffer({ resolveWithObject: true });
   const { width = 0, height = 0 } = meta.info;
 
-  // 3) zaoblené rohy přes SVG masku
+  // 3) zaoblené rohy přes SVG masku + jemný stín hrany (zatónuje zbytky bílého okraje
+  //    skenu do přirozeného vzhledu hrany karty)
   const r = Math.round(width * CORNER_RADIUS_PCT);
   const mask = Buffer.from(
     `<svg width="${width}" height="${height}"><rect x="0" y="0" width="${width}" height="${height}" rx="${r}" ry="${r}"/></svg>`,
   );
+  const edgeShade = Buffer.from(
+    `<svg width="${width}" height="${height}">
+       <rect x="1" y="1" width="${width - 2}" height="${height - 2}" rx="${r}" ry="${r}"
+             fill="none" stroke="rgba(74,58,40,0.38)" stroke-width="2.5"/>
+       <rect x="4" y="4" width="${width - 8}" height="${height - 8}" rx="${Math.max(2, r - 3)}" ry="${Math.max(2, r - 3)}"
+             fill="none" stroke="rgba(74,58,40,0.16)" stroke-width="5"/>
+     </svg>`,
+  );
 
   const out = join(OUT, file.replace(/\.png$/i, '.webp'));
   const result = await sharp(meta.data)
-    .composite([{ input: mask, blend: 'dest-in' }])
+    .composite([
+      { input: edgeShade, blend: 'multiply' },
+      { input: mask, blend: 'dest-in' },
+    ])
     .webp({ quality: WEBP_QUALITY })
     .toFile(out);
 
