@@ -88,6 +88,11 @@ export class TableUI {
       if (prevTrick.length === 2) {
         const full = [...prevTrick, { seat: a.seat, card: a.card }];
         const winner = trickWinner(full, prev.contract.trump, prev.contract.mode);
+        // ruka a počty karet soupeřů se přepnou na NOVÝ stav hned — zahraná
+        // karta nesmí zůstat v ruce, zatímco leží ve štychu na stole
+        const vNew = view(state, this.opts.humanSeat);
+        this.renderHand(vNew, []); // bez klikání, animace kliky stejně blokuje
+        this.renderOpponents(vNew);
         await this.animateTrickEnd(full, winner);
       }
     }
