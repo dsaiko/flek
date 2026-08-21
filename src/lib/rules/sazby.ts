@@ -35,5 +35,6 @@ export function defaultConfig(variant: Variant): RulesConfig {
     talonForbidsTrump: false, // ČSM zakazuje jen esa/desítky (a hlášenou sedmu) — viz renonce
     talonOnTakeover: 'retake',
     enableDveSedmy: false, // v1 vypnuto i v licitovaném; typy a žebříček připraveny
+    autoSettlePlainHra: true, // jako FLEK!: dobrá hra se nehraje, rovnou se platí
   };
 }

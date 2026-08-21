@@ -336,7 +336,13 @@ const KULE = 2 as const;
       assert.equal(result.delta[0] + result.delta[1] + result.delta[2], 0);
       if (result.contract.mode === 'hra') {
         const total = result.cardPoints.declarer + result.cardPoints.defenders;
-        assert.equal(total, 90, `${variant}/${seed}: celkové body ${total} ≠ 90`);
+        const autoSettled = result.components.some((c) => c.note === 'dobrá — nehrálo se');
+        if (autoSettled) {
+          assert.equal(total, 0);
+          assert.equal(result.components[0].wonBy, 'declarer');
+        } else {
+          assert.equal(total, 90, `${variant}/${seed}: celkové body ${total} ≠ 90`);
+        }
       }
 
       // redakce pohledu: žádný únik cizích karet

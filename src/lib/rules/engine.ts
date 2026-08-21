@@ -386,7 +386,18 @@ function reduce(state: GameState, action: PlayerAction): GameState {
     case 'good': {
       if (phase.name !== 'fleks') throw new InvariantError('good mimo fázi');
       const passed = [...phase.fleks.passed, action.seat];
-      if (new Set(passed).size >= 3) return startTricks(state);
+      if (new Set(passed).size >= 3) {
+        // hospodské pravidlo: neflekovaná prostá hra se nehraje — platí se rovnou
+        const c = state.contract;
+        if (
+          state.config.autoSettlePlainHra &&
+          c !== null && c.mode === 'hra' && c.sedma === null && c.kilo === null &&
+          Object.keys(phase.fleks.levels).length === 0
+        ) {
+          return settlePlainHra(state, c);
+        }
+        return startTricks(state);
+      }
       return {
         ...state,
         phase: { name: 'fleks', fleks: { ...phase.fleks, passed, toAct: nextSeat(action.seat) } },
@@ -454,6 +465,35 @@ function reduce(state: GameState, action: PlayerAction): GameState {
       };
     }
   }
+}
+
+/** Neflekovaná prostá hra: rovnou zúčtuj ve prospěch aktéra (nehraje se). */
+function settlePlainHra(state: GameState, contract: Contract): GameState {
+  const s = state.config.sazby;
+  const cerveny = contract.trump === 0 ? s.cervenyMultiplier : 1;
+  const amount = s.hra * cerveny;
+  const [d1, d2] = defendersOf(contract.declarer);
+  const delta: [number, number, number] = [0, 0, 0];
+  delta[contract.declarer] = 2 * amount;
+  delta[d1] = -amount;
+  delta[d2] = -amount;
+  const result: import('./types').HandResult = {
+    handNo: state.handNo,
+    contract,
+    cardPoints: { declarer: 0, defenders: 0 },
+    marriagePoints: { declarer: 0, defenders: 0 },
+    components: [{
+      target: 'hra', wonBy: 'declarer', baseRate: s.hra, flekMultiplier: 1,
+      extraMultiplier: cerveny, amount, silent: false, note: 'dobrá — nehrálo se',
+    }],
+    delta,
+  };
+  return {
+    ...state,
+    ledger: [state.ledger[0] + delta[0], state.ledger[1] + delta[1], state.ledger[2] + delta[2]],
+    handResults: [...state.handResults, result],
+    phase: { name: 'scored', result },
+  };
 }
 
 /** Finální úrovně fleků — z historie akcí aktuální hry (fleks fáze už neexistuje). */

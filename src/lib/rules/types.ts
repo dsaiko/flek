@@ -112,6 +112,8 @@ export interface RulesConfig {
   talonForbidsTrump: boolean;
   talonOnTakeover: 'retake' | 'keep';
   enableDveSedmy: boolean; // jen licitovaný
+  /** Hospodské pravidlo (i FLEK!): neflekovaná prostá hra se nehraje — platí se rovnou aktérovi. */
+  autoSettlePlainHra: boolean;
 }
 
 // ── výsledek hry ─────────────────────────────────────────────────────────────
