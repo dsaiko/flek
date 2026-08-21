@@ -459,24 +459,7 @@ export class TableUI {
     });
     const confirm = this.root.querySelector<HTMLButtonElement>('#discard-confirm');
     if (confirm) confirm.disabled = this.selected.size !== 2;
-    // varování: bodovaná karta zamkne hru; půlka hlášky = FLEKovo „A co mariáš?"
-    const statusEl = $(this.root, '#status');
-    const breaksMarriage = [...this.selected].find((c) => {
-      const r = rankOf(c);
-      if (r !== KRAL && r !== SVRSEK) return false;
-      const partner = mkCard(suitOf(c), r === KRAL ? SVRSEK : KRAL);
-      return v.hand.includes(partner) && !this.selected.has(partner);
-    });
-    if ([...this.selected].some((c) => pointsOf(c) > 0)) {
-      statusEl.textContent = t('talonWarn');
-    } else if (breaksMarriage !== undefined) {
-      statusEl.textContent = marriageWarn(suitOf(breaksMarriage));
-    } else if (v.phase.name === 'discard-talon') {
-      statusEl.textContent =
-        v.phase.standing.trump !== null
-          ? `${t('discard')} · ${t('trump')}: ${suitName(v.phase.standing.trump)}`
-          : t('discard');
-    }
+    // rizikové odhozy řeší potvrzovací popup při kliknutí na Odhodit
   }
 
   // ── akční lišta ────────────────────────────────────────────────────────────
@@ -516,7 +499,19 @@ export class TableUI {
             const action = legal.find(
               (a) => a.type === 'discard' && a.cards.includes(cards[0]) && a.cards.includes(cards[1]),
             );
-            if (action) this.cb.onAction(action);
+            if (!action) return;
+            // rizikové odhozy potvrdit popupem vestavěným do stolu
+            const warns: string[] = [];
+            if (cards.some((c) => pointsOf(c) > 0)) warns.push(t('talonWarn'));
+            const breaks = cards.find((c) => {
+              const r = rankOf(c);
+              if (r !== KRAL && r !== SVRSEK) return false;
+              const partner = mkCard(suitOf(c), r === KRAL ? SVRSEK : KRAL);
+              return v.hand.includes(partner) && !cards.includes(partner);
+            });
+            if (breaks !== undefined) warns.push(marriageWarn(suitOf(breaks)));
+            if (warns.length > 0) this.showConfirmPopup(warns, t('discardConfirm'), () => this.cb.onAction(action));
+            else this.cb.onAction(action);
           }, { primary: true, disabled: this.selected.size !== 2, id: 'discard-confirm' });
         }
         break;
@@ -610,6 +605,29 @@ export class TableUI {
       : null;
     if (seat === null || seat === this.opts.humanSeat) return null;
     return this.nameOf(seat);
+  }
+
+  // ── potvrzovací popup vestavěný do stolu ─────────────────────────────────────
+
+  private showConfirmPopup(messages: string[], confirmLabel: string, onConfirm: () => void): void {
+    const float = $(this.root, '#center-float');
+    float.classList.add('open');
+    float.innerHTML = `<div class="felt-panel warn">
+      ${messages.map((m) => `<p class="warn-msg">⚠️ ${m}</p>`).join('')}
+      <div class="felt-actions">
+        <button class="action-btn" data-act="cancel">${t('back')}</button>
+        <button class="action-btn primary" data-act="confirm">${confirmLabel}</button>
+      </div>
+    </div>`;
+    float.querySelector('[data-act="cancel"]')?.addEventListener('click', () => {
+      if (this.prevState) this.renderNow(this.prevState);
+      else { float.classList.remove('open'); float.innerHTML = ''; }
+    });
+    float.querySelector('[data-act="confirm"]')?.addEventListener('click', () => {
+      float.classList.remove('open');
+      float.innerHTML = '';
+      onConfirm();
+    });
   }
 
   // ── zúčtování a průběh hry (integrované do stolu, po vzoru FLEK!) ──────────
