@@ -40,6 +40,8 @@ export interface MatchOptions {
   autosave?: (state: GameState) => void;
   /** pauza mezi AI tahy (ms) — ať jde hra sledovat; 0 v testech */
   aiDelayMs?: number;
+  /** auto-potvrzení vynucené „dobré" (jediná legální akce) — pocta parametru Q z FLEK! */
+  autoGood?: boolean;
 }
 
 export class MatchController {
@@ -106,6 +108,26 @@ export class MatchController {
     this.opts.autosave?.(this.state);
     for (const fn of this.listeners) fn(this.state);
     void this.maybeRunAi();
+    this.maybeAutoGood();
+  }
+
+  /** Když člověk nemá žádnou volbu (jen „dobrá"/pas), potvrď za něj po pauze. */
+  private maybeAutoGood(): void {
+    if (!this.opts.autoGood || this.stopped) return;
+    const legal = this.humanLegal();
+    if (legal.length !== 1) return;
+    const a = legal[0];
+    const forced = a.type === 'good' || (a.type === 'bid' && a.bid === 'pass');
+    if (!forced) return;
+    const historyLen = this.state.history.length;
+    setTimeout(() => {
+      if (this.stopped || this.state.history.length !== historyLen) return;
+      try {
+        this.dispatch(a);
+      } catch {
+        /* stav se mezitím pohnul — nic */
+      }
+    }, this.opts.aiDelayMs ?? 700);
   }
 
   private async maybeRunAi(): Promise<void> {

@@ -63,6 +63,7 @@ function makeController(resume?: GameState): MatchController {
     seedSource: randomSeed,
     autosave: saveMatch,
     aiDelayMs: 650,
+    autoGood: true,
   }, resume);
   mc.onChange((state) => table.render(state));
   return mc;
