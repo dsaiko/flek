@@ -158,4 +158,142 @@ const KULE = 2 as const;
   console.log('PASS tricks — vítěz štychu ve všech režimech');
 }
 
+// ── scoring ──────────────────────────────────────────────────────────────────
+
+{
+  const { settle, kiloMultiplier } = await import('../src/lib/rules/scoring');
+  const { defaultConfig } = await import('../src/lib/rules/sazby');
+  type Seat = 0 | 1 | 2;
+
+  const cfg = defaultConfig('voleny');
+  const KULE_S = 2 as const;
+  const base = { mode: 'hra' as const, trump: KULE_S as 0 | 1 | 2 | 3, declarer: 0 as Seat, sedma: null, kilo: null, dveSedmy: false };
+  const trick = (winner: Seat, ...cards: [Seat, number][]) => ({
+    plays: cards.map(([seat, c]) => ({ seat, card: c })),
+    winner,
+  });
+  const zeroSum = (d: [number, number, number]) => assert.equal(d[0] + d[1] + d[2], 0, 'delta zero-sum');
+
+  // hra: víc bodů vyhrává; obrana bere 10+10 za poslední štych
+  let r = settle({
+    handNo: 0, config: cfg, contract: { ...base }, flekLevels: {},
+    tricks: [
+      trick(0, [0, card(KULE_S, ESO)], [1, card(ZELENE, R7)], [2, card(ZELENE, R8)]),
+      trick(1, [1, card(CERVENE, R10)], [2, card(CERVENE, R9)], [0, card(CERVENE, R8)]),
+    ],
+    marriages: [],
+  });
+  assert.deepEqual(r.cardPoints, { declarer: 10, defenders: 20 });
+  assert.equal(r.components[0].wonBy, 'defenders');
+  assert.deepEqual(r.delta, [-2, 1, 1]);
+  zeroSum(r.delta);
+
+  // rovnost bodů → prohrává aktér
+  r = settle({
+    handNo: 0, config: cfg, contract: { ...base }, flekLevels: {},
+    tricks: [
+      trick(0, [0, card(KULE_S, ESO)], [1, card(ZELENE, R7)], [2, card(ZELENE, R8)]),
+      trick(1, [1, card(CERVENE, ESO)], [2, card(CERVENE, R9)], [0, card(CERVENE, R8)]),
+    ],
+    marriages: [],
+  }); // aktér 10, obrana 10+10... ne — uprav: aktér 10 (eso) vs obrana 10 (eso) + 10 poslední = 20
+  assert.equal(r.components[0].wonBy, 'defenders');
+
+  // sedma hlášená aktérem — uhraná / zabitá
+  const seven = card(KULE_S, R7);
+  r = settle({
+    handNo: 0, config: cfg, contract: { ...base, sedma: 0 }, flekLevels: {},
+    tricks: [trick(0, [0, seven], [1, card(ZELENE, R7)], [2, card(ZELENE, R8)])],
+    marriages: [],
+  });
+  const sedmaComp = r.components.find((c) => c.target === 'sedma');
+  assert.equal(sedmaComp?.wonBy, 'declarer');
+  assert.equal(sedmaComp?.amount, 2);
+
+  r = settle({
+    handNo: 0, config: cfg, contract: { ...base, sedma: 0 }, flekLevels: { sedma: 1 },
+    tricks: [trick(1, [0, seven], [1, card(KULE_S, R8)], [2, card(ZELENE, R8)])],
+    marriages: [],
+  });
+  const zabita = r.components.find((c) => c.target === 'sedma');
+  assert.equal(zabita?.wonBy, 'defenders');
+  assert.equal(zabita?.note, 'zabitá sedma');
+  assert.equal(zabita?.amount, 4, 'flek na sedmu ×2');
+
+  // tichá sedma obránce (uhraná) — poloviční sazba, bez fleku
+  r = settle({
+    handNo: 0, config: cfg, contract: { ...base }, flekLevels: {},
+    tricks: [trick(2, [2, seven], [0, card(ZELENE, R7)], [1, card(ZELENE, R8)])],
+    marriages: [],
+  });
+  const ticha = r.components.find((c) => c.target === 'sedma');
+  assert.equal(ticha?.wonBy, 'defenders');
+  assert.equal(ticha?.silent, true);
+  assert.equal(ticha?.amount, 1);
+
+  // kilo: škálování
+  assert.equal(kiloMultiplier(100, 'double'), 1);
+  assert.equal(kiloMultiplier(109, 'double'), 1);
+  assert.equal(kiloMultiplier(110, 'double'), 2);
+  assert.equal(kiloMultiplier(120, 'double'), 4);
+  assert.equal(kiloMultiplier(99, 'double'), 1);
+  assert.equal(kiloMultiplier(90, 'double'), 1);
+  assert.equal(kiloMultiplier(89, 'double'), 2);
+  assert.equal(kiloMultiplier(120, 'linear'), 3);
+
+  // kilo hlášené aktérem, 110 bodů (50 z karet + 40 trumfová hláška + 20 hláška)
+  r = settle({
+    handNo: 0, config: cfg, contract: { ...base, kilo: 0 }, flekLevels: {},
+    tricks: [
+      trick(0, [0, card(KULE_S, ESO)], [1, card(ZELENE, R10)], [2, card(CERVENE, R10)]),
+      trick(0, [0, card(3, ESO)], [1, card(ZELENE, R8)], [2, card(ZELENE, R9)]),
+    ],
+    marriages: [{ seat: 0, suit: KULE_S }, { seat: 0, suit: CERVENE }],
+  });
+  // karty: 30 + 10 (1. štych? oba štychy aktér) + poslední štych 10 → 40+10 = 50; hlášky 60 → 110
+  const kilo = r.components.find((c) => c.target === 'kilo');
+  assert.equal(kilo?.wonBy, 'declarer');
+  assert.equal(kilo?.amount, 4 * 2, 'kilo 110 → dvojnásobek');
+  assert.equal(kilo?.note, 'kilo 110');
+
+  // kilo prohrané o 10+ → sazba dle deficitu, vyhrává obrana
+  r = settle({
+    handNo: 0, config: cfg, contract: { ...base, kilo: 0 }, flekLevels: {},
+    tricks: [trick(1, [1, card(KULE_S, ESO)], [2, card(ZELENE, R7)], [0, card(ZELENE, R8)])],
+    marriages: [],
+  });
+  assert.equal(r.components.find((c) => c.target === 'kilo')?.wonBy, 'defenders');
+
+  // betl / durch
+  r = settle({
+    handNo: 0, config: cfg,
+    contract: { ...base, mode: 'betl', trump: null }, flekLevels: {},
+    tricks: [trick(1, [1, card(ZELENE, ESO)], [2, card(ZELENE, R7)], [0, card(ZELENE, R8)])],
+    marriages: [],
+  });
+  assert.equal(r.components[0].target, 'betl');
+  assert.equal(r.components[0].wonBy, 'declarer');
+  assert.equal(r.components[0].amount, 10);
+  assert.deepEqual(r.delta, [20, -10, -10]);
+  zeroSum(r.delta);
+
+  r = settle({
+    handNo: 0, config: cfg,
+    contract: { ...base, mode: 'durch', trump: null }, flekLevels: { durch: 1 },
+    tricks: [trick(0, [0, card(ZELENE, ESO)], [1, card(ZELENE, R7)], [2, card(ZELENE, R8)])],
+    marriages: [],
+  });
+  assert.equal(r.components[0].amount, 40, 'durch 20 × flek 2');
+
+  // červený trumf zdvojnásobuje barevné komponenty
+  r = settle({
+    handNo: 0, config: cfg, contract: { ...base, trump: CERVENE }, flekLevels: {},
+    tricks: [trick(0, [0, card(CERVENE, ESO)], [1, card(ZELENE, R7)], [2, card(ZELENE, R8)])],
+    marriages: [],
+  });
+  assert.equal(r.components[0].amount, 2, 'červená hra ×2');
+
+  console.log('PASS scoring — hra, sedma (hlášená/zabitá/tichá), kilo škálování, betl/durch, červené, fleky, zero-sum');
+}
+
 console.log('OK: vše prošlo');
