@@ -31,6 +31,7 @@ import Layout from '../layouts/Layout.astro';
             <div class="backs"></div>
             <div class="seat-ledger"></div>
             <div class="pile" id="pile-left"></div>
+            <div class="melds" id="melds-left"></div>
             <div class="bubble"></div>
           </div>
           <div class="center-top">
@@ -42,6 +43,7 @@ import Layout from '../layouts/Layout.astro';
             <div class="backs"></div>
             <div class="seat-ledger"></div>
             <div class="pile" id="pile-right"></div>
+            <div class="melds" id="melds-right"></div>
             <div class="bubble"></div>
           </div>
         </div>
@@ -55,6 +57,7 @@ import Layout from '../layouts/Layout.astro';
           <div id="hand"></div>
           <div class="me-meta"><span id="ledger-me"></span></div>
           <div class="pile" id="pile-me"></div>
+          <div class="melds" id="melds-me"></div>
           <div class="bubble" id="bubble-me"></div>
         </div>
       </div>
@@ -266,6 +269,30 @@ import Layout from '../layouts/Layout.astro';
   /* dohraný štych: zvýraznění vítězné karty a odlet k vítězi */
   #trick .played { transition: transform .42s ease-in, opacity .42s ease-in; }
   #trick .played.win { outline: 3px solid #ffd75e; box-shadow: 0 0 22px rgba(255,215,94,.55); }
+  /* box hlášky „20/40" u zahrané karty (po vzoru FLEK!) */
+  .meld-box {
+    position: absolute; left: 50%; top: 50%;
+    background: #fffdf2; color: #2b2b33; border: 1px solid #d9d2ba;
+    font: 700 15px/1 inherit; padding: 4px 10px; border-radius: 7px;
+    box-shadow: 0 2px 8px rgba(0,0,0,.35); z-index: 4;
+  }
+  .meld-box.meld-left  { transform: translate(calc(-50% - var(--card-w) * 2.05), -110%); }
+  .meld-box.meld-right { transform: translate(calc(-50% + var(--card-w) * 2.05), -110%); }
+  .meld-box.meld-me    { transform: translate(calc(-50% + var(--card-w) * .95), 60%); }
+
+  /* trvale vystavené hlášky (karta lícem + 20/40) u hráčů — jako ve FLEK! */
+  .melds { display: flex; gap: 10px; margin-top: 8px; min-height: calc(var(--card-w) * .62); }
+  #seat-right .melds { justify-content: flex-end; }
+  .melds .meld { position: relative; }
+  .melds .meld img { width: calc(var(--card-w) * .52); border-radius: 4px;
+    box-shadow: 0 2px 6px rgba(0,0,0,.4); display: block; }
+  .melds .meld span {
+    position: absolute; top: -9px; right: -12px;
+    background: #fffdf2; color: #2b2b33; border: 1px solid #d9d2ba;
+    font: 700 12px/1 inherit; padding: 2px 6px; border-radius: 6px;
+    box-shadow: 0 1px 4px rgba(0,0,0,.3);
+  }
+  #melds-me { position: absolute; left: 16px; bottom: 12px; margin: 0; }
   #trick .played.fly-me { transform: translate(calc(-50% + 40vw), 26vh) rotate(10deg) scale(.4); opacity: 0; }
   #trick .played.fly-left { transform: translate(calc(-50% - 42vw), -22vh) rotate(-14deg) scale(.4); opacity: 0; }
   #trick .played.fly-right { transform: translate(calc(-50% + 42vw), -22vh) rotate(14deg) scale(.4); opacity: 0; }

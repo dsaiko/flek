@@ -44,7 +44,13 @@ const $ = <T extends HTMLElement>(id: string): T => {
 
 const settings = loadSettings();
 const driver = createWorkerDriver();
+
+// ?seed=NNN → deterministická rozdání (testy, sdílení zajímavých rozdání);
+// další hry v zápase dostávají seed+1, seed+2, …
+const urlSeed = Number(new URLSearchParams(location.search).get('seed')) || null;
+let seedCounter = urlSeed ?? 0;
 const randomSeed = (): number => {
+  if (urlSeed !== null) return (seedCounter += 1) - 1 || 1;
   const buf = new Uint32Array(1);
   crypto.getRandomValues(buf);
   return buf[0] || 1;

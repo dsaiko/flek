@@ -13,7 +13,7 @@ import type { GameState, HandResult, PlayerAction, PlayerView, Seat } from '../r
 import { forhont } from '../rules/types';
 import { view } from '../rules/view';
 import { backSrc, cardName, cardSrc, suitIcon, suitName, type Pattern } from './cardAssets';
-import { aiNames, compLabel, currentLang, flekName, fmtMoney, t } from './i18n';
+import { aiNames, compLabel, currentLang, flekName, fmtMoney, marriageWarn, t } from './i18n';
 
 export interface TableCallbacks {
   onAction: (action: PlayerAction) => void;
@@ -111,7 +111,11 @@ export class TableUI {
         const vNew = view(state, this.opts.humanSeat);
         this.renderHand(vNew, []); // bez klikání, animace kliky stejně blokuje
         this.renderOpponents(vNew);
-        await this.animateTrickEnd(full, winner);
+        const marriages = [
+          ...prev.phase.marriages,
+          ...(a.announceMarriage ? [{ seat: a.seat, card: a.card }].map((x) => ({ seat: x.seat, suit: suitOf(x.card) })) : []),
+        ];
+        await this.animateTrickEnd(full, winner, marriages, prev.contract.trump);
       }
     }
     return false;
@@ -132,6 +136,7 @@ export class TableUI {
     this.renderHand(v, legal, reveal, state.unseen.length);
     if (phase.name !== 'scored') this.resultView = 'summary';
     this.renderPiles(v);
+    this.renderMelds(state, v);
     this.renderActions(v, legal);
     this.renderStatus(v, legal);
     this.showLastActionBubble(state);
@@ -143,7 +148,28 @@ export class TableUI {
     return window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
   }
 
-  private async animateTrickEnd(full: { seat: Seat; card: Card }[], winner: Seat): Promise<void> {
+  /** Bílý box „20"/„40" u karty, kterou byla ohlášena hláška (po vzoru FLEK!). */
+  private appendMeldBox(
+    trickEl: HTMLElement,
+    p: { seat: Seat; card: Card },
+    marriages: { seat: Seat; suit: number }[],
+    trump: number | null,
+  ): void {
+    const r = rankOf(p.card);
+    if (r !== KRAL && r !== SVRSEK) return;
+    if (!marriages.some((m) => m.seat === p.seat && m.suit === suitOf(p.card))) return;
+    const box = document.createElement('div');
+    box.className = `meld-box meld-${this.posOf(p.seat)}`;
+    box.textContent = trump !== null && suitOf(p.card) === trump ? '40' : '20';
+    trickEl.appendChild(box);
+  }
+
+  private async animateTrickEnd(
+    full: { seat: Seat; card: Card }[],
+    winner: Seat,
+    marriages: { seat: Seat; suit: number }[] = [],
+    trump: number | null = null,
+  ): Promise<void> {
     const trickEl = $(this.root, '#trick');
     this.root.classList.add('animating');
 
@@ -157,6 +183,7 @@ export class TableUI {
       img.className = `played pos-${this.posOf(p.seat)}${p.seat === winner ? ' win' : ''}`;
       trickEl.appendChild(img);
       imgs.push(img);
+      this.appendMeldBox(trickEl, p, marriages, trump);
     }
     const statusEl = $(this.root, '#status');
     statusEl.textContent = `${currentLang() === 'en' ? 'Trick' : 'Štych'}: ${this.nameOf(winner)}`;
@@ -206,6 +233,42 @@ export class TableUI {
     if (meLedger) meLedger.textContent = fmtMoney(v.ledger[this.opts.humanSeat]);
   }
 
+  // ── vystavené hlášky (karta lícem + 20/40, po vzoru FLEK!) ──────────────────
+
+  private renderMelds(state: GameState, v: PlayerView): void {
+    const bySeat: [{ card: Card }[], { card: Card }[], { card: Card }[]] = [[], [], []];
+    if (v.phase.name === 'tricks') {
+      // ohlášené hlášky od posledního rozdání (karta, kterou byla hláška ohlášena)
+      for (let i = state.history.length - 1; i >= 0; i -= 1) {
+        const a = state.history[i];
+        if (a.type === 'deal') break;
+        if (a.type === 'play' && a.announceMarriage) bySeat[a.seat].unshift({ card: a.card });
+      }
+    }
+    const trump = v.contract?.trump ?? null;
+    const targets: [Seat, string][] = [
+      [this.opts.humanSeat, '#melds-me'],
+      [this.seatAt('left'), '#melds-left'],
+      [this.seatAt('right'), '#melds-right'],
+    ];
+    for (const [seat, sel] of targets) {
+      const el = $(this.root, sel);
+      el.innerHTML = '';
+      for (const m of bySeat[seat]) {
+        const wrap = document.createElement('div');
+        wrap.className = 'meld';
+        const img = document.createElement('img');
+        img.src = cardSrc(m.card, this.opts.pattern());
+        img.alt = cardName(m.card);
+        const badge = document.createElement('span');
+        badge.textContent = trump !== null && suitOf(m.card) === trump ? '40' : '20';
+        wrap.appendChild(img);
+        wrap.appendChild(badge);
+        el.appendChild(wrap);
+      }
+    }
+  }
+
   // ── pakle vybraných štychů ──────────────────────────────────────────────────
 
   private renderPiles(v: PlayerView): void {
@@ -251,6 +314,7 @@ export class TableUI {
         img.alt = cardName(p.card);
         img.className = `played pos-${this.posOf(p.seat)}`;
         trickEl.appendChild(img);
+        this.appendMeldBox(trickEl, p, v.phase.marriages, v.contract?.trump ?? null);
       }
     }
     // zúčtování/průběh: plovoucí vrstva přes střed stolu — nemění výšku stolu
@@ -395,10 +459,18 @@ export class TableUI {
     });
     const confirm = this.root.querySelector<HTMLButtonElement>('#discard-confirm');
     if (confirm) confirm.disabled = this.selected.size !== 2;
-    // varování: bodovaná karta v odhozu zamkne hru (zbyde jen betl/durch)
+    // varování: bodovaná karta zamkne hru; půlka hlášky = FLEKovo „A co mariáš?"
     const statusEl = $(this.root, '#status');
+    const breaksMarriage = [...this.selected].find((c) => {
+      const r = rankOf(c);
+      if (r !== KRAL && r !== SVRSEK) return false;
+      const partner = mkCard(suitOf(c), r === KRAL ? SVRSEK : KRAL);
+      return v.hand.includes(partner) && !this.selected.has(partner);
+    });
     if ([...this.selected].some((c) => pointsOf(c) > 0)) {
       statusEl.textContent = t('talonWarn');
+    } else if (breaksMarriage !== undefined) {
+      statusEl.textContent = marriageWarn(suitOf(breaksMarriage));
     } else if (v.phase.name === 'discard-talon') {
       statusEl.textContent =
         v.phase.standing.trump !== null
@@ -725,14 +797,8 @@ function bubbleText(a: PlayerAction, state: GameState): string | null {
       return t('good');
     case 'announce-proti':
       return a.sedma && a.kilo ? `${t('sedmaProti')}, ${t('kiloProti')}!` : a.sedma ? `${t('sedmaProti')}!` : `${t('kiloProti')}!`;
-    case 'play': {
-      if (a.announceMarriage) {
-        const trump = state.contract?.trump;
-        const pts = trump !== null && trump !== undefined && suitOf(a.card) === trump ? 40 : 20;
-        return `${t('marriage')} ${pts}`;
-      }
-      return null;
-    }
+    case 'play':
+      return null; // hlášku ukazuje box „20/40" u karty (po vzoru FLEK!)
     default:
       return null;
   }

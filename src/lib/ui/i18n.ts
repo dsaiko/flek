@@ -77,6 +77,11 @@ const STRINGS = {
   back: { cs: 'Zpět', en: 'Back', de: 'Zurück' },
   trickWord: { cs: 'Štych', en: 'Trick', de: 'Stich' },
   silentWord: { cs: 'tichá', en: 'silent', de: 'still' },
+  marriageWarnAdj: {
+    cs: ['červený', 'zelený', 'kulový', 'žaludský'],
+    en: ['hearts', 'leaves', 'bells', 'acorns'],
+    de: ['Herz', 'Grün', 'Schellen', 'Eichel'],
+  },
   talonWarn: {
     cs: 'Pozor: s esem/desítkou v talonu lze hrát jen betl nebo durch!',
     en: 'Careful: with an ace/ten in the talon only betl or durch can be played!',
@@ -114,6 +119,15 @@ export function fmtMoney(units: number): string {
   if (lang === 'en') return `${v < 0 ? '−' : ''}$${Math.abs(v).toFixed(2)}`;
   const num = v.toFixed(2).replace('.', ',');
   return lang === 'de' ? `${num} €` : `${num} Kč`;
+}
+
+/** Varování při odhozu půlky hlášky do talonu — FLEKova formulace. */
+export function marriageWarn(suit: 0 | 1 | 2 | 3): string {
+  const lang = currentLang();
+  const adj = STRINGS.marriageWarnAdj[lang][suit];
+  if (lang === 'cs') return `A co ${adj} mariáš?`;
+  if (lang === 'de') return `Und die ${adj}-Meldung?`;
+  return `What about the ${adj} marriage?`;
 }
 
 /** Popisek komponenty vyúčtování ve stylu FLEK! („Prohrané kilo", „Vyhraný betl"…). */
