@@ -1,6 +1,6 @@
 {
   "name": "flek",
-  "version": "1.0.0",
+  "version": "0.0.1",
   "description": "Flek! — online mariáš · tribute to FLEK!/RE! by Pivoňka Software",
   "scripts": {
     "dev": "astro dev",
