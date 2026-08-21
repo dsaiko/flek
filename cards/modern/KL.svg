@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 410" width="240" height="410">
+<!-- Flek! tribute · moderní mariášová sada · MIT © 2026 Dušan Saiko · https://flek.saiko.cz -->
+<title>král zelené</title>
+<rect x="1" y="1" width="238" height="408" rx="14" fill="#ffffff" stroke="#d9d9e0" stroke-width="2"/>
+  <g><text x="28" y="44" text-anchor="middle" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="30" font-weight="700" fill="#2e7d32">K</text></g><g transform="rotate(180 120 205)"><text x="28" y="44" text-anchor="middle" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="30" font-weight="700" fill="#2e7d32">K</text></g>
+  <rect x="36" y="70" width="168" height="270" rx="14" fill="#2e7d32" fill-opacity="0.06" stroke="#2e7d32" stroke-opacity="0.3"/>
+  <g transform="translate(120 205) scale(1.12) translate(-120 -205)">
+  <circle cx="120" cy="186" r="24" fill="#2f2f3a"/>
+  <path d="M76 322 C80 270 96 222 120 220 C144 222 160 270 164 322 Z" fill="#2e7d32"/>
+  <g transform="translate(120 272) scale(0.6)"><path d="M0 -34 C9 -26 21 -13 21 1 C21 17 11 29 0 34 C-11 29 -21 17 -21 1 C-21 -13 -9 -26 0 -34 Z" fill="#ffffff"/><path d="M0 -24 L0 24 M0 -8 C-6 -4 -10 0 -12 6 M0 -2 C6 2 10 6 12 12" stroke="#2e7d32" stroke-width="2.4" stroke-linecap="round" fill="none" opacity="1"/></g>
+  <path d="M94 170 L94 144 L107 156 L120 138 L133 156 L146 144 L146 170 Z" fill="#e8b100" stroke="#a87c00" stroke-width="2"/>
+  <circle cx="94" cy="142" r="3.4" fill="#e8b100" stroke="#a87c00" stroke-width="1.6"/>
+  <circle cx="120" cy="136" r="3.4" fill="#e8b100" stroke="#a87c00" stroke-width="1.6"/>
+  <circle cx="146" cy="142" r="3.4" fill="#e8b100" stroke="#a87c00" stroke-width="1.6"/>
+  </g>
+</svg>

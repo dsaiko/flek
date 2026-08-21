@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 410" width="240" height="410">
+<!-- Flek! tribute · moderní mariášová sada · MIT © 2026 Dušan Saiko · https://flek.saiko.cz -->
+<title>svršek kule</title>
+<rect x="1" y="1" width="238" height="408" rx="14" fill="#ffffff" stroke="#d9d9e0" stroke-width="2"/>
+  <g><text x="28" y="44" text-anchor="middle" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="30" font-weight="700" fill="#a06d00">V</text></g><g transform="rotate(180 120 205)"><text x="28" y="44" text-anchor="middle" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="30" font-weight="700" fill="#a06d00">V</text></g>
+  <rect x="36" y="70" width="168" height="270" rx="14" fill="#c8890a" fill-opacity="0.06" stroke="#c8890a" stroke-opacity="0.3"/>
+  <g transform="translate(120 205) scale(1.12) translate(-120 -205)">
+  <g transform="translate(120 140) scale(0.66)"><circle cx="0" cy="-2" r="27" fill="#edaa17" stroke="#8a5a00" stroke-width="2.4"/><path d="M-25 -8 Q0 4 25 -8" stroke="#8a5a00" stroke-width="2.4" fill="none"/><circle cx="-9" cy="-13" r="6" fill="#ffffff" opacity="0.5"/><path d="M0 10 L5.5 16.5 L0 23 L-5.5 16.5 Z" fill="#8a5a00"/></g>
+  <circle cx="120" cy="212" r="21" fill="#2f2f3a"/>
+  <path d="M101 194 A19 15 0 0 1 139 194 Z" fill="#c8890a"/>
+  <ellipse cx="120" cy="194" rx="30" ry="5.5" fill="#c8890a"/>
+  <path d="M80 322 C84 276 96 242 120 240 C144 242 156 276 160 322 Z" fill="#c8890a"/>
+  </g>
+</svg>

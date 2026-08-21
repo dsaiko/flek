@@ -1,0 +1,33 @@
+# závislosti
+node_modules/
+
+# build výstupy
+dist/
+.astro/
+
+# lokální konfigurace (deploy — AWS profil, bucket; viz Makefile)
+Makefile.local
+
+# nástroje
+.claude/
+.fixpoint/
+
+# oficiální PDF pravidel ČSM — cizí dílo, neredistribuujeme; dokumentace na ně odkazuje
+docs/pravidla/
+
+# logy a cache
+*.log
+npm-debug.log*
+.cache/
+.vite/
+
+# editory / OS
+.DS_Store
+.vscode/
+.idea/
+*.swp
+
+# prostředí
+.env
+.env.*
+!.env.example

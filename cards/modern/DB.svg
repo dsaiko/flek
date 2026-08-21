@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 410" width="240" height="410">
+<!-- Flek! tribute · moderní mariášová sada · MIT © 2026 Dušan Saiko · https://flek.saiko.cz -->
+<title>eso kule</title>
+<rect x="1" y="1" width="238" height="408" rx="14" fill="#ffffff" stroke="#d9d9e0" stroke-width="2"/>
+  <g><text x="28" y="44" text-anchor="middle" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="30" font-weight="700" fill="#a06d00">A</text></g><g transform="rotate(180 120 205)"><text x="28" y="44" text-anchor="middle" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="30" font-weight="700" fill="#a06d00">A</text></g>
+  <g transform="translate(120 205) scale(2.8)"><circle cx="0" cy="-2" r="27" fill="#edaa17" stroke="#8a5a00" stroke-width="2.4"/><path d="M-25 -8 Q0 4 25 -8" stroke="#8a5a00" stroke-width="2.4" fill="none"/><circle cx="-9" cy="-13" r="6" fill="#ffffff" opacity="0.5"/><path d="M0 10 L5.5 16.5 L0 23 L-5.5 16.5 Z" fill="#8a5a00"/></g>
+</svg>
