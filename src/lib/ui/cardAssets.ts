@@ -38,7 +38,7 @@ const RANK_NAME_EN = ['seven', 'eight', 'nine', 'ten', 'unter', 'ober', 'king', 
  * Inline SVG symboly barev — stejné tvary jako na kartách (gen-cards.ts),
  * konzistentní s vizuálem sady. Vkládat přes innerHTML.
  */
-export function suitIcon(s: Suit, size = 15): string {
+export function suitIcon(s: Suit, size = 20): string {
   const bodies = [
     // červené
     `<path d="M0 30 C-3 21 -10 12 -18 5 C-29 -3 -33 -13 -30 -21 C-27 -30 -19 -34 -12 -33 C-6 -32 -2 -27 0 -21 C2 -27 6 -32 12 -33 C19 -34 27 -30 30 -21 C33 -13 29 -3 18 5 C10 12 3 21 0 30 Z" fill="#c62828"/>`,
@@ -49,7 +49,7 @@ export function suitIcon(s: Suit, size = 15): string {
     // žaludy
     `<path d="M-17 -8 C-17 8 -9 25 0 32 C9 25 17 8 17 -8 Q0 -14 -17 -8 Z" fill="#6a8f3c"/><path d="M-19 -7 Q-19 -26 0 -26 Q19 -26 19 -7 Q0 -13 -19 -7 Z" fill="#7a4f2b"/>`,
   ];
-  return `<svg viewBox="-34 -40 68 78" width="${size}" height="${size}" style="vertical-align:-0.12em" aria-hidden="true">${bodies[s]}</svg>`;
+  return `<svg viewBox="-34 -40 68 78" width="${size}" height="${size}" style="vertical-align:-0.22em" aria-hidden="true">${bodies[s]}</svg>`;
 }
 
 export function suitName(s: Suit): string {
