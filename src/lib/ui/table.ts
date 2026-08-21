@@ -11,7 +11,7 @@ import { legalActions } from '../rules/legal';
 import { trickWinner } from '../rules/tricks';
 import type { GameState, HandResult, PlayerAction, PlayerView, Seat } from '../rules/types';
 import { view } from '../rules/view';
-import { backSrc, cardName, cardSrc, SUIT_SYMBOL, type Pattern } from './cardAssets';
+import { backSrc, cardName, cardSrc, suitIcon, type Pattern } from './cardAssets';
 import { currentLang, flekName, t } from './i18n';
 
 export interface TableCallbacks {
@@ -241,14 +241,14 @@ export class TableUI {
     } else {
       const parts: string[] = [];
       parts.push(
-        c.mode === 'hra' ? `${t('hra')} ${c.trump !== null ? SUIT_SYMBOL[c.trump] : ''}` : t(c.mode),
+        c.mode === 'hra' ? `${t('hra')} ${c.trump !== null ? suitIcon(c.trump) : ''}` : t(c.mode),
       );
       if (c.sedma !== null) parts.push(c.sedma === c.declarer ? t('sedma') : t('sedmaProti'));
       if (c.kilo !== null) parts.push(c.kilo === c.declarer ? t('kilo') : t('kiloProti'));
       const fleks = flekSummary(state);
       if (fleks) parts.push(fleks);
       const who = c.declarer === this.opts.humanSeat ? t('you') : this.nameOf(c.declarer);
-      info.textContent = `${who}: ${parts.join(' · ')}`;
+      info.innerHTML = `${who}: ${parts.join(' · ')}`;
     }
   }
 
@@ -341,7 +341,7 @@ export class TableUI {
       const b = document.createElement('button');
       b.className = `action-btn${opts?.primary ? ' primary' : ''}`;
       if (opts?.id) b.id = opts.id;
-      b.textContent = label;
+      b.innerHTML = label;
       b.disabled = opts?.disabled ?? false;
       b.addEventListener('click', onClick);
       bar.appendChild(b);
@@ -375,12 +375,14 @@ export class TableUI {
         }
         break;
 
-      case 'declare':
+      case 'declare': {
+        const standingTrump = v.phase.name === 'declare' ? v.phase.standing.trump : null;
         for (const a of legal) {
           if (a.type !== 'declare') continue;
-          btn(declareLabel(a), () => this.cb.onAction(a), { primary: a.mode === 'hra' && !a.sedma && !a.kilo });
+          btn(declareLabel(a, standingTrump), () => this.cb.onAction(a), { primary: a.mode === 'hra' && !a.sedma && !a.kilo });
         }
         break;
+      }
 
       case 'bidding':
         for (const a of legal) {
@@ -490,7 +492,7 @@ export class TableUI {
     if (seat === this.opts.humanSeat) return;
     const pos = seat === this.seatAt('left') ? 'left' : 'right';
     const el = $(this.root, `#seat-${pos} .bubble`);
-    el.textContent = text;
+    el.innerHTML = text;
     el.classList.add('show');
     const prev = this.bubbleTimers.get(seat);
     if (prev) clearTimeout(prev);
@@ -506,10 +508,11 @@ const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms
 
 const fmtLedger = (n: number): string => (n > 0 ? `+${n}` : String(n));
 
-function declareLabel(a: Extract<PlayerAction, { type: 'declare' }>): string {
+function declareLabel(a: Extract<PlayerAction, { type: 'declare' }>, standingTrump: number | null = null): string {
   if (a.mode !== 'hra') return t(a.mode);
   const parts = [t('hra')];
-  if (a.trump !== undefined) parts.push(SUIT_SYMBOL[a.trump]);
+  const trump = a.trump ?? standingTrump;
+  if (trump !== null && trump !== undefined) parts.push(suitIcon(trump as 0 | 1 | 2 | 3));
   if (a.sedma) parts.push(`+ ${t('sedma')}`);
   if (a.kilo) parts.push(`+ ${t('kilo')}`);
   return parts.join(' ');
@@ -526,7 +529,7 @@ const BID_LABEL_EN: Record<string, string> = {
 
 function bidLabel(b: { kind: string; cervena: boolean }): string {
   const base = (currentLang() === 'en' ? BID_LABEL_EN : BID_LABEL_CS)[b.kind] ?? b.kind;
-  return b.cervena ? `${base} ${SUIT_SYMBOL[0]}` : base;
+  return b.cervena ? `${base} ${suitIcon(0)}` : base;
 }
 
 function targetLabel(target: string): string {
@@ -591,7 +594,7 @@ function resultHtml(r: HandResult, humanSeat: Seat, nameOf: (s: Seat) => string)
   const lang = currentLang();
   const head =
     c.mode === 'hra'
-      ? `${t('hra')} ${c.trump !== null ? SUIT_SYMBOL[c.trump] : ''} — ${nameOf(c.declarer)}`
+      ? `${t('hra')} ${c.trump !== null ? suitIcon(c.trump) : ''} — ${nameOf(c.declarer)}`
       : `${t(c.mode)} — ${nameOf(c.declarer)}`;
   const pts =
     c.mode === 'hra'
