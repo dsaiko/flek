@@ -203,7 +203,7 @@ export class TableUI {
       }
     }
     const meLedger = this.root.querySelector<HTMLElement>('#ledger-me');
-    if (meLedger) meLedger.textContent = `${t('you')}: ${fmtMoney(v.ledger[this.opts.humanSeat])}`;
+    if (meLedger) meLedger.textContent = fmtMoney(v.ledger[this.opts.humanSeat]);
   }
 
   // ── pakle vybraných štychů ──────────────────────────────────────────────────
