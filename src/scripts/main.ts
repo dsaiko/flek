@@ -25,9 +25,9 @@ const SETTINGS_KEY = 'flek.settings.v1';
 function loadSettings(): Settings {
   try {
     const raw = localStorage.getItem(SETTINGS_KEY);
-    if (raw) return { variant: 'voleny', difficulty: 'normal', pattern: 'modern', ...JSON.parse(raw) };
+    if (raw) return { variant: 'voleny', difficulty: 'normal', pattern: 'history', ...JSON.parse(raw) };
   } catch { /* výchozí */ }
-  return { variant: 'voleny', difficulty: 'normal', pattern: 'modern' };
+  return { variant: 'voleny', difficulty: 'normal', pattern: 'history' };
 }
 
 function saveSettings(s: Settings): void {
@@ -71,7 +71,6 @@ function makeController(resume?: GameState): MatchController {
 const table = new TableUI($('table'), {
   humanSeat: 0,
   pattern: () => settings.pattern,
-  aiNames: ['Franta', 'Lojza'],
 }, {
   onAction: (action) => {
     try { controller.dispatch(action); } catch (e) { console.error(e); }

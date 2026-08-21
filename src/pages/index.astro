@@ -4,8 +4,10 @@ import Layout from '../layouts/Layout.astro';
 <Layout
   titleCs="Flek! · Mariáš"
   titleEn="Flek! · Mariáš — Czech card game"
+  titleDe="Flek! · Mariasch — böhmisches Kartenspiel"
   descriptionCs="Flek! — online mariáš. Pocta hrám FLEK! a RE! od Pivoňka Software (MS-DOS, 1991–93)."
   descriptionEn="Flek! — Mariáš, the classic Czech card game online. A tribute to FLEK! and RE! by Pivoňka Software (MS-DOS, 1991–93)."
+  descriptionDe="Flek! — Mariasch, das klassische böhmische Kartenspiel online. Eine Hommage an FLEK! und RE! von Pivoňka Software (MS-DOS, 1991–93)."
 >
   <main>
     <section class="hero">
@@ -16,6 +18,8 @@ import Layout from '../layouts/Layout.astro';
           a <strong>Josefu Saikovi</strong>, učiteli, který miloval matematiku.</span>
         <span class="en">Mariáš, the classic Czech card game — a tribute to <strong>FLEK!</strong> and <strong>RE!</strong> by Ing. Jaroslav Pivoňka,
           and to <strong>Josef Saiko</strong>, a teacher who loved mathematics.</span>
+        <span class="de">Mariasch, das klassische böhmische Kartenspiel — eine Hommage an <strong>FLEK!</strong> und <strong>RE!</strong> von Ing. Jaroslav Pivoňka
+          und an <strong>Josef Saiko</strong>, einen Lehrer, der die Mathematik liebte.</span>
       </p>
     </section>
 
@@ -50,18 +54,11 @@ import Layout from '../layouts/Layout.astro';
           <div class="me-meta"><span id="ledger-me"></span></div>
           <div class="pile" id="pile-me"></div>
         </div>
-
-        <div id="result" class="overlay">
-          <div class="panel">
-            <div id="result-body"></div>
-            <button id="result-next" class="action-btn primary"></button>
-          </div>
-        </div>
       </div>
 
       <div class="game-controls">
         <label>
-          <span class="cs">Varianta</span><span class="en">Variant</span>
+          <span class="cs">Varianta</span><span class="en">Variant</span><span class="de">Variante</span>
           <select id="set-variant">
             <option value="voleny">Volený (FLEK!)</option>
             <option value="licitovany">Licitovaný (RE!)</option>
@@ -76,13 +73,13 @@ import Layout from '../layouts/Layout.astro';
           </select>
         </label>
         <label>
-          <span class="cs">Vzor karet</span><span class="en">Cards</span>
+          <span class="cs">Vzor karet</span><span class="en">Cards</span><span class="de">Kartenbild</span>
           <select id="set-pattern">
-            <option value="modern">Modern</option>
             <option value="history">1860</option>
+            <option value="modern">Modern</option>
           </select>
         </label>
-        <button id="btn-new" class="ctl-btn"><span class="cs">Nový zápas</span><span class="en">New match</span></button>
+        <button id="btn-new" class="ctl-btn"><span class="cs">Nový zápas</span><span class="en">New match</span><span class="de">Neue Partie</span></button>
         <button id="btn-fullscreen" class="ctl-btn" title="Fullscreen">⛶</button>
       </div>
     </section>
@@ -91,6 +88,7 @@ import Layout from '../layouts/Layout.astro';
       <p>
         <span class="cs">© 2026 Dušan Saiko · nezávislá pocta hrám FLEK! a RE! (Pivoňka Software) ·</span>
         <span class="en">© 2026 Dušan Saiko · an independent tribute to FLEK! and RE! (Pivoňka Software) ·</span>
+        <span class="de">© 2026 Dušan Saiko · eine unabhängige Hommage an FLEK! und RE! (Pivoňka Software) ·</span>
         <a href="https://github.com/dsaiko/flek">GitHub</a>
       </p>
       <p class="attribution">
@@ -98,6 +96,8 @@ import Layout from '../layouts/Layout.astro';
           (Wikimedia Commons / BnF Gallica). Moderní sada: MIT.</span>
         <span class="en">Historical cards: single-headed Prague pattern, Ant. Kratochvíl, Prague 1860 — public domain
           (Wikimedia Commons / BnF Gallica). Modern deck: MIT.</span>
+        <span class="de">Historische Karten: einköpfiges Prager Bild, Ant. Kratochvíl, Prag 1860 — gemeinfrei
+          (Wikimedia Commons / BnF Gallica). Modernes Blatt: MIT.</span>
       </p>
     </footer>
   </main>
@@ -277,23 +277,36 @@ import Layout from '../layouts/Layout.astro';
 
   .me-meta { color: #a9c4dd; font-size: 13px; margin-top: 6px; }
 
-  .overlay {
-    position: absolute; inset: 0; display: none; align-items: center; justify-content: center;
-    background: rgba(10, 25, 16, .55); border-radius: 20px; z-index: 10;
+  /* zúčtování integrované do stolu (po vzoru FLEK!) */
+  #trick { display: flex; align-items: center; justify-content: center; }
+  .felt-panel {
+    margin: auto; min-width: 340px; max-width: 560px;
+    background: #0e7f8b; color: #eafcf6;
+    border: 2px solid #0a5a63; border-radius: 12px;
+    padding: 14px 22px 12px;
+    box-shadow: 0 10px 30px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.15);
+    font-size: 15px;
   }
-  .overlay.open { display: flex; }
-  .overlay .panel {
-    background: #fffdf6; border-radius: 16px; padding: 20px 24px; max-width: 420px; width: 90%;
-    box-shadow: 0 16px 50px rgba(0,0,0,.4); text-align: center;
-  }
-  .overlay h3 { margin: 0 0 6px; }
-  .overlay .pts { color: var(--muted); font-size: 14px; margin: 0 0 10px; }
-  .overlay table { width: 100%; border-collapse: collapse; font-size: 14px; margin-bottom: 10px; }
-  .overlay td { padding: 5px 4px; border-bottom: 1px solid #eee7d4; text-align: left; }
-  .overlay td.num { text-align: right; font-weight: 700; }
-  .overlay .deltas { font-size: 14px; margin: 4px 0 14px; }
-  .overlay .plus { color: #1d7a3e; font-weight: 700; }
-  .overlay .minus { color: #b3372f; font-weight: 700; }
+  .felt-panel h3 { margin: 0 0 4px; text-align: center; letter-spacing: 1px; }
+  .felt-sub { text-align: center; color: #bfeee8; font-size: 13px; margin-bottom: 8px; }
+  .felt-panel table { width: 100%; border-collapse: collapse; }
+  .felt-panel td { padding: 3px 4px; }
+  .felt-panel td.money { text-align: right; font-weight: 700; white-space: nowrap; }
+  .felt-panel tr.sum td { border-top: 1px solid rgba(255,255,255,.35); padding-top: 7px; }
+  .felt-panel .felt-others { text-align: center; color: #bfeee8; font-size: 12px; margin-top: 8px; }
+  .felt-panel em { opacity: .8; font-style: normal; font-size: 12px; }
+
+  /* průběh hry: kaskády štychů + talon */
+  .replay { margin: 2px auto; max-height: 100%; overflow: auto; align-self: stretch; width: 100%; }
+  .replay-head { text-align: center; color: #eaf2f9; font-size: 13px; margin: 4px 0 8px; }
+  .replay-head img { width: calc(var(--card-w) * .5); border-radius: 4px; vertical-align: middle;
+    margin-left: 3px; box-shadow: 0 1px 4px rgba(0,0,0,.4); }
+  .rtricks { display: flex; flex-wrap: wrap; gap: 8px 16px; justify-content: center; }
+  .rtrick { text-align: center; }
+  .rtrick img { width: calc(var(--card-w) * .58); border-radius: 4px; margin-right: calc(var(--card-w) * -.3);
+    box-shadow: 2px 1px 5px rgba(0,0,0,.4); }
+  .rtrick img:last-child { margin-right: 0; }
+  .rtrick .rwin { color: #cfe3f5; font-size: 11px; margin-top: 3px; }
 
   .game-controls {
     display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: center;

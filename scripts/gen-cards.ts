@@ -8,6 +8,7 @@
  *
  * Spuštění: npx tsx scripts/gen-cards.ts        → cards/modern/    (české indexy S V K A)
  *           npx tsx scripts/gen-cards.ts en     → cards/modern-en/ (anglické indexy J Q K A)
+ *           npx tsx scripts/gen-cards.ts de     → cards/modern-de/ (německé indexy U O K A)
  * Licence: MIT © 2026 Dušan Saiko
  */
 
@@ -15,8 +16,11 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const LANG: 'cs' | 'en' = process.argv[2] === 'en' ? 'en' : 'cs';
-const OUT = join(dirname(fileURLToPath(import.meta.url)), '..', 'cards', LANG === 'en' ? 'modern-en' : 'modern');
+const LANG: 'cs' | 'en' | 'de' = process.argv[2] === 'en' ? 'en' : process.argv[2] === 'de' ? 'de' : 'cs';
+const OUT = join(
+  dirname(fileURLToPath(import.meta.url)), '..', 'cards',
+  LANG === 'en' ? 'modern-en' : LANG === 'de' ? 'modern-de' : 'modern',
+);
 
 // ── geometrie karty ──────────────────────────────────────────────────────────
 // tradiční mariášový formát 62×106 mm
@@ -37,15 +41,16 @@ interface SuitDef {
   code: 'A' | 'B' | 'H' | 'L';
   nameCs: string;
   nameEn: string;
+  nameDe: string;
   color: string;   // hlavní barva (indexy, oděv figur, tinty)
   index: string;   // barva textu indexu (tmavší kvůli čitelnosti)
 }
 
 const SUITS: SuitDef[] = [
-  { code: 'H', nameCs: 'červené', nameEn: 'hearts', color: '#c62828', index: '#c62828' },
-  { code: 'L', nameCs: 'zelené', nameEn: 'leaves', color: '#2e7d32', index: '#2e7d32' },
-  { code: 'B', nameCs: 'kule', nameEn: 'bells', color: '#c8890a', index: '#a06d00' },
-  { code: 'A', nameCs: 'žaludy', nameEn: 'acorns', color: '#7a4f2b', index: '#6d4c2b' },
+  { code: 'H', nameCs: 'červené', nameEn: 'hearts', nameDe: 'Herz', color: '#c62828', index: '#c62828' },
+  { code: 'L', nameCs: 'zelené', nameEn: 'leaves', nameDe: 'Grün', color: '#2e7d32', index: '#2e7d32' },
+  { code: 'B', nameCs: 'kule', nameEn: 'bells', nameDe: 'Schellen', color: '#c8890a', index: '#a06d00' },
+  { code: 'A', nameCs: 'žaludy', nameEn: 'acorns', nameDe: 'Eichel', color: '#7a4f2b', index: '#6d4c2b' },
 ];
 
 // ── symboly barev ────────────────────────────────────────────────────────────
@@ -114,22 +119,24 @@ interface RankDef {
   code: '7' | '8' | '9' | 'T' | 'U' | 'O' | 'K' | 'D';
   labelCs: string; // rohový index (česky)
   labelEn: string; // rohový index (anglicky; Unter→J, Ober→Q)
+  labelDe: string; // rohový index (německy; Unter→U, Ober→O, Ass→A)
   nameCs: string;
   nameEn: string;
+  nameDe: string;
 }
 
 const RANKS: RankDef[] = [
-  { code: '7', labelCs: '7', labelEn: '7', nameCs: 'sedma', nameEn: 'seven' },
-  { code: '8', labelCs: '8', labelEn: '8', nameCs: 'osma', nameEn: 'eight' },
-  { code: '9', labelCs: '9', labelEn: '9', nameCs: 'devítka', nameEn: 'nine' },
-  { code: 'T', labelCs: '10', labelEn: '10', nameCs: 'desítka', nameEn: 'ten' },
-  { code: 'U', labelCs: 'S', labelEn: 'J', nameCs: 'spodek', nameEn: 'unter (jack)' },
-  { code: 'O', labelCs: 'V', labelEn: 'Q', nameCs: 'svršek', nameEn: 'ober (queen)' },
-  { code: 'K', labelCs: 'K', labelEn: 'K', nameCs: 'král', nameEn: 'king' },
-  { code: 'D', labelCs: 'A', labelEn: 'A', nameCs: 'eso', nameEn: 'ace' },
+  { code: '7', labelCs: '7', labelEn: '7', labelDe: '7', nameCs: 'sedma', nameEn: 'seven', nameDe: 'Sieben' },
+  { code: '8', labelCs: '8', labelEn: '8', labelDe: '8', nameCs: 'osma', nameEn: 'eight', nameDe: 'Acht' },
+  { code: '9', labelCs: '9', labelEn: '9', labelDe: '9', nameCs: 'devítka', nameEn: 'nine', nameDe: 'Neun' },
+  { code: 'T', labelCs: '10', labelEn: '10', labelDe: '10', nameCs: 'desítka', nameEn: 'ten', nameDe: 'Zehn' },
+  { code: 'U', labelCs: 'S', labelEn: 'J', labelDe: 'U', nameCs: 'spodek', nameEn: 'unter (jack)', nameDe: 'Unter' },
+  { code: 'O', labelCs: 'V', labelEn: 'Q', labelDe: 'O', nameCs: 'svršek', nameEn: 'ober (queen)', nameDe: 'Ober' },
+  { code: 'K', labelCs: 'K', labelEn: 'K', labelDe: 'K', nameCs: 'král', nameEn: 'king', nameDe: 'König' },
+  { code: 'D', labelCs: 'A', labelEn: 'A', labelDe: 'A', nameCs: 'eso', nameEn: 'ace', nameDe: 'Ass' },
 ];
 
-const rankLabel = (r: RankDef) => (LANG === 'en' ? r.labelEn : r.labelCs);
+const rankLabel = (r: RankDef) => (LANG === 'en' ? r.labelEn : LANG === 'de' ? r.labelDe : r.labelCs);
 
 // ── rohové indexy (jen číslo/písmeno, bez mini symbolu) ─────────────────────
 function cornerIndex(suit: SuitDef, rank: RankDef): string {
@@ -228,7 +235,7 @@ function cardSvg(suit: SuitDef, rank: RankDef): string {
 
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">
 ${LICENSE_COMMENT}
-<title>${LANG === 'en' ? `${rank.nameEn} of ${suit.nameEn}` : `${rank.nameCs} ${suit.nameCs}`}</title>
+<title>${LANG === 'en' ? `${rank.nameEn} of ${suit.nameEn}` : LANG === 'de' ? `${suit.nameDe} ${rank.nameDe}` : `${rank.nameCs} ${suit.nameCs}`}</title>
 <rect x="1" y="1" width="${W - 2}" height="${H - 2}" rx="14" fill="#ffffff" stroke="#d9d9e0" stroke-width="2"/>
   ${cornerIndex(suit, rank)}
   ${body}
@@ -240,7 +247,7 @@ ${LICENSE_COMMENT}
 function backSvg(): string {
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">
 ${LICENSE_COMMENT}
-<title>${LANG === 'en' ? 'card back' : 'rub karty'}</title>
+<title>${LANG === 'en' ? 'card back' : LANG === 'de' ? 'Kartenrücken' : 'rub karty'}</title>
 <defs>
   <pattern id="lattice" width="24" height="24" patternUnits="userSpaceOnUse">
     <path d="M0 12 L12 0 L24 12 L12 24 Z" fill="none" stroke="#ffffff" stroke-opacity="0.14" stroke-width="1.6"/>

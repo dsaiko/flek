@@ -2,11 +2,13 @@
 interface Props {
   titleCs: string;
   titleEn: string;
+  titleDe: string;
   descriptionCs: string;
   descriptionEn: string;
+  descriptionDe: string;
 }
 
-const { titleCs, titleEn, descriptionCs, descriptionEn } = Astro.props;
+const { titleCs, titleEn, titleDe, descriptionCs, descriptionEn, descriptionDe } = Astro.props;
 const GOATCOUNTER = 'https://saiko-flek.goatcounter.com/count';
 ---
 <!doctype html>
@@ -18,14 +20,17 @@ const GOATCOUNTER = 'https://saiko-flek.goatcounter.com/count';
   <meta name="theme-color" content="#1e5c38" />
   <link rel="canonical" href={new URL('/', Astro.site)} />
   <script is:inline>
-    (function(){var l='cs';try{var q=(location.search.match(/[?&]lang=(cs|en)/)||[])[1];
-     if(q)l=q;else if(localStorage.getItem('lang')==='en')l='en';}catch(e){}
+    (function(){var l='cs';try{var q=(location.search.match(/[?&]lang=(cs|en|de)/)||[])[1];
+     var st=localStorage.getItem('lang');
+     if(q)l=q;else if(st==='en'||st==='de')l=st;}catch(e){}
      window.__lang=l;document.documentElement.classList.add('lang-'+l);})();
   </script>
   <title>{titleCs}</title>
   <style is:global>
     * { box-sizing: border-box; }
-    .lang-cs .en, .lang-en .cs { display: none; }
+    .lang-cs .en, .lang-cs .de,
+    .lang-en .cs, .lang-en .de,
+    .lang-de .cs, .lang-de .en { display: none; }
 
     .home-link, .langpill {
       position: fixed; top: 18px; z-index: 30;
@@ -52,14 +57,19 @@ const GOATCOUNTER = 'https://saiko-flek.goatcounter.com/count';
     .langpill svg { display: block; border-radius: 2px; box-shadow: 0 0 0 1px rgba(0,0,0,.06); }
   </style>
 </head>
-<body data-title-cs={titleCs} data-title-en={titleEn} data-description-cs={descriptionCs} data-description-en={descriptionEn}>
-  <a class="home-link" href="https://www.saiko.cz/"><span class="arrow">←</span><span class="cs">PROJEKTY</span><span class="en">PROJECTS</span></a>
+<body data-title-cs={titleCs} data-title-en={titleEn} data-title-de={titleDe} data-description-cs={descriptionCs} data-description-en={descriptionEn} data-description-de={descriptionDe}>
+  <a class="home-link" href="https://www.saiko.cz/"><span class="arrow">←</span><span class="cs">PROJEKTY</span><span class="en">PROJECTS</span><span class="de">PROJEKTE</span></a>
 
   <div class="langpill" role="group" aria-label="Language / Jazyk">
     <button data-lang="cs" title="Čeština" aria-label="Čeština">
       <svg width="24" height="16" viewBox="0 0 6 4" xmlns="http://www.w3.org/2000/svg">
         <rect width="6" height="2" fill="#fff"/><rect width="6" height="2" y="2" fill="#d7141a"/>
         <path d="M0,0 L3,2 L0,4 Z" fill="#11457e"/>
+      </svg>
+    </button>
+    <button data-lang="de" title="Deutsch" aria-label="Deutsch">
+      <svg width="24" height="16" viewBox="0 0 5 3" xmlns="http://www.w3.org/2000/svg">
+        <rect width="5" height="3" fill="#FFCE00"/><rect width="5" height="2" fill="#DD0000"/><rect width="5" height="1" fill="#000"/>
       </svg>
     </button>
     <button data-lang="en" title="English" aria-label="English">
@@ -82,9 +92,9 @@ const GOATCOUNTER = 'https://saiko-flek.goatcounter.com/count';
   <script is:inline>
     (function(){
       var d=document.body.dataset;
-      var TITLES={cs:d.titleCs,en:d.titleEn},DESCRIPTIONS={cs:d.descriptionCs,en:d.descriptionEn};
+      var TITLES={cs:d.titleCs,en:d.titleEn,de:d.titleDe},DESCRIPTIONS={cs:d.descriptionCs,en:d.descriptionEn,de:d.descriptionDe};
       function apply(l){
-        document.documentElement.classList.remove('lang-cs','lang-en');
+        document.documentElement.classList.remove('lang-cs','lang-en','lang-de');
         document.documentElement.classList.add('lang-'+l);document.documentElement.lang=l;
         document.title=TITLES[l]||TITLES.cs;
         var meta=document.querySelector('meta[name="description"]');

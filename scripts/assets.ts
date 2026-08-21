@@ -12,7 +12,7 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 
-for (const set of ['modern', 'modern-en']) {
+for (const set of ['modern', 'modern-en', 'modern-de']) {
   const src = join(ROOT, 'cards', set);
   const out = join(ROOT, 'public', 'cards', set);
   rmSync(out, { recursive: true, force: true });

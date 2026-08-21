@@ -12,7 +12,7 @@ import { trickWinner } from '../rules/tricks';
 import type { GameState, HandResult, PlayerAction, PlayerView, Seat } from '../rules/types';
 import { view } from '../rules/view';
 import { backSrc, cardName, cardSrc, suitIcon, type Pattern } from './cardAssets';
-import { currentLang, flekName, t } from './i18n';
+import { aiNames, compLabel, currentLang, flekName, fmtMoney, t } from './i18n';
 
 export interface TableCallbacks {
   onAction: (action: PlayerAction) => void;
@@ -23,7 +23,6 @@ export interface TableCallbacks {
 export interface TableOptions {
   humanSeat: Seat;
   pattern: () => Pattern;
-  aiNames: [string, string]; // [levý = další v pořadí, pravý]
 }
 
 const $ = <T extends HTMLElement>(root: HTMLElement, sel: string): T => {
@@ -40,6 +39,7 @@ export class TableUI {
   private bubbleTimers = new Map<Seat, ReturnType<typeof setTimeout>>();
   private prevState: GameState | null = null;
   private chain: Promise<void> = Promise.resolve();
+  private resultView: 'summary' | 'replay' = 'summary';
 
   constructor(root: HTMLElement, opts: TableOptions, cb: TableCallbacks) {
     this.root = root;
@@ -112,10 +112,10 @@ export class TableUI {
     this.renderOpponents(v, reveal);
     this.renderCenter(v, state);
     this.renderHand(v, legal, reveal);
+    if (phase.name !== 'scored') this.resultView = 'summary';
     this.renderPiles(v);
     this.renderActions(v, legal);
     this.renderStatus(v, legal);
-    this.renderResult(v);
     this.showLastActionBubble(state);
   }
 
@@ -165,8 +165,8 @@ export class TableUI {
       const seat = this.seatAt(pos);
       const box = $(this.root, `#seat-${pos}`);
       $(box, '.seat-name').textContent =
-        this.opts.aiNames[pos === 'left' ? 0 : 1] + (seat === v.dealer ? ' 🂠' : '');
-      $(box, '.seat-ledger').textContent = fmtLedger(v.ledger[seat]);
+        aiNames()[pos === 'left' ? 0 : 1] + (seat === v.dealer ? ' 🂠' : '');
+      $(box, '.seat-ledger').textContent = fmtMoney(v.ledger[seat]);
       const backs = $(box, '.backs');
       const n = v.handCounts[seat];
       backs.innerHTML = '';
@@ -183,7 +183,7 @@ export class TableUI {
       }
     }
     const meLedger = this.root.querySelector<HTMLElement>('#ledger-me');
-    if (meLedger) meLedger.textContent = `${t('you')}: ${fmtLedger(v.ledger[this.opts.humanSeat])}`;
+    if (meLedger) meLedger.textContent = `${t('you')}: ${fmtMoney(v.ledger[this.opts.humanSeat])}`;
   }
 
   // ── pakle vybraných štychů ──────────────────────────────────────────────────
@@ -232,6 +232,12 @@ export class TableUI {
         img.className = `played pos-${this.posOf(p.seat)}`;
         trickEl.appendChild(img);
       }
+    } else if (v.phase.name === 'scored') {
+      // zúčtování integrované do stolu (po vzoru FLEK!)
+      trickEl.innerHTML =
+        this.resultView === 'summary'
+          ? this.settlementHtml(v.phase.result, v)
+          : this.replayHtml(state, v.phase.result);
     }
 
     const info = $(this.root, '#contract-info');
@@ -260,7 +266,7 @@ export class TableUI {
 
   private nameOf(seat: Seat): string {
     if (seat === this.opts.humanSeat) return t('you');
-    return this.opts.aiNames[seat === this.seatAt('left') ? 0 : 1];
+    return aiNames()[seat === this.seatAt('left') ? 0 : 1];
   }
 
   // ── ruka ───────────────────────────────────────────────────────────────────
@@ -353,9 +359,14 @@ export class TableUI {
         if (legal.some((a) => a.type === 'deal')) btn(t('deal'), () => this.cb.onDeal(), { primary: true });
         break;
 
-      case 'scored':
+      case 'scored': {
+        btn(this.resultView === 'summary' ? t('showReplay') : t('back'), () => {
+          this.resultView = this.resultView === 'summary' ? 'replay' : 'summary';
+          if (this.prevState) this.renderNow(this.prevState);
+        });
         if (legal.some((a) => a.type === 'deal')) btn(t('nextHand'), () => this.cb.onDeal(), { primary: true });
         break;
+      }
 
       case 'choose-trump': {
         const fp = legal.find((a) => a.type === 'choose-trump' && a.card === 'from-people');
@@ -461,20 +472,89 @@ export class TableUI {
     return this.nameOf(seat);
   }
 
-  // ── výsledek ───────────────────────────────────────────────────────────────
+  // ── zúčtování a průběh hry (integrované do stolu, po vzoru FLEK!) ──────────
 
-  private renderResult(v: PlayerView): void {
-    const overlay = $(this.root, '#result');
-    if (v.phase.name !== 'scored') {
-      overlay.classList.remove('open');
-      return;
+  private settlementHtml(r: HandResult, v: PlayerView): string {
+    const me = this.opts.humanSeat;
+    const mydSide = r.contract.declarer === me ? 'declarer' : 'defenders';
+    const lang = currentLang();
+
+    const head =
+      r.contract.mode === 'hra'
+        ? `${t('hra')} ${r.contract.trump !== null ? suitIcon(r.contract.trump) : ''}`
+        : t(r.contract.mode);
+    const pts =
+      r.contract.mode === 'hra'
+        ? `<div class="felt-sub">${t('declarerSide')} ${r.cardPoints.declarer + r.marriagePoints.declarer}
+           · ${t('defendersSide')} ${r.cardPoints.defenders + r.marriagePoints.defenders} ${t('units')}</div>`
+        : '';
+
+    const flekWord = lang === 'de' ? 'Kontra' : 'flek';
+    const rows = r.components
+      .map((comp) => {
+        const won = comp.wonBy === mydSide;
+        let label = compLabel(comp.target, won);
+        if (comp.silent) label += ` (${t('silentWord')})`;
+        if (comp.flekMultiplier > 1) label += `, ${Math.log2(comp.flekMultiplier)}× ${flekWord}`;
+        if (comp.note) label += ` <em>(${comp.note})</em>`;
+        return `<tr><td>${label}:</td><td class="money">${fmtMoney(comp.amount)}</td></tr>`;
+      })
+      .join('');
+
+    const myDelta = r.delta[me];
+    const deltaLine = `<tr class="sum"><td>${myDelta < 0 ? t('youLost') : t('youWon')}:</td><td class="money">${fmtMoney(Math.abs(myDelta))}</td></tr>`;
+    const totalLine = `<tr><td>${t('nowTotal')}:</td><td class="money">${fmtMoney(v.ledger[me])}</td></tr>`;
+    const others = ([0, 1, 2] as Seat[])
+      .filter((x) => x !== me)
+      .map((x) => `${this.nameOf(x)} ${r.delta[x] >= 0 ? '+' : ''}${fmtMoney(r.delta[x])}`)
+      .join(' · ');
+
+    return `<div class="felt-panel">
+      <h3>${t('vyuctovani')}:</h3>
+      <div class="felt-sub">${head} — ${this.nameOf(r.contract.declarer)}</div>
+      ${pts}
+      <table><tbody>${rows}${deltaLine}${totalLine}</tbody></table>
+      <div class="felt-others">${others}</div>
+    </div>`;
+  }
+
+  private replayHtml(state: GameState, r: HandResult): string {
+    // rekonstrukce štychů z historie aktuální hry
+    let start = 0;
+    for (let i = state.history.length - 1; i >= 0; i -= 1) {
+      if (state.history[i].type === 'deal') { start = i + 1; break; }
     }
-    overlay.classList.add('open');
-    const r = v.phase.result;
-    $(overlay, '#result-body').innerHTML = resultHtml(r, this.opts.humanSeat, (s) => this.nameOf(s));
-    const nextBtn = $(overlay, '#result-next') as HTMLButtonElement;
-    nextBtn.textContent = t('nextHand');
-    nextBtn.onclick = () => this.cb.onDeal();
+    const plays: { seat: Seat; card: Card }[] = [];
+    for (let i = start; i < state.history.length; i += 1) {
+      const a = state.history[i];
+      if (a.type === 'play') plays.push({ seat: a.seat, card: a.card });
+    }
+
+    const cardImg = (c: Card, cls = ''): string =>
+      `<img class="${cls}" src="${cardSrc(c, this.opts.pattern())}" alt="${cardName(c)}">`;
+
+    const tricksHtml: string[] = [];
+    for (let i = 0; i + 2 < plays.length; i += 3) {
+      const trick = plays.slice(i, i + 3);
+      const winner = trickWinner(trick, r.contract.trump, r.contract.mode);
+      tricksHtml.push(`<div class="rtrick">
+        <div>${trick.map((p) => cardImg(p.card)).join('')}</div>
+        <div class="rwin">${i / 3 + 1}. ${this.nameOf(winner)}</div>
+      </div>`);
+    }
+
+    const talon = state.talon.length > 0
+      ? `<span class="rtalon">${t('talon')}: ${state.talon.map((c) => cardImg(c)).join('')}</span>`
+      : '';
+    const pts = r.contract.mode === 'hra'
+      ? `${t('declarerSide')} ${r.cardPoints.declarer + r.marriagePoints.declarer}
+         · ${t('defendersSide')} ${r.cardPoints.defenders + r.marriagePoints.defenders} ${t('units')} · `
+      : '';
+
+    return `<div class="replay">
+      <div class="replay-head">${pts}${talon}</div>
+      <div class="rtricks">${tricksHtml.join('')}</div>
+    </div>`;
   }
 
   // ── bubliny (table talk základ) ────────────────────────────────────────────
@@ -589,29 +669,3 @@ function bubbleText(a: PlayerAction, state: GameState): string | null {
   }
 }
 
-function resultHtml(r: HandResult, humanSeat: Seat, nameOf: (s: Seat) => string): string {
-  const c = r.contract;
-  const lang = currentLang();
-  const head =
-    c.mode === 'hra'
-      ? `${t('hra')} ${c.trump !== null ? suitIcon(c.trump) : ''} — ${nameOf(c.declarer)}`
-      : `${t(c.mode)} — ${nameOf(c.declarer)}`;
-  const pts =
-    c.mode === 'hra'
-      ? `<p class="pts">${t('points')}: ${t('declarerSide')} ${r.cardPoints.declarer + r.marriagePoints.declarer}
-         · ${t('defendersSide')} ${r.cardPoints.defenders + r.marriagePoints.defenders}</p>`
-      : '';
-  const rows = r.components
-    .map((comp) => {
-      const who = comp.wonBy === 'declarer' ? t('declarerSide') : t('defendersSide');
-      const note = comp.note ? ` <em>(${comp.note})</em>` : '';
-      const silent = comp.silent ? (lang === 'en' ? ' (silent)' : ' (tichá)') : '';
-      return `<tr><td>${targetLabel(comp.target)}${silent}${note}</td><td>${who}</td><td class="num">${comp.amount}</td></tr>`;
-    })
-    .join('');
-  const deltas = ([0, 1, 2] as Seat[])
-    .map((s) => `<span class="${r.delta[s] >= 0 ? 'plus' : 'minus'}">${nameOf(s)} ${fmtLedger(r.delta[s])}</span>`)
-    .join(' · ');
-  void humanSeat;
-  return `<h3>${head}</h3>${pts}<table><tbody>${rows}</tbody></table><p class="deltas">${deltas}</p>`;
-}

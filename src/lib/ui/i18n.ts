@@ -1,65 +1,82 @@
 /**
- * i18n.ts — texty herního UI (CZ/EN). Jazyk stránky řídí lang-pill v Layoutu
- * (třída lang-cs/lang-en na <html>); hra si ho čte odtud.
+ * i18n.ts — texty herního UI (CZ / EN / DE). Jazyk stránky řídí lang-pill
+ * v Layoutu (třída lang-cs/lang-en/lang-de na <html>); hra si ho čte odtud.
+ *
+ * Německá terminologie vychází z německých karetních her (mariáš pochází
+ * z německého prostředí): Bettel, Durchmarsch, Kontra/Re/Supra/Resupra,
+ * Zwanziger/Vierziger (hlášky), Alleinspieler/Verteidigung.
  */
 
-export type Lang = 'cs' | 'en';
+export type Lang = 'cs' | 'en' | 'de';
 
 export function currentLang(): Lang {
-  if (typeof document !== 'undefined' && document.documentElement.classList.contains('lang-en')) {
-    return 'en';
+  if (typeof document !== 'undefined') {
+    const cl = document.documentElement.classList;
+    if (cl.contains('lang-en')) return 'en';
+    if (cl.contains('lang-de')) return 'de';
   }
   return 'cs';
 }
 
 const STRINGS = {
-  deal: { cs: 'Rozdat', en: 'Deal' },
-  nextHand: { cs: 'Další hra', en: 'Next hand' },
-  newMatch: { cs: 'Nový zápas', en: 'New match' },
-  resume: { cs: 'Pokračovat v rozehrané hře?', en: 'Resume the unfinished game?' },
-  chooseTrump: { cs: 'Vyber trumfovou kartu (z prvních sedmi)', en: 'Pick the trump card (from your first seven)' },
-  fromPeople: { cs: 'Z lidu', en: 'From the deck' },
-  discard: { cs: 'Vyber 2 karty do talonu', en: 'Choose 2 cards for the talon' },
-  discardConfirm: { cs: 'Odhodit', en: 'Discard' },
-  declare: { cs: 'Ohlaš závazek', en: 'Declare your contract' },
-  bidding: { cs: 'Licitace', en: 'Bidding' },
-  pass: { cs: 'Dobrá (pas)', en: 'Pass' },
-  takeover: { cs: 'Dobrá, nebo přebereš?', en: 'Accept, or take over?' },
-  good: { cs: 'Dobrá', en: 'Good' },
-  fleks: { cs: 'Flekování', en: 'Doubling' },
-  yourTurn: { cs: 'Hraj', en: 'Your turn' },
-  waiting: { cs: 'Na tahu:', en: 'Waiting for' },
-  you: { cs: 'Ty', en: 'You' },
-  hra: { cs: 'Hra', en: 'Game' },
-  betl: { cs: 'Betl', en: 'Betl' },
-  durch: { cs: 'Durch', en: 'Durch' },
-  sedma: { cs: 'Sedma', en: 'Seven' },
-  kilo: { cs: 'Kilo', en: 'Hundred' },
-  sedmaProti: { cs: 'Sedma proti', en: 'Seven against' },
-  kiloProti: { cs: 'Sto proti', en: 'Hundred against' },
-  trump: { cs: 'Trumfy', en: 'Trumps' },
-  talon: { cs: 'Talon', en: 'Talon' },
-  result: { cs: 'Zúčtování', en: 'Settlement' },
-  points: { cs: 'Body', en: 'Points' },
-  declarerSide: { cs: 'Aktér', en: 'Declarer' },
-  defendersSide: { cs: 'Obrana', en: 'Defence' },
-  wonBy: { cs: 'vyhrál', en: 'won by' },
-  settings: { cs: 'Nastavení', en: 'Settings' },
-  variant: { cs: 'Varianta', en: 'Variant' },
-  voleny: { cs: 'Volený (FLEK!)', en: 'Chosen (FLEK!)' },
-  licitovany: { cs: 'Licitovaný (RE!)', en: 'Auction (RE!)' },
-  difficulty: { cs: 'Obtížnost (IQ)', en: 'Difficulty (IQ)' },
-  easy: { cs: 'Nízké', en: 'Low' },
-  normal: { cs: 'Střední', en: 'Medium' },
-  hard: { cs: 'Vysoké', en: 'High' },
-  pattern: { cs: 'Vzor karet', en: 'Card pattern' },
-  modern: { cs: 'Moderní', en: 'Modern' },
-  history: { cs: '1860 (historické)', en: '1860 (historical)' },
-  fullscreen: { cs: 'Celá obrazovka', en: 'Fullscreen' },
-  marriage: { cs: 'Hláška!', en: 'Marriage!' },
-  flekNames: { cs: ['Flek!', 'Re!', 'Tutti!', 'Boty!', 'Kalhoty!', 'Kajzr!'], en: ['Flek!', 'Re!', 'Tutti!', 'Boty!', 'Kalhoty!', 'Kajzr!'] },
-  na: { cs: 'na', en: 'on' },
-  units: { cs: 'bodů', en: 'pts' },
+  deal: { cs: 'Rozdat', en: 'Deal', de: 'Geben' },
+  nextHand: { cs: 'Další hra', en: 'Next hand', de: 'Nächstes Spiel' },
+  newMatch: { cs: 'Nový zápas', en: 'New match', de: 'Neue Partie' },
+  resume: { cs: 'Pokračovat v rozehrané hře?', en: 'Resume the unfinished game?', de: 'Angefangenes Spiel fortsetzen?' },
+  chooseTrump: { cs: 'Vyber trumfovou kartu (z prvních sedmi)', en: 'Pick the trump card (from your first seven)', de: 'Wähle die Trumpfkarte (aus den ersten sieben)' },
+  fromPeople: { cs: 'Z lidu', en: 'From the deck', de: 'Blind' },
+  discard: { cs: 'Vyber 2 karty do talonu', en: 'Choose 2 cards for the talon', de: 'Lege 2 Karten in den Talon' },
+  discardConfirm: { cs: 'Odhodit', en: 'Discard', de: 'Ablegen' },
+  declare: { cs: 'Ohlaš závazek', en: 'Declare your contract', de: 'Sage dein Spiel an' },
+  bidding: { cs: 'Licitace', en: 'Bidding', de: 'Lizitation' },
+  pass: { cs: 'Dobrá (pas)', en: 'Pass', de: 'Weiter' },
+  takeover: { cs: 'Dobrá, nebo přebereš?', en: 'Accept, or take over?', de: 'Gut, oder übernimmst du?' },
+  good: { cs: 'Dobrá', en: 'Good', de: 'Gut' },
+  fleks: { cs: 'Flekování', en: 'Doubling', de: 'Kontrieren' },
+  yourTurn: { cs: 'Hraj', en: 'Your turn', de: 'Du bist dran' },
+  waiting: { cs: 'Na tahu:', en: 'Waiting for', de: 'Am Zug:' },
+  you: { cs: 'Ty', en: 'You', de: 'Du' },
+  hra: { cs: 'Hra', en: 'Game', de: 'Spiel' },
+  betl: { cs: 'Betl', en: 'Betl', de: 'Bettel' },
+  durch: { cs: 'Durch', en: 'Durch', de: 'Durchmarsch' },
+  sedma: { cs: 'Sedma', en: 'Seven', de: 'Sieben' },
+  kilo: { cs: 'Kilo', en: 'Hundred', de: 'Hundert' },
+  sedmaProti: { cs: 'Sedma proti', en: 'Seven against', de: 'Sieben dagegen' },
+  kiloProti: { cs: 'Sto proti', en: 'Hundred against', de: 'Hundert dagegen' },
+  trump: { cs: 'Trumfy', en: 'Trumps', de: 'Trumpf' },
+  talon: { cs: 'Talon', en: 'Talon', de: 'Talon' },
+  result: { cs: 'Zúčtování', en: 'Settlement', de: 'Abrechnung' },
+  points: { cs: 'Body', en: 'Points', de: 'Punkte' },
+  declarerSide: { cs: 'Aktér', en: 'Declarer', de: 'Alleinspieler' },
+  defendersSide: { cs: 'Obrana', en: 'Defence', de: 'Verteidigung' },
+  settings: { cs: 'Nastavení', en: 'Settings', de: 'Einstellungen' },
+  variant: { cs: 'Varianta', en: 'Variant', de: 'Variante' },
+  voleny: { cs: 'Volený (FLEK!)', en: 'Chosen (FLEK!)', de: 'Gewählt (FLEK!)' },
+  licitovany: { cs: 'Licitovaný (RE!)', en: 'Auction (RE!)', de: 'Lizitiert (RE!)' },
+  difficulty: { cs: 'Obtížnost (IQ)', en: 'Difficulty (IQ)', de: 'Schwierigkeit (IQ)' },
+  easy: { cs: 'Nízké', en: 'Low', de: 'Niedrig' },
+  normal: { cs: 'Střední', en: 'Medium', de: 'Mittel' },
+  hard: { cs: 'Vysoké', en: 'High', de: 'Hoch' },
+  pattern: { cs: 'Vzor karet', en: 'Card pattern', de: 'Kartenbild' },
+  modern: { cs: 'Moderní', en: 'Modern', de: 'Modern' },
+  history: { cs: '1860 (historické)', en: '1860 (historical)', de: '1860 (historisch)' },
+  fullscreen: { cs: 'Celá obrazovka', en: 'Fullscreen', de: 'Vollbild' },
+  marriage: { cs: 'Hláška!', en: 'Marriage!', de: 'Meldung!' },
+  flekNames: {
+    cs: ['Flek!', 'Re!', 'Tutti!', 'Boty!', 'Kalhoty!', 'Kajzr!'],
+    en: ['Flek!', 'Re!', 'Tutti!', 'Boty!', 'Kalhoty!', 'Kajzr!'],
+    de: ['Kontra!', 'Re!', 'Supra!', 'Resupra!', 'Bock!', 'Hirsch!'],
+  },
+  na: { cs: 'na', en: 'on', de: 'auf' },
+  units: { cs: 'bodů', en: 'pts', de: 'Punkte' },
+  vyuctovani: { cs: 'Vyúčtování', en: 'Settlement', de: 'Abrechnung' },
+  youLost: { cs: 'Přišel jsi o', en: 'You lost', de: 'Du hast verloren' },
+  youWon: { cs: 'Vyhrál jsi', en: 'You won', de: 'Du hast gewonnen' },
+  nowTotal: { cs: 'Máš nyní celkem', en: 'You now have', de: 'Du hast jetzt insgesamt' },
+  showReplay: { cs: 'Průběh hry', en: 'Show the hand', de: 'Spielverlauf' },
+  back: { cs: 'Zpět', en: 'Back', de: 'Zurück' },
+  trickWord: { cs: 'Štych', en: 'Trick', de: 'Stich' },
+  silentWord: { cs: 'tichá', en: 'silent', de: 'still' },
 } as const;
 
 type Key = keyof typeof STRINGS;
@@ -72,4 +89,46 @@ export function t(key: Key): string {
 export function flekName(level: number): string {
   const names = STRINGS.flekNames[currentLang()];
   return names[Math.min(level, names.length - 1)];
+}
+
+/** Jména AI soupeřů dle jazyka (Franta/Lojza → Frank/Louie → Franz/Alois). */
+export function aiNames(): [string, string] {
+  const lang = currentLang();
+  if (lang === 'en') return ['Frank', 'Louie'];
+  if (lang === 'de') return ['Franz', 'Alois'];
+  return ['Franta', 'Lojza'];
+}
+
+/**
+ * Peníze: konto se vede v jednotkách (1 jednotka = základní sazba hry);
+ * zobrazení 0,20 za jednotku (empiricky dle FLEK!) — Kč / $ / €.
+ */
+export function fmtMoney(units: number): string {
+  const v = units * 0.2;
+  const lang = currentLang();
+  if (lang === 'en') return `${v < 0 ? '−' : ''}$${Math.abs(v).toFixed(2)}`;
+  const num = v.toFixed(2).replace('.', ',');
+  return lang === 'de' ? `${num} €` : `${num} Kč`;
+}
+
+/** Popisek komponenty vyúčtování ve stylu FLEK! („Prohrané kilo", „Vyhraný betl"…). */
+export function compLabel(target: string, won: boolean): string {
+  const lang = currentLang();
+  if (lang === 'cs') {
+    const w: Record<string, string> = {
+      hra: 'Vyhraná hra', sedma: 'Vyhraná sedma', kilo: 'Vyhrané kilo',
+      betl: 'Vyhraný betl', durch: 'Vyhraný durch', dveSedmy: 'Vyhrané dvě sedmy',
+    };
+    const l: Record<string, string> = {
+      hra: 'Prohraná hra', sedma: 'Prohraná sedma', kilo: 'Prohrané kilo',
+      betl: 'Prohraný betl', durch: 'Prohraný durch', dveSedmy: 'Prohrané dvě sedmy',
+    };
+    return (won ? w : l)[target] ?? target;
+  }
+  const base: Record<string, Record<string, string>> = {
+    en: { hra: 'Game', sedma: 'Seven', kilo: 'Hundred', betl: 'Betl', durch: 'Durch', dveSedmy: 'Two sevens' },
+    de: { hra: 'Spiel', sedma: 'Sieben', kilo: 'Hundert', betl: 'Bettel', durch: 'Durchmarsch', dveSedmy: 'Zwei Sieben' },
+  };
+  const suffix = lang === 'en' ? (won ? 'won' : 'lost') : won ? 'gewonnen' : 'verloren';
+  return `${base[lang][target] ?? target} ${suffix}`;
 }

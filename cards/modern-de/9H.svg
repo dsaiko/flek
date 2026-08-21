@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 410" width="240" height="410">
+<!-- Flek! tribute · moderní mariášová sada · MIT © 2026 Dušan Saiko · https://flek.saiko.cz -->
+<title>Herz Neun</title>
+<rect x="1" y="1" width="238" height="408" rx="14" fill="#ffffff" stroke="#d9d9e0" stroke-width="2"/>
+  <g><text x="28" y="44" text-anchor="middle" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="30" font-weight="700" fill="#c62828">9</text></g><g transform="rotate(180 120 205)"><text x="28" y="44" text-anchor="middle" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="30" font-weight="700" fill="#c62828">9</text></g>
+  <g transform="translate(76 100) scale(0.74)"><path d="M0 30 C-3 21 -10 12 -18 5 C-29 -3 -33 -13 -30 -21 C-27 -30 -19 -34 -12 -33 C-6 -32 -2 -27 0 -21 C2 -27 6 -32 12 -33 C19 -34 27 -30 30 -21 C33 -13 29 -3 18 5 C10 12 3 21 0 30 Z" fill="#c62828"/></g>
+  <g transform="translate(164 100) scale(0.74)"><path d="M0 30 C-3 21 -10 12 -18 5 C-29 -3 -33 -13 -30 -21 C-27 -30 -19 -34 -12 -33 C-6 -32 -2 -27 0 -21 C2 -27 6 -32 12 -33 C19 -34 27 -30 30 -21 C33 -13 29 -3 18 5 C10 12 3 21 0 30 Z" fill="#c62828"/></g>
+  <g transform="translate(76 170) scale(0.74)"><path d="M0 30 C-3 21 -10 12 -18 5 C-29 -3 -33 -13 -30 -21 C-27 -30 -19 -34 -12 -33 C-6 -32 -2 -27 0 -21 C2 -27 6 -32 12 -33 C19 -34 27 -30 30 -21 C33 -13 29 -3 18 5 C10 12 3 21 0 30 Z" fill="#c62828"/></g>
+  <g transform="translate(164 170) scale(0.74)"><path d="M0 30 C-3 21 -10 12 -18 5 C-29 -3 -33 -13 -30 -21 C-27 -30 -19 -34 -12 -33 C-6 -32 -2 -27 0 -21 C2 -27 6 -32 12 -33 C19 -34 27 -30 30 -21 C33 -13 29 -3 18 5 C10 12 3 21 0 30 Z" fill="#c62828"/></g>
+  <g transform="translate(76 240) scale(0.74) rotate(180)"><path d="M0 30 C-3 21 -10 12 -18 5 C-29 -3 -33 -13 -30 -21 C-27 -30 -19 -34 -12 -33 C-6 -32 -2 -27 0 -21 C2 -27 6 -32 12 -33 C19 -34 27 -30 30 -21 C33 -13 29 -3 18 5 C10 12 3 21 0 30 Z" fill="#c62828"/></g>
+  <g transform="translate(164 240) scale(0.74) rotate(180)"><path d="M0 30 C-3 21 -10 12 -18 5 C-29 -3 -33 -13 -30 -21 C-27 -30 -19 -34 -12 -33 C-6 -32 -2 -27 0 -21 C2 -27 6 -32 12 -33 C19 -34 27 -30 30 -21 C33 -13 29 -3 18 5 C10 12 3 21 0 30 Z" fill="#c62828"/></g>
+  <g transform="translate(76 310) scale(0.74) rotate(180)"><path d="M0 30 C-3 21 -10 12 -18 5 C-29 -3 -33 -13 -30 -21 C-27 -30 -19 -34 -12 -33 C-6 -32 -2 -27 0 -21 C2 -27 6 -32 12 -33 C19 -34 27 -30 30 -21 C33 -13 29 -3 18 5 C10 12 3 21 0 30 Z" fill="#c62828"/></g>
+  <g transform="translate(164 310) scale(0.74) rotate(180)"><path d="M0 30 C-3 21 -10 12 -18 5 C-29 -3 -33 -13 -30 -21 C-27 -30 -19 -34 -12 -33 C-6 -32 -2 -27 0 -21 C2 -27 6 -32 12 -33 C19 -34 27 -30 30 -21 C33 -13 29 -3 18 5 C10 12 3 21 0 30 Z" fill="#c62828"/></g>
+  <g transform="translate(120 205) scale(0.74)"><path d="M0 30 C-3 21 -10 12 -18 5 C-29 -3 -33 -13 -30 -21 C-27 -30 -19 -34 -12 -33 C-6 -32 -2 -27 0 -21 C2 -27 6 -32 12 -33 C19 -34 27 -30 30 -21 C33 -13 29 -3 18 5 C10 12 3 21 0 30 Z" fill="#c62828"/></g>
+</svg>
