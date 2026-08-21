@@ -297,4 +297,75 @@ const KULE = 2 as const;
   console.log('PASS scoring — hra, sedma (hlášená/zabitá/tichá), kilo škálování, betl/durch, červené, fleky, zero-sum');
 }
 
+// ── engine: self-play fuzz ───────────────────────────────────────────────────
+
+{
+  const { initialState, apply, replay } = await import('../src/lib/rules/engine');
+  const { legalActions } = await import('../src/lib/rules/legal');
+  const { view } = await import('../src/lib/rules/view');
+  const { defaultConfig } = await import('../src/lib/rules/sazby');
+  const { Random } = await import('../src/lib/random');
+  const { pointsOf: pts } = await import('../src/lib/cards');
+  type St = ReturnType<typeof initialState>;
+  type Act = ReturnType<typeof legalActions>[number];
+
+  const SEEDS = 60; // seedů na variantu; každý seed = celá odehraná hra
+  for (const variant of ['voleny', 'licitovany'] as const) {
+    const cfg = defaultConfig(variant);
+    for (let seed = 1; seed <= SEEDS; seed += 1) {
+      const rng = new Random(seed * 7919);
+      let s: St = initialState(cfg, 2);
+      s = apply(s, { type: 'deal', seed });
+
+      let steps = 0;
+      while (s.phase.name !== 'scored') {
+        steps += 1;
+        assert.ok(steps < 500, `${variant}/${seed}: zaseknutá hra ve fázi ${s.phase.name}`);
+        // najdi hráče na tahu (právě jeden má legální akce)
+        let acts: Act[] = [];
+        for (const seat of [0, 1, 2] as const) {
+          const a = legalActions(view(s, seat));
+          if (a.length > 0) { acts = a; break; }
+        }
+        assert.ok(acts.length > 0, `${variant}/${seed}: nikdo nemá legální akci (${s.phase.name})`);
+        s = apply(s, acts[rng.int(acts.length)]);
+      }
+
+      // závěrečné kontroly odehrané hry
+      const result = s.phase.result;
+      assert.equal(result.delta[0] + result.delta[1] + result.delta[2], 0);
+      if (result.contract.mode === 'hra') {
+        const total = result.cardPoints.declarer + result.cardPoints.defenders;
+        assert.equal(total, 90, `${variant}/${seed}: celkové body ${total} ≠ 90`);
+      }
+
+      // redakce pohledu: žádný únik cizích karet
+      for (const seat of [0, 1, 2] as const) {
+        const v = view(s, seat);
+        assert.equal(v.hand.length, s.hands[seat].length);
+        assert.ok(v.talon === null || s.talonOwner === seat);
+      }
+    }
+
+    // replay determinismus: přehraná historie = identický stav
+    const rng = new Random(123);
+    let s: St = initialState(cfg, 2);
+    s = apply(s, { type: 'deal', seed: 42 });
+    while (s.phase.name !== 'scored') {
+      let acts: Act[] = [];
+      for (const seat of [0, 1, 2] as const) {
+        const a = legalActions(view(s, seat));
+        if (a.length > 0) { acts = a; break; }
+      }
+      s = apply(s, acts[rng.int(acts.length)]);
+    }
+    const replayed = replay(s.history, cfg, 2);
+    assert.deepEqual(replayed, s, `${variant}: replay nedává identický stav`);
+
+    console.log(`PASS engine self-play — ${variant}: ${SEEDS} her + replay determinismus`);
+  }
+
+  void pts;
+}
+
 console.log('OK: vše prošlo');

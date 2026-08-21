@@ -34,6 +34,8 @@ export interface Standing {
   declarer: Seat;
   mode: GameMode | null;
   trump: Suit | null;
+  /** Licitovaný: vysoutěžený závazek (deklarace ho musí pokrýt); volený null. */
+  bid: BidLevel | null;
 }
 
 // ── licitace (licitovaný mariáš; žebříček dle ČSM čl. I) ────────────────────
@@ -153,13 +155,16 @@ export type PlayerAction =
   /** Licitovaný. */
   | { type: 'bid'; seat: Seat; bid: BidLevel | 'pass' }
   | { type: 'discard'; seat: Seat; cards: [Card, Card] }
-  | { type: 'declare'; seat: Seat; mode: GameMode; sedma: boolean; kilo: boolean; dveSedmy?: boolean }
+  | { type: 'declare'; seat: Seat; mode: GameMode; sedma: boolean; kilo: boolean; dveSedmy?: boolean;
+      /** Licitovaný s nefixovaným trumfem: volba trumfu při deklaraci. */
+      trump?: Suit }
   /** Volený: reakce obránců — dobrá, nebo převzetí betlem/durchem. */
   | { type: 'takeover'; seat: Seat; claim: 'betl' | 'durch' | 'good' }
   | { type: 'flek'; seat: Seat; target: FlekTarget }
   | { type: 'good'; seat: Seat }
-  | { type: 'play'; seat: Seat; card: Card; announceMarriage: boolean }
-  | { type: 'ack-score'; seat: Seat };
+  /** Obránce během flekování hlásí sedmu/sto PROTI (než na komponentu padne flek). */
+  | { type: 'announce-proti'; seat: Seat; sedma: boolean; kilo: boolean }
+  | { type: 'play'; seat: Seat; card: Card; announceMarriage: boolean };
 
 /**
  * PublicAction — akce s redigovanými skrytými payloady (pro PlayerView.publicHistory):
@@ -181,11 +186,12 @@ export interface TrickPlay {
 }
 
 export type Phase =
+  | { name: 'idle' } // start zápasu — čeká na první `deal`
   | { name: 'choose-trump' } // jen volený
   | { name: 'bidding'; bids: BidEntry[]; toAct: Seat; best: BidLevel | null } // jen licitovaný
   | { name: 'discard-talon'; standing: Standing }
   | { name: 'declare'; standing: Standing }
-  | { name: 'takeover'; toAct: Seat; standing: Standing } // jen volený
+  | { name: 'takeover'; toAct: Seat; standing: Standing; passed: Seat[] } // jen volený
   | { name: 'fleks'; fleks: FlekState }
   | {
       name: 'tricks';
@@ -193,6 +199,7 @@ export type Phase =
       leader: Seat;
       toAct: Seat;
       trick: TrickPlay[];
+      played: { plays: TrickPlay[]; winner: Seat }[]; // odehrané štychy (scoring: sedma, body)
       won: [Card[], Card[], Card[]];
       marriages: { seat: Seat; suit: Suit }[];
     }
@@ -209,6 +216,8 @@ export interface GameState {
    */
   unseen: Card[];
   talon: Card[]; // aktuálně odložené karty (0 nebo 2)
+  /** Kdo aktuální talon odložil (vidí ho); null = nikdo neodložil / leží z rozdání. */
+  talonOwner: Seat | null;
   /** Které karty talonu/odhozu KTERÉ sedadlo fyzicky vidělo. */
   talonKnowledge: [Card[], Card[], Card[]];
   history: PlayerAction[]; // úplný log akcí vč. `deal` — replay celého zápasu
@@ -229,6 +238,8 @@ export interface PlayerView {
   handCounts: [number, number, number];
   /** Co JÁ vím o talonu/odhozu (vlastní odhoz, převzatý talon dle configu). */
   talonKnown: Card[];
+  /** Aktuální talon, pokud jsem ho odložil já (jinak null). */
+  talon: Card[] | null;
   contract: Contract | null;
   phase: Phase; // fáze neobsahují skrytá data (ruce/talon žijí mimo Phase)
   publicHistory: PublicAction[];
