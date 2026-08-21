@@ -415,7 +415,12 @@ function reduce(state: GameState, action: PlayerAction): GameState {
       won[winner].push(...trick.map((p) => p.card));
       const played = [...phase.played, { plays: trick, winner }];
 
-      if (phase.trickNo === 9) {
+      // betl padá prvním štychem aktéra, durch první ztrátou — hra se skládá hned
+      const earlyEnd =
+        (state.contract.mode === 'betl' && winner === state.contract.declarer) ||
+        (state.contract.mode === 'durch' && winner !== state.contract.declarer);
+
+      if (phase.trickNo === 9 || earlyEnd) {
         // konec hry → zúčtování
         const flekLevels = flekLevelsFromHistory(state);
         const result = settle({
