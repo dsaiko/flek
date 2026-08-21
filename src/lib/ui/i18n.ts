@@ -77,6 +77,11 @@ const STRINGS = {
   back: { cs: 'Zpět', en: 'Back', de: 'Zurück' },
   trickWord: { cs: 'Štych', en: 'Trick', de: 'Stich' },
   silentWord: { cs: 'tichá', en: 'silent', de: 'still' },
+  talonWarn: {
+    cs: 'Pozor: s esem/desítkou v talonu lze hrát jen betl nebo durch!',
+    en: 'Careful: with an ace/ten in the talon only betl or durch can be played!',
+    de: 'Achtung: mit Ass/Zehn im Talon sind nur Bettel oder Durchmarsch möglich!',
+  },
 } as const;
 
 type Key = keyof typeof STRINGS;

@@ -395,6 +395,16 @@ export class TableUI {
     });
     const confirm = this.root.querySelector<HTMLButtonElement>('#discard-confirm');
     if (confirm) confirm.disabled = this.selected.size !== 2;
+    // varování: bodovaná karta v odhozu zamkne hru (zbyde jen betl/durch)
+    const statusEl = $(this.root, '#status');
+    if ([...this.selected].some((c) => pointsOf(c) > 0)) {
+      statusEl.textContent = t('talonWarn');
+    } else if (v.phase.name === 'discard-talon') {
+      statusEl.textContent =
+        v.phase.standing.trump !== null
+          ? `${t('discard')} · ${t('trump')}: ${suitName(v.phase.standing.trump)}`
+          : t('discard');
+    }
   }
 
   // ── akční lišta ────────────────────────────────────────────────────────────
