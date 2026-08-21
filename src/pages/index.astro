@@ -48,6 +48,8 @@ import Layout from '../layouts/Layout.astro';
 
         <div id="trick"></div>
 
+        <div id="center-float"></div>
+
         <div class="me-row">
           <div id="actions"></div>
           <div id="hand"></div>
@@ -277,8 +279,15 @@ import Layout from '../layouts/Layout.astro';
 
   .me-meta { color: #a9c4dd; font-size: 13px; margin-top: 6px; }
 
-  /* zúčtování integrované do stolu (po vzoru FLEK!) */
-  #trick { display: flex; align-items: center; justify-content: center; }
+  /* zúčtování integrované do stolu (po vzoru FLEK!) — plovoucí vrstva,
+     aby obsah neměnil výšku stolu */
+  #center-float {
+    position: absolute; inset: 0; z-index: 6; display: none;
+    align-items: center; justify-content: center; padding: 18px;
+    pointer-events: none; /* kliky propadají na tlačítka pod vrstvou */
+  }
+  #center-float.open { display: flex; }
+  #center-float .felt-panel, #center-float .replay { pointer-events: auto; }
   .felt-panel {
     margin: auto; min-width: 340px; max-width: 560px;
     background: #0e7f8b; color: #eafcf6;
@@ -294,10 +303,11 @@ import Layout from '../layouts/Layout.astro';
   .felt-panel td.money { text-align: right; font-weight: 700; white-space: nowrap; }
   .felt-panel tr.sum td { border-top: 1px solid rgba(255,255,255,.35); padding-top: 7px; }
   .felt-panel .felt-others { text-align: center; color: #bfeee8; font-size: 12px; margin-top: 8px; }
+  .felt-actions { display: flex; gap: 10px; justify-content: center; margin-top: 12px; }
   .felt-panel em { opacity: .8; font-style: normal; font-size: 12px; }
 
   /* průběh hry: kaskády štychů + talon */
-  .replay { margin: 2px auto; max-height: 100%; overflow: auto; align-self: stretch; width: 100%; }
+  .replay { margin: auto; max-height: 100%; overflow: auto; width: 100%; }
   .replay-head { text-align: center; color: #eaf2f9; font-size: 13px; margin: 4px 0 8px; }
   .replay-head img { width: calc(var(--card-w) * .5); border-radius: 4px; vertical-align: middle;
     margin-left: 3px; box-shadow: 0 1px 4px rgba(0,0,0,.4); }

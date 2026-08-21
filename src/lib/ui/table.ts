@@ -252,12 +252,30 @@ export class TableUI {
         img.className = `played pos-${this.posOf(p.seat)}`;
         trickEl.appendChild(img);
       }
-    } else if (v.phase.name === 'scored') {
-      // zúčtování integrované do stolu (po vzoru FLEK!)
-      trickEl.innerHTML =
+    }
+    // zúčtování/průběh: plovoucí vrstva přes střed stolu — nemění výšku stolu
+    const float = $(this.root, '#center-float');
+    if (v.phase.name === 'scored') {
+      float.classList.add('open');
+      const buttons = `<div class="felt-actions">
+        <button class="action-btn" data-act="toggle">${this.resultView === 'summary' ? t('showReplay') : t('back')}</button>
+        <button class="action-btn primary" data-act="next">${t('nextHand')}</button>
+      </div>`;
+      float.innerHTML =
         this.resultView === 'summary'
           ? this.settlementHtml(v.phase.result, v)
           : this.replayHtml(state, v.phase.result);
+      // tlačítka dovnitř panelu
+      const host = float.querySelector('.felt-panel, .replay');
+      if (host) host.insertAdjacentHTML('beforeend', buttons);
+      float.querySelector('[data-act="toggle"]')?.addEventListener('click', () => {
+        this.resultView = this.resultView === 'summary' ? 'replay' : 'summary';
+        if (this.prevState) this.renderNow(this.prevState);
+      });
+      float.querySelector('[data-act="next"]')?.addEventListener('click', () => this.cb.onDeal());
+    } else {
+      float.classList.remove('open');
+      float.innerHTML = '';
     }
 
     const info = $(this.root, '#contract-info');
@@ -400,14 +418,8 @@ export class TableUI {
         if (legal.some((a) => a.type === 'deal')) btn(t('deal'), () => this.cb.onDeal(), { primary: true });
         break;
 
-      case 'scored': {
-        btn(this.resultView === 'summary' ? t('showReplay') : t('back'), () => {
-          this.resultView = this.resultView === 'summary' ? 'replay' : 'summary';
-          if (this.prevState) this.renderNow(this.prevState);
-        });
-        if (legal.some((a) => a.type === 'deal')) btn(t('nextHand'), () => this.cb.onDeal(), { primary: true });
-        break;
-      }
+      case 'scored':
+        break; // tlačítka jsou součástí plovoucího panelu
 
       case 'choose-trump': {
         const fp = legal.find((a) => a.type === 'choose-trump' && a.card === 'from-people');
