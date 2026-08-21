@@ -368,4 +368,66 @@ const KULE = 2 as const;
   void pts;
 }
 
+// ── AI: heuristiky + ISMCTS self-play ────────────────────────────────────────
+
+{
+  const { initialState, apply } = await import('../src/lib/rules/engine');
+  const { legalActions } = await import('../src/lib/rules/legal');
+  const { view } = await import('../src/lib/rules/view');
+  const { defaultConfig } = await import('../src/lib/rules/sazby');
+  const { think } = await import('../src/lib/ai/think');
+  const { Random } = await import('../src/lib/random');
+  type St = ReturnType<typeof initialState>;
+
+  const playHand = (
+    variant: 'voleny' | 'licitovany',
+    seed: number,
+    difficulty: 'easy' | 'normal',
+    iterations: number,
+  ): St => {
+    let s: St = initialState(defaultConfig(variant), 2);
+    s = apply(s, { type: 'deal', seed });
+    let steps = 0;
+    while (s.phase.name !== 'scored') {
+      steps += 1;
+      if (steps > 300) throw new Error(`AI hra se zasekla (${variant}/${seed}, ${s.phase.name})`);
+      for (const seat of [0, 1, 2] as const) {
+        const v = view(s, seat);
+        if (legalActions(v).length === 0) continue;
+        const moveSeed = Random.derive(seed, steps * 3 + seat);
+        const { action } = think({ view: v, difficulty, seed: moveSeed, budgetMs: 0, iterations });
+        s = apply(s, action);
+        break;
+      }
+    }
+    return s;
+  };
+
+  // heuristiky (easy) — rychlé kompletní hry v obou variantách
+  for (const variant of ['voleny', 'licitovany'] as const) {
+    for (let seed = 1; seed <= 12; seed += 1) {
+      const s = playHand(variant, seed, 'easy', 0);
+      const r = s.phase.name === 'scored' ? s.phase.result : null;
+      assert.ok(r, `${variant}/${seed}: nedohráno`);
+      assert.equal(r.delta[0] + r.delta[1] + r.delta[2], 0);
+    }
+  }
+  console.log('PASS ai — heuristické self-play (12 her × 2 varianty)');
+
+  // ISMCTS — malý pevný počet iterací, obě varianty
+  for (const variant of ['voleny', 'licitovany'] as const) {
+    for (let seed = 1; seed <= 3; seed += 1) {
+      const s = playHand(variant, seed, 'normal', 40);
+      assert.equal(s.phase.name, 'scored');
+    }
+  }
+  console.log('PASS ai — ISMCTS self-play (40 iterací, 3 hry × 2 varianty)');
+
+  // reprodukovatelnost: stejné seedy ⇒ identický průběh
+  const a = playHand('voleny', 5, 'normal', 30);
+  const b = playHand('voleny', 5, 'normal', 30);
+  assert.deepEqual(a.history, b.history, 'AI není deterministická');
+  console.log('PASS ai — determinismus (stejný seed ⇒ stejná hra)');
+}
+
 console.log('OK: vše prošlo');
