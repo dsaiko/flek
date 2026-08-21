@@ -226,13 +226,14 @@ import Layout from '../layouts/Layout.astro';
 
   .me-row { text-align: center; position: relative; padding-bottom: 6px; }
   #actions { min-height: 40px; display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-bottom: 8px; }
+  /* jednotný styl herních tlačítek: obdélník s oblými rohy (à la FLEK dialogy) */
   .action-btn {
-    font: 600 14px/1 inherit; padding: 9px 16px; border-radius: 999px; border: 0;
-    background: #f2efe4; color: #2b2b33; cursor: pointer; box-shadow: 0 2px 6px rgba(0,0,0,.25);
+    font: 700 14px/1 inherit; padding: 10px 20px; border-radius: 8px; border: 0;
+    background: #eafcf6; color: #0a4a52; cursor: pointer; box-shadow: 0 2px 0 rgba(0,0,0,.25);
   }
-  .action-btn.primary { background: #ffd75e; }
+  .action-btn.primary { background: #ffd75e; color: #4a3200; }
   .action-btn:disabled { opacity: .45; cursor: default; }
-  .action-btn:not(:disabled):hover { filter: brightness(1.05); }
+  .action-btn:not(:disabled):hover { filter: brightness(1.04); }
 
   /* pevná výška ruky — stůl se nesmí zmenšovat s ubývajícími kartami */
   #hand { display: flex; justify-content: center; align-items: flex-end; padding: 10px 0 6px; overflow: visible;
@@ -306,13 +307,7 @@ import Layout from '../layouts/Layout.astro';
   /* tlačítka integrovaná do panelu vyúčtování — obdélníky s oblými rohy (à la FLEK dialogy) */
   .felt-actions { display: flex; gap: 12px; justify-content: center; margin-top: 14px;
     padding-top: 12px; border-top: 1px solid rgba(255,255,255,.25); }
-  .felt-actions .action-btn {
-    border-radius: 8px; padding: 10px 22px; flex: 1; max-width: 200px;
-    background: #eafcf6; color: #0a4a52; font-weight: 700;
-    box-shadow: 0 2px 0 rgba(0,0,0,.25);
-  }
-  .felt-actions .action-btn.primary { background: #ffd75e; color: #4a3200; }
-  .felt-actions .action-btn:hover { filter: brightness(1.04); }
+  .felt-actions .action-btn { flex: 1; max-width: 200px; }
   /* v průběhu hry stejná lišta bez horní linky */
   .replay .felt-actions { border-top: 0; padding-top: 4px; }
   .felt-panel em { opacity: .8; font-style: normal; font-size: 12px; }
