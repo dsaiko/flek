@@ -21,6 +21,7 @@ const OUT = join(ROOT, 'public', 'cards', 'history');
 
 const TARGET_HEIGHT = 720; // dost pro HiDPI zobrazení karty ~180 px na výšku
 const CORNER_RADIUS_PCT = 0.045; // poměr rádiusu rohu k šířce karty
+const INSET_PCT = 0.022; // dodatečný vnitřní ořez — odstraní bílé hrany skenu po trimu
 const WEBP_QUALITY = 82;
 
 async function processCard(file: string): Promise<{ file: string; w: number; h: number; kb: number }> {
@@ -31,8 +32,13 @@ async function processCard(file: string): Promise<{ file: string; w: number; h: 
     .trim({ threshold: 35 }) // tolerantní práh — hrany karet jsou nerovné
     .toBuffer();
 
-  // 2) sjednocení výšky
-  const resized = sharp(trimmed).resize({ height: TARGET_HEIGHT });
+  // 2) dodatečný vnitřní ořez (bílé hrany karty na skenu) + sjednocení výšky
+  const t = await sharp(trimmed).metadata();
+  const ix = Math.round((t.width ?? 0) * INSET_PCT);
+  const iy = Math.round((t.height ?? 0) * INSET_PCT);
+  const resized = sharp(trimmed)
+    .extract({ left: ix, top: iy, width: (t.width ?? 0) - 2 * ix, height: (t.height ?? 0) - 2 * iy })
+    .resize({ height: TARGET_HEIGHT });
   const meta = await resized.toBuffer({ resolveWithObject: true });
   const { width = 0, height = 0 } = meta.info;
 
