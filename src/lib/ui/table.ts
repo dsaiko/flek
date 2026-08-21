@@ -10,6 +10,7 @@ import { pointsOf, rankOf, suitOf, KRAL, SVRSEK, card as mkCard, type Card } fro
 import { legalActions } from '../rules/legal';
 import { trickWinner } from '../rules/tricks';
 import type { GameState, HandResult, PlayerAction, PlayerView, Seat } from '../rules/types';
+import { forhont } from '../rules/types';
 import { view } from '../rules/view';
 import { backSrc, cardName, cardSrc, suitIcon, suitName, type Pattern } from './cardAssets';
 import { aiNames, compLabel, currentLang, flekName, fmtMoney, t } from './i18n';
@@ -126,9 +127,9 @@ export class TableUI {
 
     this.root.classList.remove('animating');
     this.root.classList.toggle('pattern-history', this.opts.pattern() === 'history');
-    this.renderOpponents(v, reveal);
+    this.renderOpponents(v, reveal, state.unseen.length);
     this.renderCenter(v, state);
-    this.renderHand(v, legal, reveal);
+    this.renderHand(v, legal, reveal, state.unseen.length);
     if (phase.name !== 'scored') this.resultView = 'summary';
     this.renderPiles(v);
     this.renderActions(v, legal);
@@ -177,7 +178,7 @@ export class TableUI {
     return ((me + (pos === 'left' ? 1 : 2)) % 3) as Seat;
   }
 
-  private renderOpponents(v: PlayerView, reveal = false): void {
+  private renderOpponents(v: PlayerView, reveal = false, unseenCount = 0): void {
     for (const pos of ['left', 'right'] as const) {
       const seat = this.seatAt(pos);
       const box = $(this.root, `#seat-${pos}`);
@@ -185,7 +186,9 @@ export class TableUI {
         aiNames()[pos === 'left' ? 0 : 1] + (seat === v.dealer ? ' 🂠' : '');
       $(box, '.seat-ledger').textContent = fmtMoney(v.ledger[seat]);
       const backs = $(box, '.backs');
-      const n = v.handCounts[seat];
+      const extraUnseen =
+        v.phase.name === 'choose-trump' && seat === forhont(v.dealer) ? unseenCount : 0;
+      const n = v.handCounts[seat] + extraUnseen;
       backs.innerHTML = '';
       for (let i = 0; i < n; i += 1) {
         const img = document.createElement('img');
@@ -288,7 +291,7 @@ export class TableUI {
 
   // ── ruka ───────────────────────────────────────────────────────────────────
 
-  private renderHand(v: PlayerView, legal: PlayerAction[], reveal = false): void {
+  private renderHand(v: PlayerView, legal: PlayerAction[], reveal = false, unseenCount = 0): void {
     const handEl = $(this.root, '#hand');
     handEl.innerHTML = '';
     const phase = v.phase;
@@ -304,7 +307,9 @@ export class TableUI {
       for (const c of v.hand) playable.add(c);
     }
 
-    const n = v.hand.length;
+    const myUnseen =
+      v.phase.name === 'choose-trump' && v.seat === forhont(v.dealer) ? unseenCount : 0;
+    const n = v.hand.length + myUnseen;
     v.hand.forEach((c, i) => {
       const btn = document.createElement('button');
       btn.className = 'card-btn';
@@ -325,6 +330,25 @@ export class TableUI {
       btn.addEventListener('click', () => this.onCardClick(c, v));
       handEl.appendChild(btn);
     });
+
+    // neotočené karty druhého balíčku (volba trumfu) — ruby v ruce jako u FLEK!
+    for (let j = 0; j < myUnseen; j += 1) {
+      const i = v.hand.length + j;
+      const btn = document.createElement('button');
+      btn.className = 'card-btn';
+      btn.disabled = true;
+      const off = i - (n - 1) / 2;
+      btn.style.transform = `rotate(${(off * 3).toFixed(1)}deg) translateY(${(off * off * 1.4).toFixed(1)}px)`;
+      const img = document.createElement('img');
+      img.src = backSrc();
+      img.alt = '';
+      if (reveal && !this.reducedMotion()) {
+        btn.classList.add('reveal');
+        btn.style.animationDelay = `${i * REVEAL_STEP_MS}ms`;
+      }
+      btn.appendChild(img);
+      handEl.appendChild(btn);
+    }
   }
 
   private onCardClick(c: Card, v: PlayerView): void {
