@@ -303,7 +303,18 @@ import Layout from '../layouts/Layout.astro';
   .felt-panel td.money { text-align: right; font-weight: 700; white-space: nowrap; }
   .felt-panel tr.sum td { border-top: 1px solid rgba(255,255,255,.35); padding-top: 7px; }
   .felt-panel .felt-others { text-align: center; color: #bfeee8; font-size: 12px; margin-top: 8px; }
-  .felt-actions { display: flex; gap: 10px; justify-content: center; margin-top: 12px; }
+  /* tlačítka integrovaná do panelu vyúčtování — obdélníky s oblými rohy (à la FLEK dialogy) */
+  .felt-actions { display: flex; gap: 12px; justify-content: center; margin-top: 14px;
+    padding-top: 12px; border-top: 1px solid rgba(255,255,255,.25); }
+  .felt-actions .action-btn {
+    border-radius: 8px; padding: 10px 22px; flex: 1; max-width: 200px;
+    background: #eafcf6; color: #0a4a52; font-weight: 700;
+    box-shadow: 0 2px 0 rgba(0,0,0,.25);
+  }
+  .felt-actions .action-btn.primary { background: #ffd75e; color: #4a3200; }
+  .felt-actions .action-btn:hover { filter: brightness(1.04); }
+  /* v průběhu hry stejná lišta bez horní linky */
+  .replay .felt-actions { border-top: 0; padding-top: 4px; }
   .felt-panel em { opacity: .8; font-style: normal; font-size: 12px; }
 
   /* průběh hry: kaskády štychů + talon */
