@@ -276,9 +276,10 @@ import Layout from '../layouts/Layout.astro';
     font: 700 15px/1 inherit; padding: 4px 10px; border-radius: 7px;
     box-shadow: 0 2px 8px rgba(0,0,0,.35); z-index: 4;
   }
-  .meld-box.meld-left  { transform: translate(calc(-50% - var(--card-w) * 2.05), -110%); }
-  .meld-box.meld-right { transform: translate(calc(-50% + var(--card-w) * 2.05), -110%); }
-  .meld-box.meld-me    { transform: translate(calc(-50% + var(--card-w) * .95), 60%); }
+  /* box sedí těsně vedle příslušné karty ve štychu */
+  .meld-box.meld-left  { transform: translate(calc(-50% - var(--card-w) * 1.95), -64%); }
+  .meld-box.meld-right { transform: translate(calc(-50% + var(--card-w) * 1.95), -64%); }
+  .meld-box.meld-me    { transform: translate(calc(-50% + var(--card-w) * .95), -20%); }
 
   /* trvale vystavené hlášky (karta lícem + 20/40) u hráčů — jako ve FLEK! */
   .melds { display: flex; gap: 10px; margin-top: 8px; min-height: calc(var(--card-w) * .62); }

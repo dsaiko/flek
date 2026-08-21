@@ -111,11 +111,7 @@ export class TableUI {
         const vNew = view(state, this.opts.humanSeat);
         this.renderHand(vNew, []); // bez klikání, animace kliky stejně blokuje
         this.renderOpponents(vNew);
-        const marriages = [
-          ...prev.phase.marriages,
-          ...(a.announceMarriage ? [{ seat: a.seat, card: a.card }].map((x) => ({ seat: x.seat, suit: suitOf(x.card) })) : []),
-        ];
-        await this.animateTrickEnd(full, winner, marriages, prev.contract.trump);
+        await this.animateTrickEnd(full, winner, state, prev.contract.trump);
       }
     }
     return false;
@@ -148,16 +144,14 @@ export class TableUI {
     return window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
   }
 
-  /** Bílý box „20"/„40" u karty, kterou byla ohlášena hláška (po vzoru FLEK!). */
+  /** Bílý box „20"/„40" u karty, KTEROU byla hláška ohlášena (po vzoru FLEK!). */
   private appendMeldBox(
     trickEl: HTMLElement,
     p: { seat: Seat; card: Card },
-    marriages: { seat: Seat; suit: number }[],
+    state: GameState,
     trump: number | null,
   ): void {
-    const r = rankOf(p.card);
-    if (r !== KRAL && r !== SVRSEK) return;
-    if (!marriages.some((m) => m.seat === p.seat && m.suit === suitOf(p.card))) return;
+    if (!wasAnnouncedBy(state, p.seat, p.card)) return;
     const box = document.createElement('div');
     box.className = `meld-box meld-${this.posOf(p.seat)}`;
     box.textContent = trump !== null && suitOf(p.card) === trump ? '40' : '20';
@@ -167,7 +161,7 @@ export class TableUI {
   private async animateTrickEnd(
     full: { seat: Seat; card: Card }[],
     winner: Seat,
-    marriages: { seat: Seat; suit: number }[] = [],
+    state: GameState | null = null,
     trump: number | null = null,
   ): Promise<void> {
     const trickEl = $(this.root, '#trick');
@@ -183,7 +177,7 @@ export class TableUI {
       img.className = `played pos-${this.posOf(p.seat)}${p.seat === winner ? ' win' : ''}`;
       trickEl.appendChild(img);
       imgs.push(img);
-      this.appendMeldBox(trickEl, p, marriages, trump);
+      if (state) this.appendMeldBox(trickEl, p, state, trump);
     }
     const statusEl = $(this.root, '#status');
     statusEl.textContent = `${currentLang() === 'en' ? 'Trick' : 'Štych'}: ${this.nameOf(winner)}`;
@@ -314,7 +308,7 @@ export class TableUI {
         img.alt = cardName(p.card);
         img.className = `played pos-${this.posOf(p.seat)}`;
         trickEl.appendChild(img);
-        this.appendMeldBox(trickEl, p, v.phase.marriages, v.contract?.trump ?? null);
+        this.appendMeldBox(trickEl, p, state, v.contract?.trump ?? null);
       }
     }
     // zúčtování/průběh: plovoucí vrstva přes střed stolu — nemění výšku stolu
@@ -740,6 +734,16 @@ export class TableUI {
 }
 
 // ── pomocné formátování ────────────────────────────────────────────────────
+
+/** Byla tato konkrétní karta zahrána s ohlášením hlášky? (z historie aktuální hry) */
+function wasAnnouncedBy(state: GameState, seat: Seat, card: Card): boolean {
+  for (let i = state.history.length - 1; i >= 0; i -= 1) {
+    const a = state.history[i];
+    if (a.type === 'deal') break;
+    if (a.type === 'play' && a.seat === seat && a.card === card) return a.announceMarriage;
+  }
+  return false;
+}
 
 const REVEAL_STEP_MS = 90;
 
