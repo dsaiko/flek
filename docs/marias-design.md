@@ -78,8 +78,15 @@ paušál 2 = 50×, limit 500×/750×.
 - Rozdávání: forhont 7 + 5, ostatní 2×5; aktér odhodí 2 karty do **talonu** (nesmí esa a desítky)
 - **Flekování**: dobrá → flek (×2) → re (×4) → tutti (×8) → boty (×16) → kalhoty (×32) → kajzr (×64);
   fleky se dávají **zvlášť na hru, sedmu a kilo**
-- **Sedma**: závazek vzít poslední štych trumfovou sedmou; **kilo (sto)**: závazek ≥100 bodů,
-  výplata škáluje za každých 10 bodů nad/pod; **tiché** varianty za poloviční sazbu
+- **Sedma**: závazek vzít poslední štych trumfovou sedmou; hlášená sedma smí z ruky
+  až v posledním štychu (dřív jen z donucení — pak je prohraná)
+- **Kilo (sto)**, dle Obecných pravidel ČSM čl. IV.4 + V.5: do hranice 100 se počítá
+  **jen jedna hláška** (splněno = 60 bodů s trumfovou hláškou / 80 s jinou; bez hlášky nelze);
+  uhrané: sazba za každých 10 bodů od 100 výš (vč. dalších hlášek); prohrané: sazba za každých
+  10 chybějících + za hlášky obrany. Oficiálně lineárně; hospodská varianta zdvojnásobuje
+  (config `kiloScaling`). **Tiché** varianty za poloviční sazbu
+- **Talon**: zákaz es a desítek platí jen u trumfových her — u betla/durcha odhodit smíš
+- **Výnos do prvního štychu**: forhont; u betla/durcha **aktér**
 - Červený trumf zdvojnásobuje sazby; peněžní konto hráčů napříč hrami; rozdávající rotuje
 
 ### 3.3 Volený mariáš (FLEK!)
@@ -339,7 +346,6 @@ interface Sazby {
   maxFlekLevel: number;               // 5 = kalhoty, 6 = kajzr
   talonForbidsTrump: boolean;         // house rules — defaulty dle originálu/ČSM
   talonOnTakeover: 'retake' | 'keep';
-  countMarriagesIntoKilo: boolean;
 }
 // sazby.ts exportuje pojmenované presety: SAZBY_CSM (výchozí), SAZBY_FLEK (podle originálu,
 // doladí se empiricky ve fázi 4); RulesConfig = { sazby: Sazby } + případné další přepínače
@@ -447,6 +453,10 @@ procesem. Jeden worker pro obě AI (myslí sekvenčně).
   fallback „maximalizovaný" CSS režim přes celý viewport; responzivní vč. mobilu
 - **Přístupnost**: kompletní ovládání klávesnicí (šipky + Enter — pocta ovládání DOS
   originálu!), viditelný fokus, `prefers-reduced-motion` → animace karet se vypnou/zkrátí
+- **Mince / bank** (nápad uživatele): konto hráčů zobrazené graficky jako hromádky mincí
+  u sedadel, platby po zúčtování animované přesunem mincí, případný bank uprostřed stolu.
+  Vlastní SVG sada mincí (éra 90. let — desetihaléře/koruny, pocta době FLEK!), generovaná
+  skriptem `scripts/gen-coins.ts` po vzoru karet; MIT. Implementace ve fázi UI.
 - Nastavení: varianta volený/licitovaný, obtížnost AI, rychlost animací, zvuky (jemné, volitelné)
 - Stránka podle mars vzoru: `Layout.astro` (lang-pill CZ/EN, meta, GoatCounter), nahoře hrací
   stůl, pod ním obsahové sekce (viz §5.6)
@@ -638,7 +648,7 @@ Před deployem `make build && make preview` + `make deploy-s3-dryrun`.
    tichá sedma 1×, omyl 6× — jiné poměry než volený (betl 10×, durch 20×) ⇒ preset per varianta.
    Závazek **dvě sedmy** (trumfová 7 poslední + pomocná 7 předposlední štych) je v typech,
    v1 za config přepínačem `enableDveSedmy`. Chování originálu RE! stále ověřit v DOSBoxu.
-2. Defaulty house-rules (`talonForbidsTrump`, `talonOnTakeover`, `countMarriagesIntoKilo`,
+2. Defaulty house-rules (`talonForbidsTrump`, `talonOnTakeover`,
    `maxFlekLevel` — kajzr ano/ne) — navrhnout podle chování originálu, vše zůstane konfigurovatelné
 3. Jednotky konta: desetihaléře jako ČSM pravidla / Kč / abstraktní body?
 4. ✅ Zvuky budou (§5.7 — míchání, rozdávání, karty; vypnutelné); rozhodnuto s uživatelem

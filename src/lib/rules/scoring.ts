@@ -6,7 +6,7 @@
  * strana platí — aktér platí/inkasuje dvojnásobek (proti dvěma), obránci po jednom.
  */
 
-import { CERVENE, ESO, R7, R10, pointsOf, rankOf, suitOf, card, type Card, type Suit } from '../cards';
+import { CERVENE, R7, pointsOf, card, type Suit } from '../cards';
 import type {
   ComponentResult,
   Contract,
@@ -66,13 +66,38 @@ export function marriagePoints(input: SettleInput): { declarer: number; defender
   return { declarer, defenders };
 }
 
-/** Kilo škálování: násobek podle bodů (za každých 10 bodů nad/pod 100). */
-export function kiloMultiplier(points: number, scaling: 'double' | 'linear'): number {
-  // uhráno: 100–109 → 1 krok 0; 110–119 → krok 1; ...
-  // prohráno: 90–99 → krok 0; 80–89 → krok 1; ...  (vždy aspoň základní sazba)
-  const steps = points >= 100 ? Math.floor((points - 100) / 10) : Math.ceil((100 - points) / 10) - 1;
-  return scaling === 'double' ? 2 ** steps : 1 + steps;
+/**
+ * Vyhodnocení závazku Sto dle Obecných pravidel ČSM (čl. IV.4 a V.5):
+ *  - do hranice 100 se započítává JEN JEDNA hláška (ta nejvyšší) → splněno = 60 bodů
+ *    s trumfovou hláškou, 80 s jinou (bez hlášky sto uhrát nelze — karty dají max 90)
+ *  - uhráno: sazba za každých započatých 10 bodů od 100 VÝŠE, včetně dalších hlášek
+ *    (přesně 100 → 1×, 110 → 2×, ...)
+ *  - prohráno: sazba za každých 10 bodů chybějících do 100 + za každých 10 bodů,
+ *    které obrana získala hláškami
+ *  - scaling 'linear' = oficiální ČSM (násobky sazby); 'double' = hospodská varianta
+ *    (každý krok zdvojnásobuje: 100 → 1×, 110 → 2×, 120 → 4×)
+ * Všechny bodové hodnoty jsou násobky 10, kroky jsou proto celočíselné.
+ */
+export function kiloSteps(
+  holderCardPts: number,
+  holderMarriages: readonly number[],
+  opponentMarriagePts: number,
+): { fulfilled: boolean; steps: number; measured: number } {
+  const best = holderMarriages.length > 0 ? Math.max(...holderMarriages) : 0;
+  const threshold = holderCardPts + best;
+  if (threshold >= 100) {
+    const total = holderCardPts + holderMarriages.reduce((a, b) => a + b, 0);
+    return { fulfilled: true, steps: 1 + Math.floor((total - 100) / 10), measured: total };
+  }
+  return {
+    fulfilled: false,
+    steps: (100 - threshold) / 10 + opponentMarriagePts / 10,
+    measured: threshold,
+  };
 }
+
+export const stepsToMultiplier = (steps: number, scaling: 'double' | 'linear'): number =>
+  scaling === 'double' ? 2 ** (steps - 1) : steps;
 
 interface SedmaFacts {
   /** Trumfová sedma zahraná v posledním štychu (kým), pokud vůbec. */
@@ -149,24 +174,36 @@ export function settle(input: SettleInput): HandResult {
       push('sedma', wonBy, s.tichaSedma, 1, cerveny, true, sf.won ? 'tichá sedma' : 'zabitá tichá sedma');
     }
 
-    // ── kilo (hlášené / tiché) ──
-    const pointsFor = (side: 'declarer' | 'defenders'): number =>
-      side === 'declarer'
-        ? cp.declarer + (config.countMarriagesIntoKilo ? mp.declarer : 0)
-        : cp.defenders + (config.countMarriagesIntoKilo ? mp.defenders : 0);
+    // ── kilo (hlášené / tiché) — dle Obecných pravidel ČSM čl. IV.4 + V.5 ──
+    const marriageValues = (side: 'declarer' | 'defenders'): number[] =>
+      input.marriages
+        .filter((m) => isDeclarerSide(m.seat, contract.declarer) === (side === 'declarer'))
+        .map((m) => (contract.trump !== null && m.suit === contract.trump ? 40 : 20));
+
+    const assessKilo = (holder: 'declarer' | 'defenders') => {
+      const other = holder === 'declarer' ? 'defenders' : 'declarer';
+      return kiloSteps(
+        holder === 'declarer' ? cp.declarer : cp.defenders,
+        marriageValues(holder),
+        marriageValues(other).reduce((a, b) => a + b, 0),
+      );
+    };
 
     if (contract.kilo !== null) {
-      const holderIsDeclarer = contract.kilo === contract.declarer;
-      const pts = pointsFor(holderIsDeclarer ? 'declarer' : 'defenders');
-      const fulfilled = pts >= 100;
-      const wonBy = fulfilled === holderIsDeclarer ? 'declarer' : 'defenders';
-      push('kilo', wonBy, s.kilo, flek('kilo'), cerveny * kiloMultiplier(pts, s.kiloScaling), false, `kilo ${pts}`);
+      const holder = contract.kilo === contract.declarer ? ('declarer' as const) : ('defenders' as const);
+      const k = assessKilo(holder);
+      const wonBy = k.fulfilled ? holder : holder === 'declarer' ? 'defenders' : 'declarer';
+      push(
+        'kilo', wonBy, s.kilo, flek('kilo'),
+        cerveny * stepsToMultiplier(k.steps, s.kiloScaling), false,
+        k.fulfilled ? `kilo ${k.measured}` : `kilo nedohráno (${k.measured})`,
+      );
     } else {
       // tiché kilo: nehlášených ≥100 bodů (nejvýše jedna strana — celkem je max 190)
       for (const side of ['declarer', 'defenders'] as const) {
-        const pts = pointsFor(side);
-        if (pts >= 100) {
-          push('kilo', side, s.ticheKilo, 1, cerveny * kiloMultiplier(pts, s.kiloScaling), true, `tiché kilo ${pts}`);
+        const k = assessKilo(side);
+        if (k.fulfilled) {
+          push('kilo', side, s.ticheKilo, 1, cerveny * stepsToMultiplier(k.steps, s.kiloScaling), true, `tiché kilo ${k.measured}`);
         }
       }
     }
@@ -214,5 +251,3 @@ export function totalCardPoints(tricks: PlayedTrick[]): number {
   return tricks.reduce((s, t) => s + t.plays.reduce((x, p) => x + pointsOf(p.card), 0), 0) + 10;
 }
 
-// re-export pro konzumenty scoringu
-export { ESO, R10, rankOf, suitOf };

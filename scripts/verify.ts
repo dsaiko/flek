@@ -161,7 +161,7 @@ const KULE = 2 as const;
 // ── scoring ──────────────────────────────────────────────────────────────────
 
 {
-  const { settle, kiloMultiplier } = await import('../src/lib/rules/scoring');
+  const { settle, kiloSteps, stepsToMultiplier } = await import('../src/lib/rules/scoring');
   const { defaultConfig } = await import('../src/lib/rules/sazby');
   type Seat = 0 | 1 | 2;
 
@@ -231,38 +231,39 @@ const KULE = 2 as const;
   assert.equal(ticha?.silent, true);
   assert.equal(ticha?.amount, 1);
 
-  // kilo: škálování
-  assert.equal(kiloMultiplier(100, 'double'), 1);
-  assert.equal(kiloMultiplier(109, 'double'), 1);
-  assert.equal(kiloMultiplier(110, 'double'), 2);
-  assert.equal(kiloMultiplier(120, 'double'), 4);
-  assert.equal(kiloMultiplier(99, 'double'), 1);
-  assert.equal(kiloMultiplier(90, 'double'), 1);
-  assert.equal(kiloMultiplier(89, 'double'), 2);
-  assert.equal(kiloMultiplier(120, 'linear'), 3);
+  // kilo: oficiální ČSM pravidla — do hranice jen JEDNA hláška, sazba za každých 10 bodů
+  assert.deepEqual(kiloSteps(60, [40], 0), { fulfilled: true, steps: 1, measured: 100 });
+  assert.deepEqual(kiloSteps(80, [20], 0), { fulfilled: true, steps: 1, measured: 100 });
+  assert.deepEqual(kiloSteps(60, [40, 20], 0), { fulfilled: true, steps: 3, measured: 120 });
+  assert.deepEqual(kiloSteps(90, [], 0), { fulfilled: false, steps: 1, measured: 90 }, 'sto bez hlášky nelze');
+  assert.deepEqual(kiloSteps(50, [40], 20), { fulfilled: false, steps: 3, measured: 90 }, 'deficit + hlášky obrany');
+  assert.equal(stepsToMultiplier(3, 'linear'), 3);
+  assert.equal(stepsToMultiplier(3, 'double'), 4, 'hospodské zdvojnásobování');
+  assert.equal(stepsToMultiplier(1, 'double'), 1);
 
-  // kilo hlášené aktérem, 110 bodů (50 z karet + 40 trumfová hláška + 20 hláška)
+  // kilo hlášené aktérem: 60 z karet + trumfová hláška (40) + další (20) → 120 → 3× sazba
   r = settle({
     handNo: 0, config: cfg, contract: { ...base, kilo: 0 }, flekLevels: {},
     tricks: [
       trick(0, [0, card(KULE_S, ESO)], [1, card(ZELENE, R10)], [2, card(CERVENE, R10)]),
-      trick(0, [0, card(3, ESO)], [1, card(ZELENE, R8)], [2, card(ZELENE, R9)]),
+      trick(0, [0, card(3, ESO)], [1, card(CERVENE, ESO)], [2, card(ZELENE, R9)]),
     ],
     marriages: [{ seat: 0, suit: KULE_S }, { seat: 0, suit: CERVENE }],
   });
-  // karty: 30 + 10 (1. štych? oba štychy aktér) + poslední štych 10 → 40+10 = 50; hlášky 60 → 110
   const kilo = r.components.find((c) => c.target === 'kilo');
   assert.equal(kilo?.wonBy, 'declarer');
-  assert.equal(kilo?.amount, 4 * 2, 'kilo 110 → dvojnásobek');
-  assert.equal(kilo?.note, 'kilo 110');
+  assert.equal(kilo?.amount, 4 * 3, 'kilo 120 → 3× sazba (linear)');
+  assert.equal(kilo?.note, 'kilo 120');
 
-  // kilo prohrané o 10+ → sazba dle deficitu, vyhrává obrana
+  // kilo prohrané: 0 bodů → 10 kroků deficitu, vyhrává obrana
   r = settle({
     handNo: 0, config: cfg, contract: { ...base, kilo: 0 }, flekLevels: {},
     tricks: [trick(1, [1, card(KULE_S, ESO)], [2, card(ZELENE, R7)], [0, card(ZELENE, R8)])],
     marriages: [],
   });
-  assert.equal(r.components.find((c) => c.target === 'kilo')?.wonBy, 'defenders');
+  const kiloLost = r.components.find((c) => c.target === 'kilo');
+  assert.equal(kiloLost?.wonBy, 'defenders');
+  assert.equal(kiloLost?.amount, 4 * 10, 'deficit 100 → 10 kroků');
 
   // betl / durch
   r = settle({
@@ -273,8 +274,8 @@ const KULE = 2 as const;
   });
   assert.equal(r.components[0].target, 'betl');
   assert.equal(r.components[0].wonBy, 'declarer');
-  assert.equal(r.components[0].amount, 10);
-  assert.deepEqual(r.delta, [20, -10, -10]);
+  assert.equal(r.components[0].amount, 15);
+  assert.deepEqual(r.delta, [30, -15, -15]);
   zeroSum(r.delta);
 
   r = settle({
@@ -283,7 +284,7 @@ const KULE = 2 as const;
     tricks: [trick(0, [0, card(ZELENE, ESO)], [1, card(ZELENE, R7)], [2, card(ZELENE, R8)])],
     marriages: [],
   });
-  assert.equal(r.components[0].amount, 40, 'durch 20 × flek 2');
+  assert.equal(r.components[0].amount, 60, 'durch 30 × flek 2');
 
   // červený trumf zdvojnásobuje barevné komponenty
   r = settle({

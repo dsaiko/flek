@@ -109,7 +109,6 @@ export interface RulesConfig {
   // house rules
   talonForbidsTrump: boolean;
   talonOnTakeover: 'retake' | 'keep';
-  countMarriagesIntoKilo: boolean;
   enableDveSedmy: boolean; // jen licitovaný
 }
 
