@@ -1,0 +1,472 @@
+/**
+ * table.ts — vykreslení herního stolu a interakce (bez herní logiky)
+ *
+ * Prosté překreslení dynamických regionů při každé změně stavu; legalitu akcí
+ * určuje výhradně legalActions(view) — UI z ní jen staví tlačítka a klikací
+ * karty. Žádný přístup ke GameState mimo humanView + veřejné části.
+ */
+
+import { pointsOf, rankOf, suitOf, KRAL, SVRSEK, card as mkCard, type Card } from '../cards';
+import { legalActions } from '../rules/legal';
+import type { GameState, HandResult, PlayerAction, PlayerView, Seat } from '../rules/types';
+import { view } from '../rules/view';
+import { backSrc, cardName, cardSrc, SUIT_SYMBOL, type Pattern } from './cardAssets';
+import { currentLang, flekName, t } from './i18n';
+
+export interface TableCallbacks {
+  onAction: (action: PlayerAction) => void;
+  onDeal: () => void;
+  onNewMatch: () => void;
+}
+
+export interface TableOptions {
+  humanSeat: Seat;
+  pattern: () => Pattern;
+  aiNames: [string, string]; // [levý = další v pořadí, pravý]
+}
+
+const $ = <T extends HTMLElement>(root: HTMLElement, sel: string): T => {
+  const el = root.querySelector<T>(sel);
+  if (!el) throw new Error(`chybí element ${sel}`);
+  return el;
+};
+
+export class TableUI {
+  private readonly root: HTMLElement;
+  private readonly cb: TableCallbacks;
+  private readonly opts: TableOptions;
+  private selected = new Set<Card>();
+  private bubbleTimers = new Map<Seat, ReturnType<typeof setTimeout>>();
+
+  constructor(root: HTMLElement, opts: TableOptions, cb: TableCallbacks) {
+    this.root = root;
+    this.opts = opts;
+    this.cb = cb;
+  }
+
+  /** Kompletní překreslení podle stavu. */
+  render(state: GameState): void {
+    const me = this.opts.humanSeat;
+    const v = view(state, me);
+    const legal = legalActions(v);
+    const phase = v.phase;
+    if (phase.name !== 'discard-talon') this.selected.clear();
+
+    this.renderOpponents(v);
+    this.renderCenter(v, state);
+    this.renderHand(v, legal);
+    this.renderActions(v, legal);
+    this.renderStatus(v, legal);
+    this.renderResult(v);
+    this.showLastActionBubble(state);
+  }
+
+  // ── protihráči ─────────────────────────────────────────────────────────────
+
+  private seatAt(pos: 'left' | 'right'): Seat {
+    const me = this.opts.humanSeat;
+    return ((me + (pos === 'left' ? 1 : 2)) % 3) as Seat;
+  }
+
+  private renderOpponents(v: PlayerView): void {
+    for (const pos of ['left', 'right'] as const) {
+      const seat = this.seatAt(pos);
+      const box = $(this.root, `#seat-${pos}`);
+      $(box, '.seat-name').textContent =
+        this.opts.aiNames[pos === 'left' ? 0 : 1] + (seat === v.dealer ? ' 🂠' : '');
+      $(box, '.seat-ledger').textContent = fmtLedger(v.ledger[seat]);
+      const backs = $(box, '.backs');
+      const n = v.handCounts[seat];
+      backs.innerHTML = '';
+      for (let i = 0; i < n; i += 1) {
+        const img = document.createElement('img');
+        img.src = backSrc();
+        img.alt = '';
+        img.className = 'back';
+        backs.appendChild(img);
+      }
+    }
+    const meLedger = this.root.querySelector<HTMLElement>('#ledger-me');
+    if (meLedger) meLedger.textContent = `${t('you')}: ${fmtLedger(v.ledger[this.opts.humanSeat])}`;
+  }
+
+  // ── střed stolu ────────────────────────────────────────────────────────────
+
+  private renderCenter(v: PlayerView, state: GameState): void {
+    const trickEl = $(this.root, '#trick');
+    trickEl.innerHTML = '';
+    if (v.phase.name === 'tricks') {
+      for (const p of v.phase.trick) {
+        const img = document.createElement('img');
+        img.src = cardSrc(p.card, this.opts.pattern());
+        img.alt = cardName(p.card);
+        img.className = `played pos-${this.posOf(p.seat)}`;
+        trickEl.appendChild(img);
+      }
+    }
+
+    const info = $(this.root, '#contract-info');
+    const c = v.contract;
+    if (!c || v.phase.name === 'idle' || v.phase.name === 'scored') {
+      info.textContent = '';
+    } else {
+      const parts: string[] = [];
+      parts.push(
+        c.mode === 'hra' ? `${t('hra')} ${c.trump !== null ? SUIT_SYMBOL[c.trump] : ''}` : t(c.mode),
+      );
+      if (c.sedma !== null) parts.push(c.sedma === c.declarer ? t('sedma') : t('sedmaProti'));
+      if (c.kilo !== null) parts.push(c.kilo === c.declarer ? t('kilo') : t('kiloProti'));
+      const fleks = flekSummary(state);
+      if (fleks) parts.push(fleks);
+      const who = c.declarer === this.opts.humanSeat ? t('you') : this.nameOf(c.declarer);
+      info.textContent = `${who}: ${parts.join(' · ')}`;
+    }
+  }
+
+  private posOf(seat: Seat): string {
+    const me = this.opts.humanSeat;
+    if (seat === me) return 'me';
+    return seat === this.seatAt('left') ? 'left' : 'right';
+  }
+
+  private nameOf(seat: Seat): string {
+    if (seat === this.opts.humanSeat) return t('you');
+    return this.opts.aiNames[seat === this.seatAt('left') ? 0 : 1];
+  }
+
+  // ── ruka ───────────────────────────────────────────────────────────────────
+
+  private renderHand(v: PlayerView, legal: PlayerAction[]): void {
+    const handEl = $(this.root, '#hand');
+    handEl.innerHTML = '';
+    const phase = v.phase;
+
+    const playable = new Set<Card>();
+    if (phase.name === 'tricks') {
+      for (const a of legal) if (a.type === 'play') playable.add(a.card);
+    } else if (phase.name === 'choose-trump') {
+      for (const a of legal) {
+        if (a.type === 'choose-trump' && a.card !== 'from-people') playable.add(a.card);
+      }
+    } else if (phase.name === 'discard-talon' && legal.length > 0) {
+      for (const c of v.hand) playable.add(c);
+    }
+
+    for (const c of v.hand) {
+      const btn = document.createElement('button');
+      btn.className = 'card-btn';
+      btn.disabled = !playable.has(c);
+      if (this.selected.has(c)) btn.classList.add('selected');
+      const img = document.createElement('img');
+      img.src = cardSrc(c, this.opts.pattern());
+      img.alt = cardName(c);
+      btn.appendChild(img);
+      btn.addEventListener('click', () => this.onCardClick(c, v));
+      handEl.appendChild(btn);
+    }
+  }
+
+  private onCardClick(c: Card, v: PlayerView): void {
+    const phase = v.phase;
+    if (phase.name === 'choose-trump') {
+      this.cb.onAction({ type: 'choose-trump', seat: v.seat, card: c });
+    } else if (phase.name === 'discard-talon') {
+      if (this.selected.has(c)) this.selected.delete(c);
+      else if (this.selected.size < 2) this.selected.add(c);
+      this.rerenderSelection(v);
+    } else if (phase.name === 'tricks') {
+      // preferuj hlášku, když je legální (skoro vždy správně)
+      const legal = legalActions(v);
+      const withM = legal.find((a) => a.type === 'play' && a.card === c && a.announceMarriage);
+      const plain = legal.find((a) => a.type === 'play' && a.card === c);
+      const action = withM ?? plain;
+      if (action) this.cb.onAction(action);
+    }
+  }
+
+  private rerenderSelection(v: PlayerView): void {
+    const handEl = $(this.root, '#hand');
+    const buttons = handEl.querySelectorAll<HTMLButtonElement>('.card-btn');
+    v.hand.forEach((c, i) => {
+      buttons[i]?.classList.toggle('selected', this.selected.has(c));
+    });
+    const confirm = this.root.querySelector<HTMLButtonElement>('#discard-confirm');
+    if (confirm) confirm.disabled = this.selected.size !== 2;
+  }
+
+  // ── akční lišta ────────────────────────────────────────────────────────────
+
+  private renderActions(v: PlayerView, legal: PlayerAction[]): void {
+    const bar = $(this.root, '#actions');
+    bar.innerHTML = '';
+    const btn = (label: string, onClick: () => void, opts?: { primary?: boolean; disabled?: boolean; id?: string }) => {
+      const b = document.createElement('button');
+      b.className = `action-btn${opts?.primary ? ' primary' : ''}`;
+      if (opts?.id) b.id = opts.id;
+      b.textContent = label;
+      b.disabled = opts?.disabled ?? false;
+      b.addEventListener('click', onClick);
+      bar.appendChild(b);
+      return b;
+    };
+
+    switch (v.phase.name) {
+      case 'idle':
+        if (legal.some((a) => a.type === 'deal')) btn(t('deal'), () => this.cb.onDeal(), { primary: true });
+        break;
+
+      case 'scored':
+        if (legal.some((a) => a.type === 'deal')) btn(t('nextHand'), () => this.cb.onDeal(), { primary: true });
+        break;
+
+      case 'choose-trump': {
+        const fp = legal.find((a) => a.type === 'choose-trump' && a.card === 'from-people');
+        if (fp) btn(t('fromPeople'), () => this.cb.onAction(fp));
+        break;
+      }
+
+      case 'discard-talon':
+        if (legal.length > 0) {
+          btn(t('discardConfirm'), () => {
+            const cards = [...this.selected] as [Card, Card];
+            const action = legal.find(
+              (a) => a.type === 'discard' && a.cards.includes(cards[0]) && a.cards.includes(cards[1]),
+            );
+            if (action) this.cb.onAction(action);
+          }, { primary: true, disabled: this.selected.size !== 2, id: 'discard-confirm' });
+        }
+        break;
+
+      case 'declare':
+        for (const a of legal) {
+          if (a.type !== 'declare') continue;
+          btn(declareLabel(a), () => this.cb.onAction(a), { primary: a.mode === 'hra' && !a.sedma && !a.kilo });
+        }
+        break;
+
+      case 'bidding':
+        for (const a of legal) {
+          if (a.type !== 'bid') continue;
+          btn(a.bid === 'pass' ? t('pass') : bidLabel(a.bid), () => this.cb.onAction(a), {
+            primary: a.bid === 'pass',
+          });
+        }
+        break;
+
+      case 'takeover':
+        for (const a of legal) {
+          if (a.type !== 'takeover') continue;
+          const label = a.claim === 'good' ? t('good') : t(a.claim);
+          btn(label, () => this.cb.onAction(a), { primary: a.claim === 'good' });
+        }
+        break;
+
+      case 'fleks':
+        for (const a of legal) {
+          if (a.type === 'good') {
+            btn(t('good'), () => this.cb.onAction(a), { primary: true });
+          } else if (a.type === 'flek') {
+            const level = (v.phase.name === 'fleks' ? v.phase.fleks.levels[a.target] ?? 0 : 0) + 0;
+            btn(`${flekName(level)} ${t('na')} ${targetLabel(a.target)}`, () => this.cb.onAction(a));
+          } else if (a.type === 'announce-proti') {
+            const label = a.sedma && a.kilo ? `${t('sedmaProti')} + ${t('kiloProti')}` : a.sedma ? t('sedmaProti') : t('kiloProti');
+            btn(label, () => this.cb.onAction(a));
+          }
+        }
+        break;
+
+      default:
+        break;
+    }
+  }
+
+  // ── status ─────────────────────────────────────────────────────────────────
+
+  private renderStatus(v: PlayerView, legal: PlayerAction[]): void {
+    const el = $(this.root, '#status');
+    const iAct = legal.some((a) => a.type !== 'deal');
+    if (v.phase.name === 'idle') {
+      el.textContent = '';
+    } else if (v.phase.name === 'scored') {
+      el.textContent = '';
+    } else if (iAct) {
+      const hint: Partial<Record<string, string>> = {
+        'choose-trump': t('chooseTrump'),
+        'discard-talon': t('discard'),
+        declare: t('declare'),
+        bidding: t('bidding'),
+        takeover: t('takeover'),
+        fleks: t('fleks'),
+        tricks: t('yourTurn'),
+      };
+      el.textContent = hint[v.phase.name] ?? t('yourTurn');
+      el.classList.add('me-turn');
+    } else {
+      const actor = this.currentActorName(v);
+      el.textContent = actor ? `${t('waiting')} ${actor}…` : '…';
+      el.classList.remove('me-turn');
+    }
+  }
+
+  private currentActorName(v: PlayerView): string | null {
+    const p = v.phase;
+    const seat =
+      p.name === 'bidding' || p.name === 'takeover' ? p.toAct
+      : p.name === 'fleks' ? p.fleks.toAct
+      : p.name === 'tricks' ? p.toAct
+      : p.name === 'choose-trump' ? null
+      : p.name === 'discard-talon' || p.name === 'declare' ? p.standing.declarer
+      : null;
+    if (seat === null || seat === this.opts.humanSeat) return null;
+    return this.nameOf(seat);
+  }
+
+  // ── výsledek ───────────────────────────────────────────────────────────────
+
+  private renderResult(v: PlayerView): void {
+    const overlay = $(this.root, '#result');
+    if (v.phase.name !== 'scored') {
+      overlay.classList.remove('open');
+      return;
+    }
+    overlay.classList.add('open');
+    const r = v.phase.result;
+    $(overlay, '#result-body').innerHTML = resultHtml(r, this.opts.humanSeat, (s) => this.nameOf(s));
+    const nextBtn = $(overlay, '#result-next') as HTMLButtonElement;
+    nextBtn.textContent = t('nextHand');
+    nextBtn.onclick = () => this.cb.onDeal();
+  }
+
+  // ── bubliny (table talk základ) ────────────────────────────────────────────
+
+  private lastHistoryLen = 0;
+
+  private showLastActionBubble(state: GameState): void {
+    if (state.history.length === this.lastHistoryLen) return;
+    this.lastHistoryLen = state.history.length;
+    const a = state.history[state.history.length - 1];
+    if (!a || a.type === 'deal') return;
+    const text = bubbleText(a, state);
+    if (!text) return;
+    const seat = a.seat;
+    if (seat === this.opts.humanSeat) return;
+    const pos = seat === this.seatAt('left') ? 'left' : 'right';
+    const el = $(this.root, `#seat-${pos} .bubble`);
+    el.textContent = text;
+    el.classList.add('show');
+    const prev = this.bubbleTimers.get(seat);
+    if (prev) clearTimeout(prev);
+    this.bubbleTimers.set(seat, setTimeout(() => el.classList.remove('show'), 2600));
+  }
+}
+
+// ── pomocné formátování ────────────────────────────────────────────────────
+
+const fmtLedger = (n: number): string => (n > 0 ? `+${n}` : String(n));
+
+function declareLabel(a: Extract<PlayerAction, { type: 'declare' }>): string {
+  if (a.mode !== 'hra') return t(a.mode);
+  const parts = [t('hra')];
+  if (a.trump !== undefined) parts.push(SUIT_SYMBOL[a.trump]);
+  if (a.sedma) parts.push(`+ ${t('sedma')}`);
+  if (a.kilo) parts.push(`+ ${t('kilo')}`);
+  return parts.join(' ');
+}
+
+const BID_LABEL_CS: Record<string, string> = {
+  sedma: 'Sedma', sto: 'Sto', 'sto-sedma': 'Sto a sedma',
+  betl: 'Betl', durch: 'Durch', 'dve-sedmy': 'Dvě sedmy', 'dve-sedmy-sto': 'Dvě sedmy a sto',
+};
+const BID_LABEL_EN: Record<string, string> = {
+  sedma: 'Seven', sto: 'Hundred', 'sto-sedma': 'Hundred & seven',
+  betl: 'Betl', durch: 'Durch', 'dve-sedmy': 'Two sevens', 'dve-sedmy-sto': 'Two sevens & hundred',
+};
+
+function bidLabel(b: { kind: string; cervena: boolean }): string {
+  const base = (currentLang() === 'en' ? BID_LABEL_EN : BID_LABEL_CS)[b.kind] ?? b.kind;
+  return b.cervena ? `${base} ${SUIT_SYMBOL[0]}` : base;
+}
+
+function targetLabel(target: string): string {
+  const map: Record<string, string> = {
+    hra: t('hra'), sedma: t('sedma'), kilo: t('kilo'),
+    betl: t('betl'), durch: t('durch'), dveSedmy: 'dvě sedmy',
+  };
+  return map[target] ?? target;
+}
+
+function flekSummary(state: GameState): string {
+  const counts: Record<string, number> = {};
+  for (let i = state.history.length - 1; i >= 0; i -= 1) {
+    const a = state.history[i];
+    if (a.type === 'deal') break;
+    if (a.type === 'flek') counts[a.target] = (counts[a.target] ?? 0) + 1;
+  }
+  const parts = Object.entries(counts).map(
+    ([tg, lvl]) => `${flekName(lvl - 1)} ${t('na')} ${targetLabel(tg)}`,
+  );
+  return parts.join(', ');
+}
+
+function bubbleText(a: PlayerAction, state: GameState): string | null {
+  switch (a.type) {
+    case 'choose-trump':
+      return a.card === 'from-people' ? t('fromPeople') : null;
+    case 'bid':
+      return a.bid === 'pass' ? t('good') : bidLabel(a.bid);
+    case 'declare':
+      return declareLabel(a);
+    case 'takeover':
+      return a.claim === 'good' ? t('good') : `${t(a.claim)}!`;
+    case 'flek': {
+      let level = 0;
+      for (let i = state.history.length - 1; i >= 0; i -= 1) {
+        const h = state.history[i];
+        if (h.type === 'deal') break;
+        if (h.type === 'flek' && h.target === a.target) level += 1;
+      }
+      return `${flekName(level)} ${t('na')} ${targetLabel(a.target)}`;
+    }
+    case 'good':
+      return t('good');
+    case 'announce-proti':
+      return a.sedma && a.kilo ? `${t('sedmaProti')}, ${t('kiloProti')}!` : a.sedma ? `${t('sedmaProti')}!` : `${t('kiloProti')}!`;
+    case 'play': {
+      if (a.announceMarriage) {
+        const trump = state.contract?.trump;
+        const pts = trump !== null && trump !== undefined && suitOf(a.card) === trump ? 40 : 20;
+        return `${t('marriage')} ${pts}`;
+      }
+      return null;
+    }
+    default:
+      return null;
+  }
+}
+
+function resultHtml(r: HandResult, humanSeat: Seat, nameOf: (s: Seat) => string): string {
+  const c = r.contract;
+  const lang = currentLang();
+  const head =
+    c.mode === 'hra'
+      ? `${t('hra')} ${c.trump !== null ? SUIT_SYMBOL[c.trump] : ''} — ${nameOf(c.declarer)}`
+      : `${t(c.mode)} — ${nameOf(c.declarer)}`;
+  const pts =
+    c.mode === 'hra'
+      ? `<p class="pts">${t('points')}: ${t('declarerSide')} ${r.cardPoints.declarer + r.marriagePoints.declarer}
+         · ${t('defendersSide')} ${r.cardPoints.defenders + r.marriagePoints.defenders}</p>`
+      : '';
+  const rows = r.components
+    .map((comp) => {
+      const who = comp.wonBy === 'declarer' ? t('declarerSide') : t('defendersSide');
+      const note = comp.note ? ` <em>(${comp.note})</em>` : '';
+      const silent = comp.silent ? (lang === 'en' ? ' (silent)' : ' (tichá)') : '';
+      return `<tr><td>${targetLabel(comp.target)}${silent}${note}</td><td>${who}</td><td class="num">${comp.amount}</td></tr>`;
+    })
+    .join('');
+  const deltas = ([0, 1, 2] as Seat[])
+    .map((s) => `<span class="${r.delta[s] >= 0 ? 'plus' : 'minus'}">${nameOf(s)} ${fmtLedger(r.delta[s])}</span>`)
+    .join(' · ');
+  void humanSeat;
+  return `<h3>${head}</h3>${pts}<table><tbody>${rows}</tbody></table><p class="deltas">${deltas}</p>`;
+}

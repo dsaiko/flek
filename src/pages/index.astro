@@ -19,17 +19,69 @@ import Layout from '../layouts/Layout.astro';
       </p>
     </section>
 
-    <section class="table-placeholder">
-      <div class="fan" aria-hidden="true">
-        <img src="/cards/history/DH.webp" alt="" width="120" />
-        <img src="/cards/history/KL.webp" alt="" width="120" />
-        <img src="/cards/history/TB.webp" alt="" width="120" />
-        <img src="/cards/history/UA.webp" alt="" width="120" />
+    <section id="game-section" class="game-section">
+      <div id="table">
+        <div class="opp-row">
+          <div class="seatbox" id="seat-left">
+            <div class="seat-name"></div>
+            <div class="backs"></div>
+            <div class="seat-ledger"></div>
+            <div class="bubble"></div>
+          </div>
+          <div class="center-top">
+            <div id="status"></div>
+            <div id="contract-info"></div>
+          </div>
+          <div class="seatbox" id="seat-right">
+            <div class="seat-name"></div>
+            <div class="backs"></div>
+            <div class="seat-ledger"></div>
+            <div class="bubble"></div>
+          </div>
+        </div>
+
+        <div id="trick"></div>
+
+        <div class="me-row">
+          <div id="actions"></div>
+          <div id="hand"></div>
+          <div class="me-meta"><span id="ledger-me"></span></div>
+        </div>
+
+        <div id="result" class="overlay">
+          <div class="panel">
+            <div id="result-body"></div>
+            <button id="result-next" class="action-btn primary"></button>
+          </div>
+        </div>
       </div>
-      <p class="wip">
-        <span class="cs">Hra je ve výstavbě — brzy si zde zahrajete volený i licitovaný mariáš.</span>
-        <span class="en">The game is under construction — chosen and auction mariáš are coming soon.</span>
-      </p>
+
+      <div class="game-controls">
+        <label>
+          <span class="cs">Varianta</span><span class="en">Variant</span>
+          <select id="set-variant">
+            <option value="voleny">Volený (FLEK!)</option>
+            <option value="licitovany">Licitovaný (RE!)</option>
+          </select>
+        </label>
+        <label>
+          <span class="cs">IQ</span><span class="en">IQ</span>
+          <select id="set-difficulty">
+            <option value="easy">90</option>
+            <option value="normal">110</option>
+            <option value="hard">130</option>
+          </select>
+        </label>
+        <label>
+          <span class="cs">Vzor karet</span><span class="en">Cards</span>
+          <select id="set-pattern">
+            <option value="modern">Modern</option>
+            <option value="history">1860</option>
+          </select>
+        </label>
+        <button id="btn-new" class="ctl-btn"><span class="cs">Nový zápas</span><span class="en">New match</span></button>
+        <button id="btn-fullscreen" class="ctl-btn" title="Fullscreen">⛶</button>
+      </div>
     </section>
 
     <footer>
@@ -38,15 +90,25 @@ import Layout from '../layouts/Layout.astro';
         <span class="en">© 2026 Dušan Saiko · an independent tribute to FLEK! and RE! (Pivoňka Software) ·</span>
         <a href="https://github.com/dsaiko/flek">GitHub</a>
       </p>
+      <p class="attribution">
+        <span class="cs">Historické karty: jednohlavý pražský vzor, Ant. Kratochvíl, Praha 1860 — public domain
+          (Wikimedia Commons / BnF Gallica). Moderní sada: MIT.</span>
+        <span class="en">Historical cards: single-headed Prague pattern, Ant. Kratochvíl, Prague 1860 — public domain
+          (Wikimedia Commons / BnF Gallica). Modern deck: MIT.</span>
+      </p>
     </footer>
   </main>
 </Layout>
 
+<script src="../scripts/main.ts"></script>
+
 <style is:global>
   :root {
     --table: #1e5c38;
+    --table-light: #2a7548;
     --ink: #1f2430;
     --muted: #6b7280;
+    --card-w: clamp(52px, 8.5vw, 92px);
   }
   body {
     margin: 0;
@@ -55,33 +117,134 @@ import Layout from '../layouts/Layout.astro';
     background: linear-gradient(160deg, #f6f7f4, #eef1ea);
     min-height: 100vh;
   }
-  main { max-width: 960px; margin: 0 auto; padding: 84px 20px 40px; }
+  main { max-width: 1060px; margin: 0 auto; padding: 72px 16px 40px; }
 
-  .hero { text-align: center; }
+  .hero { text-align: center; margin-bottom: 18px; }
   .kicker {
     font: 600 13px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
     letter-spacing: 3px; color: var(--muted); margin: 0 0 10px;
   }
-  .hero h1 { font-size: 56px; margin: 0 0 10px; letter-spacing: -1px; }
-  .lead { color: var(--muted); max-width: 560px; margin: 0 auto; }
+  .hero h1 { font-size: 44px; margin: 0 0 8px; letter-spacing: -1px; }
+  .lead { color: var(--muted); max-width: 620px; margin: 0 auto; font-size: 15px; }
 
-  .table-placeholder {
-    margin: 40px auto; padding: 48px 24px 32px; border-radius: 20px;
-    background: radial-gradient(ellipse at 50% 30%, #2a7548, var(--table) 75%);
+  /* ── stůl ── */
+  .game-section { margin: 0 auto; }
+  .game-section.fs-fallback {
+    position: fixed; inset: 0; z-index: 40; background: #10131a;
+    padding: 10px; overflow: auto;
+  }
+  #table {
+    position: relative;
+    border-radius: 20px;
+    background: radial-gradient(ellipse at 50% 30%, var(--table-light), var(--table) 75%);
     box-shadow: inset 0 0 60px rgba(0,0,0,.25), 0 10px 30px rgba(17,24,39,.15);
-    text-align: center;
+    padding: 14px 14px 10px;
+    min-height: 540px;
+    display: flex; flex-direction: column;
   }
-  .fan { display: flex; justify-content: center; }
-  .fan img {
-    border-radius: 8px; box-shadow: 0 4px 14px rgba(0,0,0,.35);
-    margin: 0 -14px; transition: transform .15s;
-  }
-  .fan img:nth-child(1) { transform: rotate(-9deg) translateY(8px); }
-  .fan img:nth-child(2) { transform: rotate(-3deg); }
-  .fan img:nth-child(3) { transform: rotate(3deg); }
-  .fan img:nth-child(4) { transform: rotate(9deg) translateY(8px); }
-  .wip { color: #dcefe2; margin: 30px 0 0; font-size: 15px; }
 
-  footer { text-align: center; color: var(--muted); font-size: 13px; margin-top: 30px; }
+  .opp-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+  .seatbox { position: relative; min-width: 140px; }
+  .seat-name { color: #dcefe2; font-weight: 700; font-size: 14px; margin-bottom: 4px; }
+  .seat-ledger { color: #a8cdb4; font-size: 12px; margin-top: 2px; }
+  .backs { display: flex; }
+  .backs .back { width: calc(var(--card-w) * .45); border-radius: 4px; margin-right: calc(var(--card-w) * -.28);
+    box-shadow: 0 1px 4px rgba(0,0,0,.4); }
+  .backs .back:last-child { margin-right: 0; }
+  #seat-right .backs { justify-content: flex-end; flex-direction: row-reverse; }
+  #seat-right .backs .back { margin-right: 0; margin-left: calc(var(--card-w) * -.28); }
+  #seat-right { text-align: right; }
+
+  .bubble {
+    position: absolute; top: 100%; margin-top: 8px; max-width: 180px;
+    background: #fffef5; color: #2b2b33; font-weight: 700; font-size: 14px;
+    padding: 7px 12px; border-radius: 12px; box-shadow: 0 3px 10px rgba(0,0,0,.3);
+    opacity: 0; transform: translateY(-4px); transition: opacity .18s, transform .18s;
+    pointer-events: none; z-index: 5;
+  }
+  #seat-left .bubble { left: 6px; border-top-left-radius: 2px; }
+  #seat-right .bubble { right: 6px; border-top-right-radius: 2px; }
+  .bubble.show { opacity: 1; transform: translateY(0); }
+
+  .center-top { text-align: center; flex: 1; }
+  #status { color: #eaf6ee; font-size: 15px; min-height: 22px; }
+  #status.me-turn { font-weight: 700; color: #ffe9a8; }
+  #contract-info { color: #bcd9c6; font-size: 13px; min-height: 18px; margin-top: 2px; }
+
+  #trick {
+    flex: 1; display: flex; align-items: center; justify-content: center; gap: 10px;
+    min-height: calc(var(--card-w) * 1.85);
+  }
+  #trick .played { width: var(--card-w); border-radius: 6px; box-shadow: 0 4px 14px rgba(0,0,0,.35); }
+  #trick .played.pos-left { transform: rotate(-7deg) translateY(-4px); }
+  #trick .played.pos-right { transform: rotate(7deg) translateY(-4px); }
+
+  .me-row { text-align: center; }
+  #actions { min-height: 40px; display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-bottom: 8px; }
+  .action-btn {
+    font: 600 14px/1 inherit; padding: 9px 16px; border-radius: 999px; border: 0;
+    background: #f2efe4; color: #2b2b33; cursor: pointer; box-shadow: 0 2px 6px rgba(0,0,0,.25);
+  }
+  .action-btn.primary { background: #ffd75e; }
+  .action-btn:disabled { opacity: .45; cursor: default; }
+  .action-btn:not(:disabled):hover { filter: brightness(1.05); }
+
+  #hand { display: flex; justify-content: center; padding: 6px 0 2px; }
+  .card-btn {
+    background: none; border: 0; padding: 0; cursor: pointer;
+    margin: 0 calc(var(--card-w) * -.17);
+    transition: transform .12s;
+    filter: drop-shadow(0 3px 8px rgba(0,0,0,.35));
+  }
+  .card-btn img { width: var(--card-w); border-radius: 6px; display: block; }
+  .card-btn:disabled { cursor: default; filter: drop-shadow(0 2px 5px rgba(0,0,0,.3)) grayscale(.35) brightness(.82); }
+  .card-btn:not(:disabled):hover { transform: translateY(-12px); z-index: 3; position: relative; }
+  .card-btn.selected { transform: translateY(-16px); }
+  .card-btn.selected img { outline: 3px solid #ffd75e; border-radius: 6px; }
+
+  .me-meta { color: #a8cdb4; font-size: 13px; margin-top: 6px; }
+
+  .overlay {
+    position: absolute; inset: 0; display: none; align-items: center; justify-content: center;
+    background: rgba(10, 25, 16, .55); border-radius: 20px; z-index: 10;
+  }
+  .overlay.open { display: flex; }
+  .overlay .panel {
+    background: #fffdf6; border-radius: 16px; padding: 20px 24px; max-width: 420px; width: 90%;
+    box-shadow: 0 16px 50px rgba(0,0,0,.4); text-align: center;
+  }
+  .overlay h3 { margin: 0 0 6px; }
+  .overlay .pts { color: var(--muted); font-size: 14px; margin: 0 0 10px; }
+  .overlay table { width: 100%; border-collapse: collapse; font-size: 14px; margin-bottom: 10px; }
+  .overlay td { padding: 5px 4px; border-bottom: 1px solid #eee7d4; text-align: left; }
+  .overlay td.num { text-align: right; font-weight: 700; }
+  .overlay .deltas { font-size: 14px; margin: 4px 0 14px; }
+  .overlay .plus { color: #1d7a3e; font-weight: 700; }
+  .overlay .minus { color: #b3372f; font-weight: 700; }
+
+  .game-controls {
+    display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: center;
+    padding: 12px 4px;
+    color: var(--muted); font-size: 13px;
+  }
+  .game-controls label { display: inline-flex; align-items: center; gap: 6px; }
+  .game-controls select, .ctl-btn {
+    font: 500 13px/1.2 inherit; padding: 6px 10px; border-radius: 8px;
+    border: 1px solid #d5d3c8; background: #fff; color: var(--ink); cursor: pointer;
+  }
+  .ctl-btn:hover { background: #f7f5ec; }
+
+  footer { text-align: center; color: var(--muted); font-size: 13px; margin-top: 26px; }
   footer a { color: inherit; }
+  footer .attribution { font-size: 11px; opacity: .8; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .card-btn, .bubble, .action-btn { transition: none; }
+  }
+  @media (max-width: 640px) {
+    main { padding-top: 64px; }
+    .hero h1 { font-size: 32px; }
+    .seatbox { min-width: 90px; }
+    #table { min-height: 480px; }
+  }
 </style>
