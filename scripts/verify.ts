@@ -430,4 +430,56 @@ const KULE = 2 as const;
   console.log('PASS ai — determinismus (stejný seed ⇒ stejná hra)');
 }
 
+// ── match controller ─────────────────────────────────────────────────────────
+
+{
+  const { MatchController } = await import('../src/lib/match/controller');
+  const { defaultConfig } = await import('../src/lib/rules/sazby');
+  const { think } = await import('../src/lib/ai/think');
+  const { playPolicy, decideAuction } = await import('../src/lib/ai/heuristics');
+  const { Random } = await import('../src/lib/random');
+
+  const driver = {
+    think: async (req: Parameters<typeof think>[0] & { requestId: number }) =>
+      think({ view: req.view, difficulty: 'easy', seed: req.seed, budgetMs: 0 }),
+    cancel: () => {},
+  };
+
+  let seedCounter = 100;
+  let saves = 0;
+  const mc = new MatchController(driver, {
+    config: defaultConfig('voleny'),
+    humanSeat: 0,
+    difficulty: 'easy',
+    budgetMs: 0,
+    seedSource: () => (seedCounter += 1),
+    autosave: () => { saves += 1; },
+    aiDelayMs: 0,
+  });
+
+  // odehraj 2 kompletní hry: člověk = heuristika volaná synchronně přes dispatch
+  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+  for (let hand = 0; hand < 2; hand += 1) {
+    mc.dealNext();
+    let guard = 0;
+    while (mc.state.phase.name !== 'scored') {
+      guard += 1;
+      assert.ok(guard < 3000, 'controller: zaseknutý zápas');
+      const actor = mc.actor();
+      if (actor === 0) {
+        const v = mc.humanView();
+        const rng = new Random(guard);
+        mc.dispatch(v.phase.name === 'tricks' ? playPolicy(v, rng) : decideAuction(v, 'easy', rng));
+      } else {
+        await sleep(2); // AI jede asynchronně přes driver
+      }
+    }
+  }
+  assert.equal(mc.state.handResults.length, 2);
+  assert.ok(saves > 20, 'autosave se nevolá');
+  assert.equal(mc.state.ledger[0] + mc.state.ledger[1] + mc.state.ledger[2], 0);
+  mc.stop();
+  console.log('PASS match controller — 2 hry: člověk (dispatch) + 2 AI (async driver), autosave');
+}
+
 console.log('OK: vše prošlo');
