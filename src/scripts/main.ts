@@ -9,7 +9,7 @@ import { createWorkerDriver } from '../lib/match/workerDriver';
 import { defaultConfig } from '../lib/rules/sazby';
 import type { GameState, Variant } from '../lib/rules/types';
 import type { Pattern } from '../lib/ui/cardAssets';
-import { t } from '../lib/ui/i18n';
+import { currentLang, t } from '../lib/ui/i18n';
 import { TableUI } from '../lib/ui/table';
 
 // ── nastavení ────────────────────────────────────────────────────────────────
@@ -143,8 +143,25 @@ $('btn-fullscreen').addEventListener('click', async () => {
   }
 });
 
-// přepnutí jazyka (lang-pill v Layoutu) → překreslit herní texty
-new MutationObserver(() => table.render(controller.state)).observe(document.documentElement, {
+// texty v <option> neumí CSS přepínání (.cs/.en spany) — přepisuje je JS
+function updateControlLabels(): void {
+  const set = (sel: HTMLSelectElement, labels: Record<string, string>) => {
+    for (const opt of Array.from(sel.options)) {
+      const label = labels[opt.value];
+      if (label) opt.textContent = label;
+    }
+  };
+  set(variantSel, { voleny: t('voleny'), licitovany: t('licitovany') });
+  set(patternSel, { modern: t('modern'), history: t('history') });
+  void currentLang();
+}
+updateControlLabels();
+
+// přepnutí jazyka (lang-pill v Layoutu) → překreslit herní texty i ovládání
+new MutationObserver(() => {
+  updateControlLabels();
+  table.render(controller.state);
+}).observe(document.documentElement, {
   attributes: true,
   attributeFilter: ['class'],
 });
