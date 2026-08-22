@@ -345,6 +345,9 @@ import Layout from '../layouts/Layout.astro';
   /* v průběhu hry stejná lišta bez horní linky */
   .replay .felt-actions { border-top: 0; padding-top: 4px; }
   .felt-panel em { opacity: .8; font-style: normal; font-size: 12px; }
+  /* symboly barev na tyrkysu zanikají (žalud, list) — bílá podložka */
+  .felt-panel svg { background: #fffdf2; border-radius: 5px; padding: 2px 3px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.25); }
 
   /* průběh hry: kaskády štychů + talon */
   .replay { margin: auto; max-height: 100%; overflow: auto; width: 100%; }
