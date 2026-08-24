@@ -56,15 +56,21 @@ export class TableUI {
   render(state: GameState): void {
     const prev = this.prevState;
     this.prevState = state;
-    this.chain = this.chain.then(async () => {
-      try {
-        const handled = await this.playTransitions(prev, state);
-        if (!handled) this.renderNow(state);
-      } catch (e) {
-        console.error(e);
-        this.renderNow(state);
-      }
-    });
+    this.chain = this.chain
+      .then(async () => {
+        try {
+          const handled = await this.playTransitions(prev, state);
+          if (!handled) this.renderNow(state);
+        } catch (e) {
+          console.error(e);
+          this.renderNow(state); // ještě jeden pokus bez animací
+        }
+      })
+      // chain nesmí ZŮSTAT odmítnutý — jinak by se žádné další překreslení
+      // nikdy nespustilo a tabule by zamrzla natrvalo
+      .catch((e) => {
+        console.error('render selhal:', e);
+      });
   }
 
   /** Vrací true, když přechod sám vykreslil finální stav. */
@@ -184,7 +190,7 @@ export class TableUI {
       if (state) this.appendMeldBox(trickEl, p, state, trump);
     }
     const statusEl = $(this.root, '#status');
-    statusEl.textContent = `${currentLang() === 'en' ? 'Trick' : 'Štych'}: ${this.nameOf(winner)}`;
+    statusEl.textContent = `${t('trickWord')}: ${this.nameOf(winner)}`;
     statusEl.classList.remove('me-turn');
 
     if (this.reducedMotion()) {
@@ -353,7 +359,7 @@ export class TableUI {
       if (c.kilo !== null) parts.push(c.kilo === c.declarer ? t('kilo') : t('kiloProti'));
       const fleks = flekSummary(state);
       if (fleks) parts.push(fleks);
-      const who = c.declarer === this.opts.humanSeat ? t('you') : this.nameOf(c.declarer);
+      const who = esc(c.declarer === this.opts.humanSeat ? t('you') : this.nameOf(c.declarer));
       info.innerHTML = `${who}: ${parts.join(' · ')}`;
     }
   }
@@ -735,6 +741,7 @@ export class TableUI {
       seat === this.opts.humanSeat
         ? $(this.root, '#bubble-me')
         : $(this.root, `#seat-${seat === this.seatAt('left') ? 'left' : 'right'} .bubble`);
+    // text obsahuje jen i18n konstanty, escapované cizí hodnoty a naše SVG ikony
     el.innerHTML = text;
     el.classList.add('show');
     const prev = this.bubbleTimers.get(seat);
@@ -756,7 +763,7 @@ function wasAnnouncedBy(state: GameState, seat: Seat, card: Card): boolean {
 }
 
 /** Escapování textu do innerHTML — obnovený stav z localStorage je nedůvěryhodný. */
-function esc(x: unknown): string {
+export function esc(x: unknown): string {
   return String(x).replace(/[&<>"']/g, (ch) =>
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch] as string,
   );
@@ -788,16 +795,20 @@ const BID_LABEL_EN: Record<string, string> = {
 };
 
 function bidLabel(b: { kind: string; cervena: boolean }): string {
-  const base = (currentLang() === 'en' ? BID_LABEL_EN : BID_LABEL_CS)[b.kind] ?? b.kind;
+  const base = (currentLang() === 'en' ? BID_LABEL_EN : BID_LABEL_CS)[b.kind] ?? esc(b.kind);
   return b.cervena ? `${base} ${suitIcon(0)}` : base;
 }
 
+/**
+ * Popisek komponenty. `target` může přijít z obnoveného (nedůvěryhodného) savu,
+ * takže neznámá hodnota se escapuje — texty jdou do innerHTML.
+ */
 function targetLabel(target: string): string {
   const map: Record<string, string> = {
     hra: t('hra'), sedma: t('sedma'), kilo: t('kilo'),
     betl: t('betl'), durch: t('durch'), dveSedmy: 'dvě sedmy',
   };
-  return map[target] ?? target;
+  return map[target] ?? esc(target);
 }
 
 function flekSummary(state: GameState): string {

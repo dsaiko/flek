@@ -25,16 +25,83 @@ const PHASE_NAMES = [
 ];
 
 const isSeat = (x: unknown): boolean => x === 0 || x === 1 || x === 2;
+const isNum = (x: unknown): boolean => typeof x === 'number' && Number.isFinite(x);
+const isStr = (x: unknown): boolean => typeof x === 'string';
 const isCardArray = (x: unknown): boolean =>
   Array.isArray(x) && x.every((c) => typeof c === 'number' && Number.isInteger(c) && c >= 0 && c <= 31);
 const isTriple = (x: unknown, item: (y: unknown) => boolean): boolean =>
   Array.isArray(x) && x.length === 3 && x.every(item);
 
+/** Payload fáze musí odpovídat jejímu jménu — UI na něj sahá bez dalších kontrol. */
+function isValidPhase(p: Record<string, unknown>): boolean {
+  const standingOk = (x: unknown): boolean => {
+    if (x === null || typeof x !== 'object') return false;
+    const st = x as Record<string, unknown>;
+    return isSeat(st.declarer) && (st.mode === null || isStr(st.mode)) &&
+      (st.trump === null || isNum(st.trump)) && (st.bid === null || typeof st.bid === 'object');
+  };
+  switch (p.name) {
+    case 'idle':
+    case 'choose-trump':
+      return true;
+    case 'bidding':
+      return Array.isArray(p.bids) && isSeat(p.toAct) && (p.best === null || typeof p.best === 'object');
+    case 'discard-talon':
+    case 'declare':
+      return standingOk(p.standing);
+    case 'takeover':
+      return standingOk(p.standing) && isSeat(p.toAct) && Array.isArray(p.passed);
+    case 'fleks': {
+      const f = p.fleks as Record<string, unknown> | null;
+      return f !== null && typeof f === 'object' && typeof f.levels === 'object' &&
+        typeof f.lastRaiser === 'object' && isSeat(f.toAct) && Array.isArray(f.passed);
+    }
+    case 'tricks':
+      return isNum(p.trickNo) && isSeat(p.leader) && isSeat(p.toAct) &&
+        Array.isArray(p.trick) && Array.isArray(p.played) && Array.isArray(p.marriages) &&
+        isTriple(p.won, (w) => isCardArray(w));
+    case 'scored':
+      return isHandResult(p.result);
+    default:
+      return false;
+  }
+}
+
+/**
+ * Výsledek hry se vykresluje do zúčtování (včetně poznámek) — musí být
+ * strukturálně v pořádku, jinak by podvržený sav dostal libovolný obsah do UI.
+ */
+function isHandResult(x: unknown): boolean {
+  if (x === null || typeof x !== 'object') return false;
+  const r = x as Record<string, unknown>;
+  const side = (y: unknown): boolean => {
+    if (y === null || typeof y !== 'object') return false;
+    const o = y as Record<string, unknown>;
+    return isNum(o.declarer) && isNum(o.defenders);
+  };
+  return (
+    isNum(r.handNo) &&
+    r.contract !== null && typeof r.contract === 'object' &&
+    side(r.cardPoints) && side(r.marriagePoints) &&
+    isTriple(r.delta, isNum) &&
+    Array.isArray(r.components) &&
+    r.components.every((c) => {
+      if (c === null || typeof c !== 'object') return false;
+      const comp = c as Record<string, unknown>;
+      return isStr(comp.target) && (comp.wonBy === 'declarer' || comp.wonBy === 'defenders') &&
+        isNum(comp.baseRate) && isNum(comp.flekMultiplier) && isNum(comp.extraMultiplier) &&
+        isNum(comp.amount) && typeof comp.silent === 'boolean' &&
+        (comp.note === undefined || isStr(comp.note));
+    })
+  );
+}
+
 /**
  * Kontrola obnoveného stavu — localStorage může obsahovat poškozený, starý
  * nebo cizí JSON a nevalidní stav by shodil celé UI. Kontroluje se KOMPLETNÍ
- * tvar stavu; semantiku (konzervace 32 karet, zero-sum konto, velikost talonu)
- * pak potvrdí `assertValid` z enginu.
+ * tvar stavu včetně payloadu fáze a archivu odehraných her; semantiku
+ * (konzervace 32 karet, zero-sum konto, velikost talonu) pak potvrdí
+ * `assertValid` z enginu.
  */
 function looksLikeGameState(x: unknown): x is GameState {
   if (x === null || typeof x !== 'object') return false;
@@ -54,11 +121,12 @@ function looksLikeGameState(x: unknown): x is GameState {
     (s.talonOwner === null || isSeat(s.talonOwner)) &&
     isTriple(s.talonKnowledge, isCardArray) &&
     Array.isArray(s.history) && s.history.every((a) => typeof a === 'object' && a !== null && typeof (a as { type?: unknown }).type === 'string') &&
-    Array.isArray(s.handResults) &&
+    Array.isArray(s.handResults) && s.handResults.every(isHandResult) &&
     isTriple(s.ledger, (n) => typeof n === 'number' && Number.isFinite(n)) &&
     (s.contract === null || (typeof s.contract === 'object' && s.contract !== null)) &&
     typeof phase === 'object' && phase !== null &&
-    typeof phase.name === 'string' && PHASE_NAMES.includes(phase.name)
+    typeof phase.name === 'string' && PHASE_NAMES.includes(phase.name) &&
+    isValidPhase(phase as Record<string, unknown>)
   );
 }
 

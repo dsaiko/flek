@@ -177,6 +177,8 @@ export class MatchController {
       });
       action = res.action;
     } catch (e) {
+      // zrušený nebo zastaralý požadavek — fallback nemá smysl vůbec počítat
+      if (this.pendingRequest !== requestId || this.stopped) return;
       // fallback: heuristika na hlavním vlákně — hra se nikdy nezasekne
       console.error('AI driver selhal, používám heuristický fallback:', e);
       try {

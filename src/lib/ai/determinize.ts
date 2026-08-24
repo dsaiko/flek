@@ -13,17 +13,27 @@ import { ESO, R10, rankOf, suitOf, type Card, type Suit } from '../cards';
 import { Random } from '../random';
 import type { GameState, PlayerView, Seat, TrickPlay } from '../rules/types';
 
+/** Kam smí karta padnout: sedadlo 0–2, nebo talon (-1). */
+export const TALON_SLOT = -1;
+
 export interface Constraints {
   /** voids[seat] = množina barev, které hráč prokazatelně nemá. */
   voids: [Set<Suit>, Set<Suit>, Set<Suit>];
-  /** mustHave[seat] = karty, které hráč prokazatelně drží (hlášky). */
+  /** mustHave[seat] = karty, které hráč prokazatelně drží (hlášky, sedma proti). */
   mustHave: [Set<Card>, Set<Card>, Set<Card>];
+  /**
+   * Karty, u kterých veřejná informace omezuje MOŽNÁ místa (sedadlo/talon):
+   *  - ukázaná trumfová karta (i „z lidu") je v ruce forhonta, nebo v talonu
+   *  - hlášená sedma aktéra je v jeho ruce, nebo (teoreticky) v talonu
+   */
+  allowed: Map<Card, Set<number>>;
 }
 
 /** Odvození omezení z veřejné historie aktuální hry. */
 export function deriveConstraints(v: PlayerView): Constraints {
   const voids: Constraints['voids'] = [new Set(), new Set(), new Set()];
   const mustHave: Constraints['mustHave'] = [new Set(), new Set(), new Set()];
+  const allowed: Constraints['allowed'] = new Map();
   const contract = v.contract;
   const trump = contract?.trump ?? null;
   const mode = contract?.mode ?? 'hra';
@@ -38,6 +48,11 @@ export function deriveConstraints(v: PlayerView): Constraints {
   let trick: TrickPlay[] = [];
   for (let i = start; i < v.publicHistory.length; i += 1) {
     const a = v.publicHistory[i];
+    // ukázaná trumfová karta (z ruky i „z lidu") je veřejná: skončila v ruce
+    // toho, kdo volil — nebo v jeho odhozu do talonu
+    if (a.type === 'choose-trump' && a.card !== 'from-people') {
+      allowed.set(a.card, new Set([a.seat, TALON_SLOT]));
+    }
     if (a.type !== 'play') continue;
     played.add(a.card);
     if (a.announceMarriage) {
@@ -59,11 +74,25 @@ export function deriveConstraints(v: PlayerView): Constraints {
     if (trick.length === 3) trick = [];
   }
 
+  // hlášená sedma: její držitel prokazatelně drží trumfovou sedmičku
+  if (contract !== null && contract.sedma !== null && trump !== null) {
+    const seven = ((trump << 3) | 0) as Card; // R7 = 0
+    if (!played.has(seven)) {
+      if (contract.sedma === contract.declarer) {
+        // aktér ji teoreticky mohl odhodit do talonu (byla by prohraná)
+        allowed.set(seven, new Set([contract.declarer, TALON_SLOT]));
+      } else {
+        mustHave[contract.sedma].add(seven); // obránce talon nedržel
+      }
+    }
+  }
+
   // hlášky splněné zahráním druhé karty ⇒ mustHave už jen dosud nezahrané
   for (const s of [0, 1, 2] as Seat[]) {
     for (const c of [...mustHave[s]]) if (played.has(c)) mustHave[s].delete(c);
   }
-  return { voids, mustHave };
+  for (const c of [...allowed.keys()]) if (played.has(c)) allowed.delete(c);
+  return { voids, mustHave, allowed };
 }
 
 export interface Determinization {
@@ -124,13 +153,17 @@ export function determinize(v: PlayerView, rng: Random): Determinization {
     const canTake = (s: Seat, c: Card): boolean => {
       if (s === me || hands[s].length >= needs[s]) return false;
       if (relaxLevel < 1 && constraints.voids[s].has(suitOf(c))) return false;
+      const allow = constraints.allowed.get(c);
+      if (relaxLevel < 1 && allow !== undefined && !allow.has(s)) return false;
       return true;
     };
     const options = (c: Card): Seat[] => {
       const seats = ([0, 1, 2] as Seat[]).filter((s) => canTake(s, c));
+      const allow = constraints.allowed.get(c);
       const talonOk =
         talon.length < talonSize &&
-        (relaxLevel >= 2 || !talonBanValuable || (rankOf(c) !== ESO && rankOf(c) !== R10));
+        (relaxLevel >= 2 || !talonBanValuable || (rankOf(c) !== ESO && rankOf(c) !== R10)) &&
+        (relaxLevel >= 1 || allow === undefined || allow.has(TALON_SLOT));
       return talonOk ? [...seats, -1 as unknown as Seat] : seats;
     };
     const ordered = remaining.slice().sort((a, b) => options(a).length - options(b).length);

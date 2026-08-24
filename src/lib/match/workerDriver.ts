@@ -31,6 +31,17 @@ export function createWorkerDriver(): AiDriver {
   let worker: Worker | null = null;
   const pending = new Map<number, Pending>();
 
+  /** Zabij worker a odmítni VŠE, co na něm čeká — terminate ruší i cizí hledání. */
+  const killWorker = (err: Error): void => {
+    for (const [, p] of pending) {
+      clearTimeout(p.timer);
+      p.reject(err);
+    }
+    pending.clear();
+    worker?.terminate();
+    worker = null;
+  };
+
   const spawn = (): Worker => {
     const w = new Worker(new URL('../../worker/ai.worker.ts', import.meta.url), { type: 'module' });
     w.onmessage = (ev: MessageEvent<FromWorker>) => {
@@ -44,13 +55,7 @@ export function createWorkerDriver(): AiDriver {
     };
     w.onerror = () => {
       // pád workeru: odmítni vše čekající (controller má fallback), restartuj
-      for (const [, p] of pending) {
-        clearTimeout(p.timer);
-        p.reject(new Error('AI worker havaroval'));
-      }
-      pending.clear();
-      worker?.terminate();
-      worker = null;
+      killWorker(new Error('AI worker havaroval'));
     };
     return w;
   };
@@ -61,11 +66,9 @@ export function createWorkerDriver(): AiDriver {
     new Promise((resolve, reject) => {
       const w = ensureWorker();
       const timer = setTimeout(() => {
-        // watchdog: worker mlčí — zabij a odmítni
-        pending.delete(req.requestId);
-        worker?.terminate();
-        worker = null;
-        reject(new Error('AI worker neodpověděl (watchdog)'));
+        // watchdog: worker mlčí — zabij ho a odmítni VŠECHNY čekající požadavky
+        // (terminate ukončí i hledání, na které čekají ostatní)
+        killWorker(new Error('AI worker neodpověděl (watchdog)'));
       }, req.budgetMs + GRACE_MS);
       pending.set(req.requestId, { resolve, reject, timer });
       const msg: ToWorker = { type: 'think', ...req };
@@ -90,6 +93,16 @@ export function createWorkerDriver(): AiDriver {
         // promise MUSÍ skončit, jinak `await think()` visí navždy; controller
         // odpověď na zrušený požadavek zahodí podle requestId
         p.reject(new CancelledError());
+      }
+      /*
+       * Zrušené hledání běží dál (think() ve workeru je synchronní) a další
+       * požadavek by čekal ve frontě za ním. Pokud na workeru nic jiného
+       * nezbývá, ukonči ho — nový se vytvoří líně a hned volný.
+       */
+      if (p !== undefined && pending.size === 0) {
+        worker?.terminate();
+        worker = null;
+        return;
       }
       const msg: ToWorker = { type: 'cancel', requestId };
       worker?.postMessage(msg);

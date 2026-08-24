@@ -47,7 +47,10 @@ const driver = createWorkerDriver();
 
 // ?seed=NNN → deterministická rozdání (testy, sdílení zajímavých rozdání);
 // další hry v zápase dostávají seed+1, seed+2, …
-const urlSeed = Number(new URLSearchParams(location.search).get('seed')) || null;
+const seedParam = new URLSearchParams(location.search).get('seed');
+const urlSeed = seedParam !== null && seedParam !== '' && Number.isFinite(Number(seedParam))
+  ? Number(seedParam)
+  : null;
 let seedCounter = urlSeed ?? 0;
 const randomSeed = (): number => {
   if (urlSeed !== null) return (seedCounter += 1) - 1 || 1;

@@ -751,3 +751,25 @@ opravy. Vše opraveno, každý blokující nález má regresní test.
 | i19, i21, i22, i23, i24 | medium | netestované: `talonForbidsTrump` větev, tvrzení „durch hlásí původní aktér", volba trumfu AI, `speakingOrder`; smoke končil úspěchem i při vyčerpání smyčky | testy doplněny; smoke při nedohrání vrací **exit 1** |
 
 `make verify` má nyní **27 PASS bloků**.
+
+## 14. Fixpoint review kódu — třetí kolo (2026-08-24, po 5782606)
+
+39 nálezů, 24 zamítl judge. Zbylých **15 otevřených jsem prošel proti kódu a všechny
+potvrdil**. Tři blokující byly testovací mezery u záruk z předchozího kola — a jedna z nich
+odhalila i skutečnou dírou v modelu (nevalidovaný `handResults`).
+
+| Nález | Sev | Podstata | Oprava |
+|---|---|---|---|
+| i25 | high | `esc()` nebyl exportovaný ani testovaný; `handResults` se v savu nevalidoval vůbec, takže podvržený stav dostal libovolný text do `note` a odtud do `innerHTML` | `esc()` exportován + 7 testů; `isHandResult` validuje archiv her (vč. typu `note`) |
+| i26, i36 | high | semantika `cancel()` (odmítnutí promise) a „zrušené se neopakuje" neměly test — regrese by vrátila zaseknutí hry | testy s podvrženým `globalThis.Worker`: odpověď, cancel → `CancelledError` bez retry + uvolnění workeru, pád → jeden retry, watchdog |
+| i1 | medium | chyba v renderu zamítla `this.chain` → **žádné další překreslení se nikdy nespustilo** (natrvalo zamrzlá tabule) | `.catch()` na konci řetězu |
+| i2 | medium | validace savu kontrolovala jen `phase.name`, takže poškozený payload fáze shodil první render | `isValidPhase` kontroluje payload podle jména fáze |
+| i13, i14 | medium | `target`/`kind` z obnovené historie tekly do `innerHTML` (bubliny, tlačítka, badge kontraktu) | escapování neznámých hodnot v `targetLabel`, `bidLabel`, badge |
+| i18 | medium | zrušené hledání běželo dál a další požadavek čekal ve frontě za ním | při zrušení se nečinný worker ukončí (nový vzniká líně) |
+| i19 | medium | watchdog ukončil worker, ale ostatní čekající požadavky nechal viset | `killWorker` odmítne všechny čekající |
+| i24 | medium | fallback se počítal i pro zrušený požadavek, jen aby se výsledek zahodil | kontrola zastaralosti před výpočtem |
+| i5, i6 | medium | determinizace ignorovala **ukázanou trumfovou kartu** a **hlášenou sedmu** — veřejnou informaci | omezení `allowed` (sedadlo / talon) a `mustHave` u sedmy proti; self-play nepotřebuje uvolnění omezení ani jednou |
+| i3, i10 | low | hlášení štychu mělo pevný cs/en ternár (němčina dostala češtinu); `?seed=0` se bralo jako „bez seedu" | `t('trickWord')`; explicitní kontrola parametru |
+| i27 | medium | test `talonForbidsTrump` ověřoval jen absenci deadlocku, ne vynucení pravidla | u barevného závazku se kontroluje, že žádná nabídnutá hra nemá trumf ležící v talonu |
+
+`make verify` má nyní **30 PASS bloků**.

@@ -734,7 +734,6 @@ const KULE = 2 as const;
   const { view } = await import('../src/lib/rules/view');
   const { defaultConfig } = await import('../src/lib/rules/sazby');
   const { MatchController: MC2 } = await import('../src/lib/match/controller');
-  const { think: think2 } = await import('../src/lib/ai/think');
   const { decideAuction: decide2, trumpScore } = await import('../src/lib/ai/heuristics');
   const { Random: Rnd } = await import('../src/lib/cards').then(() => import('../src/lib/random'));
   const { card: mk2, CERVENE: CE, R7: S7b, ESO: Ab, R10: Tb, KRAL: Kb, SVRSEK: SVb } =
@@ -789,6 +788,20 @@ const KULE = 2 as const;
         const after = apply(st, d);
         const seatAfter = ([0, 1, 2] as const).find((x) => legalActions(view(after, x)).length > 0);
         assert.ok(seatAfter !== undefined, `talonForbidsTrump: odhoz zamkl fázi ${after.phase.name}`);
+        // pravidlo musí být VYNUCENÉ: žádná nabídnutá hra nesmí mít trumf,
+        // jehož barva leží v talonu (a talon nesmí obsahovat bodované karty)
+        // jen barevný závazek (u betla/durcha smí talon obsahovat cokoli)
+        if (after.phase.name === 'declare' && after.phase.standing.mode === null) {
+          const talonSuits = new Set(after.talon.map((c) => c >> 3));
+          const standingTrump: number | null = after.phase.standing.trump;
+          assert.ok(!after.talon.some((c) => (c & 7) === 7 || (c & 7) === 3), 'eso/desítka v talonu u barevného závazku');
+          for (const a of legalActions(view(after, after.phase.standing.declarer))) {
+            if (a.type !== 'declare' || a.mode !== 'hra') continue;
+            const tr: number | null = a.trump ?? standingTrump;
+            assert.ok(tr !== null, 'hra bez trumfu');
+            assert.ok(!talonSuits.has(tr as number), `talonForbidsTrump nevynuceno: trumf ${tr} leží v talonu`);
+          }
+        }
         checked += 1;
       }
     }
@@ -954,6 +967,140 @@ const KULE = 2 as const;
     delete (globalThis as { localStorage?: unknown }).localStorage;
     void assertValid;
     console.log('PASS regrese i18/i8 — validace savu: tvar, neznámá fáze, invarianty, poškozený JSON');
+  }
+}
+
+
+// ── regrese: třetí kolo fixpoint review-code (2026-08-24, po 5782606) ───────
+
+{
+  const { defaultConfig } = await import('../src/lib/rules/sazby');
+  const { deriveConstraints, TALON_SLOT } = await import('../src/lib/ai/determinize');
+  const { card: mk3, CERVENE: CE3, R7: S73, KRAL: K3, SVRSEK: SV3 } = await import('../src/lib/cards');
+  const nap2 = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+
+  // ── i25: esc() escapuje vše, co jde do innerHTML ──────────────────────────
+  {
+    const { esc } = await import('../src/lib/ui/table');
+    assert.equal(esc('<img src=x onerror=alert(1)>'), '&lt;img src=x onerror=alert(1)&gt;');
+    assert.equal(esc('a & b'), 'a &amp; b');
+    assert.equal(esc('"quoted"'), '&quot;quoted&quot;');
+    assert.equal(esc("it's"), 'it&#39;s');
+    assert.equal(esc('</script><script>x()</script>'), '&lt;/script&gt;&lt;script&gt;x()&lt;/script&gt;');
+    assert.equal(esc(42), '42');
+    assert.equal(esc('čistý text'), 'čistý text');
+    console.log('PASS regrese i25 — esc() escapuje HTML metaznaky (obnovený sav je nedůvěryhodný)');
+  }
+
+  // ── i26/i36: workerDriver — zrušení, neopakování, watchdog ───────────────
+  {
+    interface FakeMsg { type: string; requestId: number }
+    class FakeWorker {
+      static instances: FakeWorker[] = [];
+      onmessage: ((ev: { data: unknown }) => void) | null = null;
+      onerror: ((e?: unknown) => void) | null = null;
+      posted: FakeMsg[] = [];
+      terminated = false;
+      constructor() { FakeWorker.instances.push(this); }
+      postMessage(m: FakeMsg): void { this.posted.push(m); }
+      terminate(): void { this.terminated = true; }
+    }
+    const g = globalThis as { Worker?: unknown };
+    const orig = g.Worker;
+    g.Worker = FakeWorker as never;
+    const { createWorkerDriver } = await import('../src/lib/match/workerDriver');
+    const req = (requestId: number, budgetMs = 5000) => ({
+      requestId, view: {} as never, difficulty: 'easy' as const, seed: 1, budgetMs,
+    });
+    const stats = { iterations: 0, elapsedMs: 0, evaluations: [] };
+    const thinkCount = (w: FakeWorker): number => w.posted.filter((m) => m.type === 'think').length;
+
+    // (a) normální odpověď se vyřídí
+    FakeWorker.instances.length = 0;
+    const dA = createWorkerDriver();
+    const pA = dA.think(req(1));
+    const wA = FakeWorker.instances[0];
+    assert.equal(thinkCount(wA), 1, 'požadavek se má odeslat workeru');
+    wA.onmessage?.({ data: { type: 'move', requestId: 1, action: { type: 'good', seat: 1 }, stats } });
+    assert.equal((await pA).action.type, 'good');
+
+    // (b) cancel odmítne CancelledError, NEopakuje a uvolní zaneprázdněný worker
+    FakeWorker.instances.length = 0;
+    const dB = createWorkerDriver();
+    const pB = dB.think(req(2));
+    const wB = FakeWorker.instances[0];
+    dB.cancel(2);
+    await assert.rejects(pB, (e: Error) => e.name === 'CancelledError', 'cancel musí promise ODMÍTNOUT');
+    assert.equal(thinkCount(wB), 1, 'zrušený požadavek se nesmí opakovat');
+    assert.equal(wB.terminated, true, 'opuštěné hledání nesmí blokovat další požadavky');
+
+    // (c) pád workeru → jeden retry na čerstvém workeru
+    FakeWorker.instances.length = 0;
+    const dC = createWorkerDriver();
+    const pC = dC.think(req(3));
+    const wC1 = FakeWorker.instances[0];
+    wC1.onerror?.();
+    await nap2(5);
+    assert.equal(FakeWorker.instances.length, 2, 'po pádu workeru se má zkusit čerstvý');
+    const wC2 = FakeWorker.instances[1];
+    assert.equal(thinkCount(wC2), 1, 'retry pošle požadavek znovu');
+    wC2.onmessage?.({ data: { type: 'move', requestId: 3, action: { type: 'good', seat: 2 }, stats } });
+    assert.equal((await pC).action.type, 'good');
+
+    // (d) watchdog: mlčící worker → zabít a odmítnout VŠECHNY čekající (i19)
+    FakeWorker.instances.length = 0;
+    const dD = createWorkerDriver();
+    const errs: string[] = [];
+    const pD1 = dD.think(req(4, 0)).catch((e: Error) => { errs.push(`4:${e.name}`); throw e; });
+    const pD2 = dD.think(req(5, 0)).catch((e: Error) => { errs.push(`5:${e.name}`); throw e; });
+    pD1.catch(() => {}); pD2.catch(() => {});
+    const wD = FakeWorker.instances[0];
+    await nap2(2150); // budgetMs 0 + GRACE_MS 2000
+    assert.equal(wD.terminated, true, 'watchdog má mlčící worker ukončit');
+    assert.ok(FakeWorker.instances.length >= 2, 'retry po watchdogu má vzniknout na novém workeru');
+    // oba požadavky dostaly odmítnutí (druhý nesmí zůstat viset)
+    dD.cancel(4); dD.cancel(5);
+    await nap2(20);
+    assert.equal(errs.length, 2, `oba čekající požadavky musí být odmítnuty (${errs.join(',')})`);
+
+    if (orig === undefined) delete g.Worker; else g.Worker = orig;
+    console.log('PASS regrese i26/i36/i19 — driver: cancel odmítá bez retry, watchdog čistí vše');
+  }
+
+  // ── i5/i6: determinizace zná odhalený trumf a hlášenou sedmu ─────────────
+  {
+    const cfg = defaultConfig('voleny');
+    const trumpCard = mk3(2, 5); // kulový svršek — ukázaná trumfová karta
+    const mkView = (sedmaSeat: 0 | 1 | 2 | null) => ({
+      seat: 1 as const, config: cfg, dealer: 2 as const,
+      hand: [mk3(CE3, K3), mk3(CE3, SV3)], handCounts: [2, 2, 2],
+      talonKnown: [], talon: null,
+      contract: { mode: 'hra' as const, trump: 2 as const, declarer: 0 as const, sedma: sedmaSeat, kilo: null, dveSedmy: false },
+      phase: { name: 'tricks' as const, trickNo: 0, leader: 0 as const, toAct: 1 as const,
+        trick: [], played: [], won: [[], [], []] as [number[], number[], number[]], marriages: [] },
+      publicHistory: [
+        { type: 'deal' as const },
+        { type: 'choose-trump' as const, seat: 0 as const, card: trumpCard },
+      ],
+      handResults: [], ledger: [0, 0, 0] as [number, number, number], handNo: 1,
+    });
+
+    // ukázaná trumfová karta smí být jen u volícího (sedadlo 0), nebo v talonu
+    const c1 = deriveConstraints(mkView(null) as never);
+    const allowTrump = c1.allowed.get(trumpCard);
+    assert.ok(allowTrump, 'ukázaná trumfová karta musí být omezená');
+    assert.deepEqual([...(allowTrump as Set<number>)].sort((a, b) => a - b), [TALON_SLOT, 0]);
+
+    // sedma hlášená OBRÁNCEM (sedadlo 2) → drží trumfovou sedmu jistě
+    const c2 = deriveConstraints(mkView(2) as never);
+    assert.ok(c2.mustHave[2].has(mk3(2, S73)), 'sedma proti ⇒ obránce drží trumfovou sedmu');
+
+    // sedma hlášená AKTÉREM → ruka aktéra, nebo (teoreticky) talon
+    const c3 = deriveConstraints(mkView(0) as never);
+    const allowSeven = c3.allowed.get(mk3(2, S73));
+    assert.ok(allowSeven, 'hlášená sedma aktéra musí být omezená');
+    assert.deepEqual([...(allowSeven as Set<number>)].sort((a, b) => a - b), [TALON_SLOT, 0]);
+    console.log('PASS regrese i5/i6 — determinizace: odhalený trumf a hlášená sedma');
   }
 }
 
