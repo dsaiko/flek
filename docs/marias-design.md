@@ -729,3 +729,25 @@ potvrdil jako reálné — všechny opraveny**, každý s cíleným regresním t
 Nové regresní testy v `scripts/verify.ts`: i27 (výplata + vypnutelnost), i1 (převzetí durchem),
 i2/i6/i7 (**2640 legálních odhozů, žádný deadlock**), i8/i20 (unikátní requestId), i13
 (kanonické porovnání), i30 (varování odhozu).
+
+## 13. Fixpoint review kódu — druhé kolo (2026-08-24, po 293dbfc)
+
+Revize po zapracování prvního kola: 36 nálezů, 18 zamítl judge. Zbylých **18 otevřených
+jsem prošel proti kódu a všechny potvrdil** — včetně dvou, které způsobily moje předchozí
+opravy. Vše opraveno, každý blokující nález má regresní test.
+
+| Nález | Sev | Podstata | Oprava |
+|---|---|---|---|
+| i6 | high | **regrese z i7**: gate na sedmový závazek uznal i červenou sedmu pro NEČERVENÝ závazek → nezbyla sedma v povolené trumfové barvě a filtr odhozu zamítl všechny páry (deadlock) | závazek vyžaduje sedmu v barvě, která smí být trumfem |
+| i17 | high | celá cesta obnovy po selhání AI (fallback, strop, rekurze) byla v testech mrtvá | strop se kontroluje na VSTUPU (rekurze je tím omezená) + injektovatelná `fallbackPolicy`; test pokrývá nelegální tah, pád driveru i selhání fallbacku |
+| i18, i8 | high/med | validace obnoveného savu nebyla testovaná a byla částečná (chyběl `seed`, `unseen`, `handNo`, `talonOwner`, `contract`, kontrola fází) | kompletní kontrola tvaru + **semantická validace `assertValid`** (karty, konto, talon); 10 testů obou směrů |
+| i1 | medium | **regrese z i2/i6**: zakázaný odhoz v licitovaném se po kliknutí tiše ignoroval | nelegální karty nejde vybrat, tlačítko je aktivní jen pro legální pár, jinak hlášení na stole |
+| i2 | medium | závazek „dvě sedmy" šel vylicitovat, ale deklarace ho nepokrývala a scoring ho neuměl | nenabízí se vůbec (i se zapnutým configem), doloženo testem |
+| i4 | medium | `cancel()` zahodil čekající promise bez ukončení → `await think()` visel navždy | reject `CancelledError` (a `think()` ho neopakuje — retry je jen pro pád workeru) |
+| i13 | medium | „předběžná kontrola zrušených id" ve workeru byla nedosažitelná (FIFO + synchronní hledání) | mrtvý kód odstraněn, zrušení dokumentovaně vynucuje driver + controller + watchdog |
+| i14 | medium | překreslení TÍMŽ stavem (změna jazyka/vzoru) přehrálo animaci štychu s duplikovanou kartou | animuje se jen skutečný posun o jednu akci |
+| i9, i10 | med/low | analytics přes protokolově relativní URL; obnovený (nedůvěryhodný) stav se vykresloval do `innerHTML` bez escapování | `https://` + `referrerpolicy`; `esc()` na všech interpolacích zúčtování a průběhu hry |
+| i3, i5 | low | mrtvá druhá smyčka ve varováních; chybějící německý popisek IQ | smyčka odstraněna (první pokrývá i pohřbení obou půlek), `de` span doplněn |
+| i19, i21, i22, i23, i24 | medium | netestované: `talonForbidsTrump` větev, tvrzení „durch hlásí původní aktér", volba trumfu AI, `speakingOrder`; smoke končil úspěchem i při vyčerpání smyčky | testy doplněny; smoke při nedohrání vrací **exit 1** |
+
+`make verify` má nyní **27 PASS bloků**.

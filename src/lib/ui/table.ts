@@ -69,7 +69,10 @@ export class TableUI {
 
   /** Vrací true, když přechod sám vykreslil finální stav. */
   private async playTransitions(prev: GameState | null, state: GameState): Promise<boolean> {
-    if (!prev) return false;
+    // Přechod animuj jen tehdy, když stav opravdu pokročil právě o jednu akci.
+    // (Překreslení TÍMŽ stavem — změna jazyka/vzoru karet — jinak přehrávalo
+    //  animaci štychu znovu a s duplikovanou kartou.)
+    if (!prev || prev === state || prev.history.length + 1 !== state.history.length) return false;
     const a = state.history[state.history.length - 1];
 
     // rozdání po vzoru FLEK!: karty se v ruce objevují postupně
@@ -381,7 +384,8 @@ export class TableUI {
         if (a.type === 'choose-trump' && a.card !== 'from-people') playable.add(a.card);
       }
     } else if (phase.name === 'discard-talon' && legal.length > 0) {
-      for (const c of v.hand) playable.add(c);
+      // klikat lze jen na karty, které se vyskytují v aspoň jednom legálním odhozu
+      for (const a of legal) if (a.type === 'discard') for (const c of a.cards) playable.add(c);
     }
 
     const myUnseen =
@@ -452,9 +456,8 @@ export class TableUI {
     v.hand.forEach((c, i) => {
       buttons[i]?.classList.toggle('selected', this.selected.has(c));
     });
-    const confirm = this.root.querySelector<HTMLButtonElement>('#discard-confirm');
-    if (confirm) confirm.disabled = this.selected.size !== 2;
-    // rizikové odhozy řeší potvrzovací popup při kliknutí na Odhodit
+    // stav tlačítka i případné hlášení o nedovoleném odhozu řeší renderActions
+    this.renderActions(v, legalActions(v));
   }
 
   // ── akční lišta ────────────────────────────────────────────────────────────
@@ -489,6 +492,18 @@ export class TableUI {
 
       case 'discard-talon':
         if (legal.length > 0) {
+          const selectedPair = [...this.selected] as Card[];
+          const legalPair =
+            selectedPair.length === 2 &&
+            legal.some(
+              (a) => a.type === 'discard' && a.cards.includes(selectedPair[0]) && a.cards.includes(selectedPair[1]),
+            );
+          if (selectedPair.length === 2 && !legalPair) {
+            const note = document.createElement('span');
+            note.className = 'action-note';
+            note.textContent = t('talonIllegal');
+            bar.appendChild(note);
+          }
           btn(t('discardConfirm'), () => {
             const cards = [...this.selected] as [Card, Card];
             const action = legal.find(
@@ -501,7 +516,7 @@ export class TableUI {
             );
             if (warns.length > 0) this.showConfirmPopup(warns, t('discardConfirm'), () => this.cb.onAction(action));
             else this.cb.onAction(action);
-          }, { primary: true, disabled: this.selected.size !== 2, id: 'discard-confirm' });
+          }, { primary: true, disabled: !legalPair, id: 'discard-confirm' });
         }
         break;
 
@@ -602,7 +617,7 @@ export class TableUI {
     const float = $(this.root, '#center-float');
     float.classList.add('open');
     float.innerHTML = `<div class="felt-panel warn">
-      ${messages.map((m) => `<p class="warn-msg">⚠️ ${m}</p>`).join('')}
+      ${messages.map((m) => `<p class="warn-msg">⚠️ ${esc(m)}</p>`).join('')}
       <div class="felt-actions">
         <button class="action-btn" data-act="cancel">${t('back')}</button>
         <button class="action-btn primary" data-act="confirm">${confirmLabel}</button>
@@ -628,37 +643,37 @@ export class TableUI {
 
     const head =
       r.contract.mode === 'hra'
-        ? `${t('hra')} ${r.contract.trump !== null ? suitIcon(r.contract.trump) : ''}`
-        : t(r.contract.mode);
+        ? `${esc(t('hra'))} ${r.contract.trump !== null ? suitIcon(r.contract.trump) : ''}`
+        : esc(t(r.contract.mode));
     const pts =
       r.contract.mode === 'hra'
-        ? `<div class="felt-sub">${t('declarerSide')} ${r.cardPoints.declarer + r.marriagePoints.declarer}
-           · ${t('defendersSide')} ${r.cardPoints.defenders + r.marriagePoints.defenders} ${t('units')}</div>`
+        ? `<div class="felt-sub">${esc(t('declarerSide'))} ${esc(r.cardPoints.declarer + r.marriagePoints.declarer)}
+           · ${esc(t('defendersSide'))} ${esc(r.cardPoints.defenders + r.marriagePoints.defenders)} ${esc(t('units'))}</div>`
         : '';
 
     const flekWord = lang === 'de' ? 'Kontra' : 'flek';
     const rows = r.components
       .map((comp) => {
         const won = comp.wonBy === mydSide;
-        let label = compLabel(comp.target, won);
-        if (comp.silent) label += ` (${t('silentWord')})`;
-        if (comp.flekMultiplier > 1) label += `, ${Math.log2(comp.flekMultiplier)}× ${flekWord}`;
-        if (comp.note) label += ` <em>(${comp.note})</em>`;
-        return `<tr><td>${label}:</td><td class="money">${fmtMoney(comp.amount)}</td></tr>`;
+        let label = esc(compLabel(comp.target, won));
+        if (comp.silent) label += ` (${esc(t('silentWord'))})`;
+        if (comp.flekMultiplier > 1) label += `, ${esc(Math.log2(comp.flekMultiplier))}× ${esc(flekWord)}`;
+        if (comp.note) label += ` <em>(${esc(comp.note)})</em>`;
+        return `<tr><td>${label}:</td><td class="money">${esc(fmtMoney(comp.amount))}</td></tr>`;
       })
       .join('');
 
     const myDelta = r.delta[me];
-    const deltaLine = `<tr class="sum"><td>${myDelta < 0 ? t('youLost') : t('youWon')}:</td><td class="money">${fmtMoney(Math.abs(myDelta))}</td></tr>`;
-    const totalLine = `<tr><td>${t('nowTotal')}:</td><td class="money">${fmtMoney(v.ledger[me])}</td></tr>`;
+    const deltaLine = `<tr class="sum"><td>${esc(myDelta < 0 ? t('youLost') : t('youWon'))}:</td><td class="money">${esc(fmtMoney(Math.abs(myDelta)))}</td></tr>`;
+    const totalLine = `<tr><td>${esc(t('nowTotal'))}:</td><td class="money">${esc(fmtMoney(v.ledger[me]))}</td></tr>`;
     const others = ([0, 1, 2] as Seat[])
       .filter((x) => x !== me)
-      .map((x) => `${this.nameOf(x)} ${r.delta[x] >= 0 ? '+' : ''}${fmtMoney(r.delta[x])}`)
+      .map((x) => `${esc(this.nameOf(x))} ${r.delta[x] >= 0 ? '+' : ''}${esc(fmtMoney(r.delta[x]))}`)
       .join(' · ');
 
     return `<div class="felt-panel">
-      <h3>${t('vyuctovani')}:</h3>
-      <div class="felt-sub">${head} — ${this.nameOf(r.contract.declarer)}</div>
+      <h3>${esc(t('vyuctovani'))}:</h3>
+      <div class="felt-sub">${head} — ${esc(this.nameOf(r.contract.declarer))}</div>
       ${pts}
       <table><tbody>${rows}${deltaLine}${totalLine}</tbody></table>
       <div class="felt-others">${others}</div>
@@ -678,7 +693,7 @@ export class TableUI {
     }
 
     const cardImg = (c: Card, cls = ''): string =>
-      `<img class="${cls}" src="${cardSrc(c, this.opts.pattern())}" alt="${cardName(c)}">`;
+      `<img class="${esc(cls)}" src="${esc(cardSrc(c, this.opts.pattern()))}" alt="${esc(cardName(c))}">`;
 
     const tricksHtml: string[] = [];
     for (let i = 0; i + 2 < plays.length; i += 3) {
@@ -686,16 +701,16 @@ export class TableUI {
       const winner = trickWinner(trick, r.contract.trump, r.contract.mode);
       tricksHtml.push(`<div class="rtrick">
         <div>${trick.map((p) => cardImg(p.card)).join('')}</div>
-        <div class="rwin">${i / 3 + 1}. ${this.nameOf(winner)}</div>
+        <div class="rwin">${esc(i / 3 + 1)}. ${esc(this.nameOf(winner))}</div>
       </div>`);
     }
 
     const talon = state.talon.length > 0
-      ? `<span class="rtalon">${t('talon')}: ${state.talon.map((c) => cardImg(c)).join('')}</span>`
+      ? `<span class="rtalon">${esc(t('talon'))}: ${state.talon.map((c) => cardImg(c)).join('')}</span>`
       : '';
     const pts = r.contract.mode === 'hra'
-      ? `${t('declarerSide')} ${r.cardPoints.declarer + r.marriagePoints.declarer}
-         · ${t('defendersSide')} ${r.cardPoints.defenders + r.marriagePoints.defenders} ${t('units')} · `
+      ? `${esc(t('declarerSide'))} ${esc(r.cardPoints.declarer + r.marriagePoints.declarer)}
+         · ${esc(t('defendersSide'))} ${esc(r.cardPoints.defenders + r.marriagePoints.defenders)} ${esc(t('units'))} · `
       : '';
 
     return `<div class="replay">
@@ -738,6 +753,13 @@ function wasAnnouncedBy(state: GameState, seat: Seat, card: Card): boolean {
     if (a.type === 'play' && a.seat === seat && a.card === card) return a.announceMarriage;
   }
   return false;
+}
+
+/** Escapování textu do innerHTML — obnovený stav z localStorage je nedůvěryhodný. */
+function esc(x: unknown): string {
+  return String(x).replace(/[&<>"']/g, (ch) =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch] as string,
+  );
 }
 
 const REVEAL_STEP_MS = 90;

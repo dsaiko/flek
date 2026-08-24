@@ -82,6 +82,11 @@ const STRINGS = {
     en: ['hearts', 'leaves', 'bells', 'acorns'],
     de: ['Herz', 'Grün', 'Schellen', 'Eichel'],
   },
+  talonIllegal: {
+    cs: 'Tento odhoz pravidla licitovaného mariáše nedovolují (závazek by nešlo ohlásit).',
+    en: 'Auction mariáš rules do not allow this discard (the contract could not be declared).',
+    de: 'Diese Ablage erlauben die Regeln des lizitierten Mariasch nicht (das Spiel wäre nicht ansagbar).',
+  },
   talonWarn: {
     cs: 'Pozor: s esem/desítkou v talonu lze hrát jen betl nebo durch!',
     en: 'Careful: with an ace/ten in the talon only betl or durch can be played!',

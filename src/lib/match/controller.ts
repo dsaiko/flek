@@ -50,7 +50,16 @@ export interface MatchOptions {
   aiDelayMs?: number;
   /** auto-potvrzení vynucené „dobré" (jediná legální akce) — pocta parametru Q z FLEK! */
   autoGood?: boolean;
+  /**
+   * Záložní politika, když AI driver selže nebo vrátí nelegální tah.
+   * Výchozí je heuristika na hlavním vlákně; injektovatelná kvůli testům
+   * (aby šla ověřit i cesta, kdy selže i fallback).
+   */
+  fallbackPolicy?: (v: PlayerView, rng: Random) => PlayerAction;
 }
+
+/** Kolik selhání za sebou se snese, než se AI smyčka vzdá (ochrana proti zacyklení). */
+const AI_MAX_FAILURES = 3;
 
 export class MatchController {
   state: GameState;
@@ -143,6 +152,11 @@ export class MatchController {
     if (this.stopped) return;
     const seat = this.actor();
     if (seat === null || seat === this.opts.humanSeat) return;
+    // strop kontrolovaný na VSTUPU — rekurzivní opakování je tím shora omezené
+    if (this.aiFailures >= AI_MAX_FAILURES) {
+      console.error('AI opakovaně selhává, smyčka se zastavuje');
+      return;
+    }
 
     const requestId = (nextRequestId += 1);
     this.pendingRequest = requestId;
@@ -165,7 +179,15 @@ export class MatchController {
     } catch (e) {
       // fallback: heuristika na hlavním vlákně — hra se nikdy nezasekne
       console.error('AI driver selhal, používám heuristický fallback:', e);
-      action = playPolicy(v, new Random(seed));
+      try {
+        action = this.fallback(v, new Random(seed));
+      } catch (e2) {
+        console.error('Záložní politika selhala:', e2);
+        this.aiFailures += 1;
+        this.pendingRequest = null;
+        void this.maybeRunAi();
+        return;
+      }
     }
 
     // opožděná odpověď (cancel/restart/nové rozdání) se zahazuje
@@ -176,26 +198,27 @@ export class MatchController {
       this.state = apply(this.state, action);
       this.aiFailures = 0;
     } catch (e) {
-      // Tah už není legální (stav se pohnul, cizí odpověď…). Zkus heuristiku
-      // na hlavním vlákně a hlavně nedopusť, aby smyčka umřela a hra zamrzla.
-      console.error('AI tah odmítnut, zkouším heuristiku:', e);
+      // Tah už není legální (stav se pohnul, cizí odpověď…). Zkus záložní
+      // politiku a hlavně nedopusť, aby smyčka umřela a hra zamrzla.
+      console.error('AI tah odmítnut, zkouším záložní politiku:', e);
       this.aiFailures += 1;
-      if (this.aiFailures > 3) {
-        console.error('AI opakovaně selhává, smyčka se zastavuje');
-        return;
-      }
+      const actor = this.actor();
+      if (actor === null || actor === this.opts.humanSeat) return;
       try {
-        const actor = this.actor();
-        if (actor === null || actor === this.opts.humanSeat) return;
-        this.state = apply(this.state, playPolicy(view(this.state, actor), new Random(seed + this.aiFailures)));
+        this.state = apply(this.state, this.fallback(view(this.state, actor), new Random(seed + this.aiFailures)));
         this.aiFailures = 0;
       } catch (e2) {
-        console.error('Heuristický fallback také selhal:', e2);
-        void this.maybeRunAi(); // ještě jeden pokus s čerstvým požadavkem
+        console.error('Záložní politika také selhala:', e2);
+        void this.maybeRunAi(); // omezené vstupním stropem
         return;
       }
     }
     this.afterChange();
+  }
+
+  /** Záložní politika (default heuristika na hlavním vlákně). */
+  private fallback(v: PlayerView, rng: Random): PlayerAction {
+    return (this.opts.fallbackPolicy ?? playPolicy)(v, rng);
   }
 
   /** Ruční spuštění AI smyčky (po resume ze savu). */

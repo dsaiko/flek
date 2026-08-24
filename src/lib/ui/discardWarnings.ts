@@ -6,7 +6,7 @@
  * esa/desítky jen uzamkne závazek na betl/durch. Hráč je ale musí vidět.
  */
 
-import { KRAL, SVRSEK, card, pointsOf, rankOf, suitOf, type Card, type Suit } from '../cards';
+import { KRAL, SVRSEK, card, pointsOf, type Card, type Suit } from '../cards';
 
 export type DiscardWarning =
   | { kind: 'valuable' }
@@ -30,20 +30,15 @@ export function discardWarnings(hand: readonly Card[], discard: readonly Card[])
   const out: DiscardWarning[] = [];
   if (discard.some((c) => pointsOf(c) > 0)) out.push({ kind: 'valuable' });
 
+  /*
+   * Odhoz zabije hlášku, když ji ruka držela celou a po odhozu už ne — pokrývá
+   * to obě varianty: rozbití (jedna půlka do talonu) i pohřbení obou půlek.
+   * Půlku hlášky, kterou ruka celou nedrží, odhoz o nic nepřipraví.
+   */
   const rest = hand.filter((c) => !discard.includes(c));
-  const before = marriagesIn(hand);
   const after = marriagesIn(rest);
-  for (const s of before) {
+  for (const s of marriagesIn(hand)) {
     if (!after.includes(s)) out.push({ kind: 'marriage', suit: s });
-  }
-  // půlka hlášky se v ruce nedrží celá, ale odhoz ji přesto znemožní navždy
-  for (const c of discard) {
-    const r = rankOf(c);
-    if (r !== KRAL && r !== SVRSEK) continue;
-    const s = suitOf(c);
-    if (before.includes(s)) continue; // už pokryto výše
-    const partner = card(s, r === KRAL ? SVRSEK : KRAL);
-    if (discard.includes(partner)) out.push({ kind: 'marriage', suit: s });
   }
   return out;
 }

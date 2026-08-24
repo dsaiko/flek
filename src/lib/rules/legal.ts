@@ -52,17 +52,20 @@ export function legalActions(v: PlayerView): PlayerAction[] {
       if (me !== phase.toAct) break;
       out.push({ type: 'bid', seat: me, bid: 'pass' });
       const minRank = phase.best ? bidRank(phase.best) : 0;
-      // Sedmový závazek smí slíbit jen ten, kdo příslušnou sedmu drží — jinak
-      // by ho ve fázi `declare` nemohl pokrýt a hra by se zasekla bez legální akce.
-      const sevens = v.hand.filter((c) => rankOf(c) === R7);
+      /*
+       * Sedmový závazek smí slíbit jen ten, kdo drží sedmu v barvě, která se
+       * pak SMÍ stát trumfem: u červeného závazku výhradně červenou, u ostatních
+       * jen nečervenou (trumf tam červená být nemůže). Jinak by závazek nešlo
+       * ve fázi `declare` pokrýt a hra by se zasekla bez legální akce.
+       */
       const hasCervenaSeven = v.hand.includes(card(CERVENE, R7));
+      const hasNonCervenaSeven = v.hand.some((c) => rankOf(c) === R7 && suitOf(c) !== CERVENE);
       for (const b of ALL_BIDS) {
         if (bidRank(b) <= minRank) continue;
-        if (!v.config.enableDveSedmy && (b.kind === 'dve-sedmy' || b.kind === 'dve-sedmy-sto')) continue;
+        // „dvě sedmy" scoring neumí (viz §10) — nenabízí se ani se zapnutým configem
+        if (b.kind === 'dve-sedmy' || b.kind === 'dve-sedmy-sto') continue;
         const needsSeven = b.kind === 'sedma' || b.kind === 'sto-sedma';
-        const needsTwoSevens = b.kind === 'dve-sedmy' || b.kind === 'dve-sedmy-sto';
-        if ((needsSeven || needsTwoSevens) && (b.cervena ? !hasCervenaSeven : sevens.length === 0)) continue;
-        if (needsTwoSevens && sevens.length < 2) continue;
+        if (needsSeven && !(b.cervena ? hasCervenaSeven : hasNonCervenaSeven)) continue;
         out.push({ type: 'bid', seat: me, bid: b });
       }
       break;

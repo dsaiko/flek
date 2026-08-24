@@ -107,6 +107,8 @@ const GOATCOUNTER = 'https://saiko-flek.goatcounter.com/count';
     })();
   </script>
 
-  {GOATCOUNTER && <script is:inline async src="//gc.zgo.at/count.js" data-goatcounter={GOATCOUNTER}></script>}
+  {GOATCOUNTER && (
+    <script is:inline async src="https://gc.zgo.at/count.js" referrerpolicy="no-referrer-when-downgrade" data-goatcounter={GOATCOUNTER}></script>
+  )}
 </body>
 </html>

@@ -34,6 +34,8 @@ await page.screenshot({ path: join(outDir, 'smoke-1-deal.png'), clip: await tabl
 
 // hraj: klikej na primární tlačítka a hratelné karty, dokud se hra hýbe
 let shots = 2;
+let reachedSettlement = false;
+let confirmedWarnings = 0;
 for (let i = 0; i < 200; i += 1) {
   await page.waitForTimeout(350);
 
@@ -48,12 +50,14 @@ for (let i = 0; i < 200; i += 1) {
   // varovný popup (rizikový odhoz) je potřeba potvrdit, ne ho brát za konec hry
   if ((await page.locator('.felt-panel.warn').count()) > 0) {
     await page.click('[data-act="confirm"]');
+    confirmedWarnings += 1;
     continue;
   }
 
   // výsledková obrazovka (panel na stole) → konec smoke testu
   if ((await page.locator('.felt-panel:not(.warn)').count()) > 0) {
     await page.screenshot({ path: join(outDir, 'smoke-5-result.png'), clip: await tableClip() });
+    reachedSettlement = true;
     console.log('OK: dohráno až k zúčtování');
     break;
   }
@@ -84,7 +88,13 @@ for (let i = 0; i < 200; i += 1) {
 }
 
 await browser.close();
-console.log(`Screenshoty v ${outDir}/`);
+console.log(`Screenshoty v ${outDir}/ (potvrzených varování: ${confirmedWarnings})`);
+
+// vyčerpání smyčky NENÍ úspěch — jinak by test procházel, i když hra uvízne
+if (!reachedSettlement) {
+  console.error('CHYBA: hra nedošla k zúčtování (smyčka vyčerpána)');
+  process.exit(1);
+}
 
 async function tableClip(): Promise<{ x: number; y: number; width: number; height: number }> {
   const box = await page.locator('#game-section').boundingBox();

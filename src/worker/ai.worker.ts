@@ -9,27 +9,18 @@
 import { think } from '../lib/ai/think';
 import type { FromWorker, ToWorker } from './messages';
 
-const cancelledIds = new Set<number>();
-/** requestId je globálně rostoucí, takže staré položky už nikdy nesedí — drž jen ocas. */
-const MAX_CANCELLED = 64;
-
+/*
+ * `cancel` nelze uvnitř workeru uplatnit: think() je synchronní a zprávy se
+ * zpracovávají FIFO, takže cancel dorazí vždy až PO dokončení hledání, které
+ * měl zrušit (dřívější „předběžná kontrola zrušených id" byla mrtvý kód).
+ * Zrušení proto vynucuje volající: driver odmítne čekající promise a
+ * controller zahodí odpověď podle requestId; zaseknutý worker řeší watchdog
+ * (terminate + nový worker). Zprávu přijímáme kvůli stabilitě protokolu.
+ */
 self.onmessage = (ev: MessageEvent<ToWorker>) => {
   const msg = ev.data;
 
-  if (msg.type === 'cancel') {
-    cancelledIds.add(msg.requestId);
-    while (cancelledIds.size > MAX_CANCELLED) {
-      const oldest = cancelledIds.values().next().value;
-      if (oldest === undefined) break;
-      cancelledIds.delete(oldest);
-    }
-    return;
-  }
-
-  if (cancelledIds.has(msg.requestId)) {
-    cancelledIds.delete(msg.requestId);
-    return;
-  }
+  if (msg.type === 'cancel') return;
 
   try {
     const { action, stats } = think({

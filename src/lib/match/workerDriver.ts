@@ -13,6 +13,14 @@ import type { AiDriver, ThinkRequestMsg } from './controller';
 
 const GRACE_MS = 2000;
 
+/** Zrušený požadavek se NESMÍ opakovat (retry je jen pro pád/mlčení workeru). */
+class CancelledError extends Error {
+  constructor() {
+    super('AI požadavek zrušen');
+    this.name = 'CancelledError';
+  }
+}
+
 type Pending = {
   resolve: (r: { action: PlayerAction; stats: ThinkStats }) => void;
   reject: (e: Error) => void;
@@ -68,8 +76,9 @@ export function createWorkerDriver(): AiDriver {
     async think(req) {
       try {
         return await thinkOnce(req);
-      } catch {
-        // 1× retry s čerstvým workerem
+      } catch (e) {
+        if (e instanceof CancelledError) throw e; // zrušené se neopakuje
+        // 1× retry s čerstvým workerem (pád/mlčení workeru)
         return thinkOnce(req);
       }
     },
@@ -78,6 +87,9 @@ export function createWorkerDriver(): AiDriver {
       if (p) {
         clearTimeout(p.timer);
         pending.delete(requestId);
+        // promise MUSÍ skončit, jinak `await think()` visí navždy; controller
+        // odpověď na zrušený požadavek zahodí podle requestId
+        p.reject(new CancelledError());
       }
       const msg: ToWorker = { type: 'cancel', requestId };
       worker?.postMessage(msg);
