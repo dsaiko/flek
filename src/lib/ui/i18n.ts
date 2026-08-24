@@ -82,6 +82,13 @@ const STRINGS = {
     en: ['hearts', 'leaves', 'bells', 'acorns'],
     de: ['Herz', 'Grün', 'Schellen', 'Eichel'],
   },
+  announceQuestion: {
+    cs: 'Ohlásit hlášku?',
+    en: 'Announce the marriage?',
+    de: 'Meldung ansagen?',
+  },
+  announceYes: { cs: 'Ohlásit', en: 'Announce', de: 'Ansagen' },
+  announceNo: { cs: 'Zahrát bez hlášky', en: 'Play without it', de: 'Ohne Meldung spielen' },
   talonIllegal: {
     cs: 'Tento odhoz pravidla licitovaného mariáše nedovolují (závazek by nešlo ohlásit).',
     en: 'Auction mariáš rules do not allow this discard (the contract could not be declared).',

@@ -15,6 +15,16 @@ const GOATCOUNTER = 'https://saiko-flek.goatcounter.com/count';
 <html lang="cs">
 <head>
   <meta charset="UTF-8" />
+  <!--
+    CSP: statická stránka bez backendu, takže politika žije v <meta> (musí být
+    hned za charset, platí až od svého výskytu). Skripty jen z vlastního
+    původu + gc.zgo.at (analytika), 'unsafe-inline' kvůli is:inline blokům
+    Astra; beacon GoatCounteru chodí jako <img> na *.goatcounter.com.
+  -->
+  <meta
+    http-equiv="Content-Security-Policy"
+    content="default-src 'self'; script-src 'self' 'unsafe-inline' https://gc.zgo.at; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://*.goatcounter.com; connect-src 'self' https://*.goatcounter.com; worker-src 'self' blob:; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'"
+  />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="description" content={descriptionCs} />
   <meta name="theme-color" content="#1e5c38" />
@@ -107,8 +117,21 @@ const GOATCOUNTER = 'https://saiko-flek.goatcounter.com/count';
     })();
   </script>
 
+  <!--
+    Verzovaná URL (count.v4.js je neměnná) + SRI: kdyby někdo podvrhl gc.zgo.at,
+    prohlížeč skript neprovede. Při přechodu na v5 je nutné přepočítat hash:
+    openssl dgst -sha384 -binary count.v5.js | openssl base64 -A
+  -->
   {GOATCOUNTER && (
-    <script is:inline async src="https://gc.zgo.at/count.js" referrerpolicy="no-referrer-when-downgrade" data-goatcounter={GOATCOUNTER}></script>
+    <script
+      is:inline
+      async
+      src="https://gc.zgo.at/count.v4.js"
+      integrity="sha384-nRw6qfbWyJha9LhsOtSb2YJDyZdKvvCFh0fJYlkquSFjUxp9FVNugbfy8q1jdxI+"
+      crossorigin="anonymous"
+      referrerpolicy="no-referrer-when-downgrade"
+      data-goatcounter={GOATCOUNTER}
+    ></script>
   )}
 </body>
 </html>

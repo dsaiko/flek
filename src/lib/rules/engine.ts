@@ -35,6 +35,7 @@ export function initialState(config: RulesConfig, firstDealer: Seat = 2): GameSt
     unseen: [],
     talon: [],
     talonOwner: null,
+    revealedTrump: null,
     talonKnowledge: [[], [], []],
     history: [],
     handResults: [],
@@ -87,6 +88,7 @@ function deal(state: GameState, seed: number, config?: RulesConfig): GameState {
     unseen,
     talon,
     talonOwner: null,
+    revealedTrump: null,
     talonKnowledge: [[], [], []],
     handNo: state.handNo + 1,
     contract: null,
@@ -249,6 +251,7 @@ function reduce(state: GameState, action: PlayerAction): GameState {
         ...state,
         hands,
         unseen: [],
+        revealedTrump: trumpCard, // ukázaná karta je veřejná (i „z lidu")
         phase: {
           name: 'discard-talon',
           standing: { declarer: action.seat, mode: null, trump, bid: null },

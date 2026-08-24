@@ -10,7 +10,7 @@
  * Licence: MIT © 2026 Dušan Saiko (skeny samotné jsou public domain, viz cards/history/README.md)
  */
 
-import { mkdirSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, renameSync, rmSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
@@ -58,6 +58,10 @@ async function processCard(file: string): Promise<{ file: string; w: number; h: 
   );
 
   const out = join(OUT, file.replace(/\.png$/i, '.webp'));
+  // Zapisuj do .tmp a teprve hotový soubor přejmenuj: přerušený běh (chyba
+  // jiné karty, Ctrl-C) tak nikdy nenechá pod platným jménem uříznutý WebP,
+  // který by rychlá cesta níže napořád považovala za hotový.
+  const tmp = `${out}.tmp`;
   const result = await sharp(meta.data)
     // skeny jsou samy o sobě tmavé — projasnit pro obrazovku
     .modulate({ brightness: 1.14, saturation: 1.06 })
@@ -66,7 +70,8 @@ async function processCard(file: string): Promise<{ file: string; w: number; h: 
       { input: mask, blend: 'dest-in' },
     ])
     .webp({ quality: WEBP_QUALITY })
-    .toFile(out);
+    .toFile(tmp);
+  renameSync(tmp, out);
 
   return { file, w: result.width, h: result.height, kb: Math.round(statSync(out).size / 1024) };
 }
@@ -74,17 +79,30 @@ async function processCard(file: string): Promise<{ file: string; w: number; h: 
 mkdirSync(OUT, { recursive: true });
 const files = readdirSync(SRC).filter((f) => /\.png$/i.test(f)).sort();
 
-// rychlá cesta: už vygenerováno (přegenerování vynutí `--force`)
-const existing = readdirSync(OUT).filter((f) => /\.webp$/i.test(f));
-if (existing.length === files.length && !process.argv.includes('--force')) {
-  console.log(`OK: ${existing.length} karet už existuje v ${OUT} (přegenerování: --force)`);
+// rychlá cesta: už vygenerováno (přegenerování vynutí `--force`).
+// Kontroluj JMENOVITĚ každou očekávanou kartu, ne jen počet souborů — jinak by
+// 32 náhodných zbytků v adresáři vypadalo jako hotová sada.
+const expected = files.map((f) => f.replace(/\.png$/i, '.webp'));
+const done = expected.every((f) => {
+  const p = join(OUT, f);
+  return existsSync(p) && statSync(p).size > 0;
+});
+if (done && !process.argv.includes('--force')) {
+  console.log(`OK: ${expected.length} karet už existuje v ${OUT} (přegenerování: --force)`);
   process.exit(0);
 }
+// zbytky po dřívějším přerušeném běhu
+for (const f of readdirSync(OUT).filter((f) => f.endsWith('.tmp'))) rmSync(join(OUT, f));
 if (files.length !== 32) {
   console.warn(`Pozor: očekáváno 32 karet, nalezeno ${files.length}`);
 }
 
-const results = await Promise.all(files.map(processCard));
+// dávky po 4: 32 souběžných sharp pipeline zbytečně žere paměť a při chybě
+// nechává za sebou nejvíc rozdělané práce
+const results: Awaited<ReturnType<typeof processCard>>[] = [];
+for (let i = 0; i < files.length; i += 4) {
+  results.push(...(await Promise.all(files.slice(i, i + 4).map(processCard))));
+}
 let total = 0;
 for (const r of results) {
   total += r.kb;

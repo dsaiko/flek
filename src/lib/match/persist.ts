@@ -31,40 +31,59 @@ const isCardArray = (x: unknown): boolean =>
   Array.isArray(x) && x.every((c) => typeof c === 'number' && Number.isInteger(c) && c >= 0 && c <= 31);
 const isTriple = (x: unknown, item: (y: unknown) => boolean): boolean =>
   Array.isArray(x) && x.length === 3 && x.every(item);
+/** Pozor: `typeof null === 'object'` — mapy fleků se z nich indexují. */
+const isRecord = (x: unknown): boolean => x !== null && typeof x === 'object' && !Array.isArray(x);
 
 /** Payload fáze musí odpovídat jejímu jménu — UI na něj sahá bez dalších kontrol. */
 function isValidPhase(p: Record<string, unknown>): boolean {
   const standingOk = (x: unknown): boolean => {
-    if (x === null || typeof x !== 'object') return false;
+    if (!isRecord(x)) return false;
     const st = x as Record<string, unknown>;
     return isSeat(st.declarer) && (st.mode === null || isStr(st.mode)) &&
-      (st.trump === null || isNum(st.trump)) && (st.bid === null || typeof st.bid === 'object');
+      (st.trump === null || isNum(st.trump)) && (st.bid === null || isRecord(st.bid));
   };
   switch (p.name) {
     case 'idle':
     case 'choose-trump':
       return true;
     case 'bidding':
-      return Array.isArray(p.bids) && isSeat(p.toAct) && (p.best === null || typeof p.best === 'object');
+      return Array.isArray(p.bids) && isSeat(p.toAct) && (p.best === null || isRecord(p.best));
     case 'discard-talon':
     case 'declare':
       return standingOk(p.standing);
     case 'takeover':
       return standingOk(p.standing) && isSeat(p.toAct) && Array.isArray(p.passed);
     case 'fleks': {
-      const f = p.fleks as Record<string, unknown> | null;
-      return f !== null && typeof f === 'object' && typeof f.levels === 'object' &&
-        typeof f.lastRaiser === 'object' && isSeat(f.toAct) && Array.isArray(f.passed);
+      if (!isRecord(p.fleks)) return false;
+      const f = p.fleks as Record<string, unknown>;
+      return isRecord(f.levels) && isRecord(f.lastRaiser) &&
+        isSeat(f.toAct) && Array.isArray(f.passed);
     }
     case 'tricks':
       return isNum(p.trickNo) && isSeat(p.leader) && isSeat(p.toAct) &&
-        Array.isArray(p.trick) && Array.isArray(p.played) && Array.isArray(p.marriages) &&
+        Array.isArray(p.trick) &&
+        (p.trick as unknown[]).every((t) => isRecord(t) && isSeat((t as Record<string, unknown>).seat)) &&
+        isCardArray(p.played) && Array.isArray(p.marriages) &&
         isTriple(p.won, (w) => isCardArray(w));
     case 'scored':
       return isHandResult(p.result);
     default:
       return false;
   }
+}
+
+/** Kontrakt řídí pravidla i zúčtování — musí být kompletní a v rozsahu. */
+function isContract(x: unknown): boolean {
+  if (x === null || typeof x !== 'object') return false;
+  const c = x as Record<string, unknown>;
+  return (
+    (c.mode === 'hra' || c.mode === 'betl' || c.mode === 'durch') &&
+    (c.trump === null || (isNum(c.trump) && (c.trump as number) >= 0 && (c.trump as number) <= 3)) &&
+    isSeat(c.declarer) &&
+    (c.sedma === null || isSeat(c.sedma)) &&
+    (c.kilo === null || isSeat(c.kilo)) &&
+    typeof c.dveSedmy === 'boolean'
+  );
 }
 
 /**
@@ -81,9 +100,11 @@ function isHandResult(x: unknown): boolean {
   };
   return (
     isNum(r.handNo) &&
-    r.contract !== null && typeof r.contract === 'object' &&
+    isContract(r.contract) &&
     side(r.cardPoints) && side(r.marriagePoints) &&
     isTriple(r.delta, isNum) &&
+    // konto je hra s nulovým součtem — nesedící archiv je podvržený
+    Math.abs((r.delta as number[]).reduce((a, b) => a + b, 0)) < 1e-9 &&
     Array.isArray(r.components) &&
     r.components.every((c) => {
       if (c === null || typeof c !== 'object') return false;
@@ -123,7 +144,8 @@ function looksLikeGameState(x: unknown): x is GameState {
     Array.isArray(s.history) && s.history.every((a) => typeof a === 'object' && a !== null && typeof (a as { type?: unknown }).type === 'string') &&
     Array.isArray(s.handResults) && s.handResults.every(isHandResult) &&
     isTriple(s.ledger, (n) => typeof n === 'number' && Number.isFinite(n)) &&
-    (s.contract === null || (typeof s.contract === 'object' && s.contract !== null)) &&
+    (s.revealedTrump === null || (isNum(s.revealedTrump) && (s.revealedTrump as number) >= 0 && (s.revealedTrump as number) <= 31)) &&
+    (s.contract === null || isContract(s.contract)) &&
     typeof phase === 'object' && phase !== null &&
     typeof phase.name === 'string' && PHASE_NAMES.includes(phase.name) &&
     isValidPhase(phase as Record<string, unknown>)

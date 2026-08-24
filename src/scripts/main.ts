@@ -22,12 +22,23 @@ interface Settings {
 
 const SETTINGS_KEY = 'flek.settings.v1';
 
+const DEFAULT_SETTINGS: Settings = { variant: 'voleny', difficulty: 'normal', pattern: 'history' };
+
+/** Nastavení z localStorage může být poškozené nebo cizí — ověř každou hodnotu. */
 function loadSettings(): Settings {
   try {
     const raw = localStorage.getItem(SETTINGS_KEY);
-    if (raw) return { variant: 'voleny', difficulty: 'normal', pattern: 'history', ...JSON.parse(raw) };
-  } catch { /* výchozí */ }
-  return { variant: 'voleny', difficulty: 'normal', pattern: 'history' };
+    if (!raw) return { ...DEFAULT_SETTINGS };
+    const p = JSON.parse(raw) as Partial<Settings>;
+    return {
+      variant: p.variant === 'voleny' || p.variant === 'licitovany' ? p.variant : DEFAULT_SETTINGS.variant,
+      difficulty: p.difficulty === 'easy' || p.difficulty === 'normal' || p.difficulty === 'hard'
+        ? p.difficulty : DEFAULT_SETTINGS.difficulty,
+      pattern: p.pattern === 'modern' || p.pattern === 'history' ? p.pattern : DEFAULT_SETTINGS.pattern,
+    };
+  } catch {
+    return { ...DEFAULT_SETTINGS };
+  }
 }
 
 function saveSettings(s: Settings): void {
@@ -52,11 +63,13 @@ const urlSeed = seedParam !== null && seedParam !== '' && Number.isFinite(Number
   ? Number(seedParam)
   : null;
 let seedCounter = urlSeed ?? 0;
+// Random si se seedem 0 poradí, takže se nic nepřepisuje — jinak by ?seed=0
+// dalo dvěma prvním hrám stejný seed a slíbený determinismus by neplatil.
 const randomSeed = (): number => {
-  if (urlSeed !== null) return (seedCounter += 1) - 1 || 1;
+  if (urlSeed !== null) return seedCounter++;
   const buf = new Uint32Array(1);
   crypto.getRandomValues(buf);
-  return buf[0] || 1;
+  return buf[0];
 };
 
 const BUDGETS: Record<Difficulty, number> = { easy: 300, normal: 1000, hard: 2200 };

@@ -53,6 +53,15 @@ export function legalActions(v: PlayerView): PlayerAction[] {
       out.push({ type: 'bid', seat: me, bid: 'pass' });
       const minRank = phase.best ? bidRank(phase.best) : 0;
       /*
+       * Shodu drží hráč dřívější v pořadí mluvení (§3.4): smí vzít TÝŽ závazek,
+       * ostatní musí přihodit výš. Každé takové „držím" posouvá držitele blíž
+       * k forhontovi, takže licitace zůstává konečná.
+       */
+      const order = [forhont(v.dealer), nextSeat(forhont(v.dealer)), nextSeat(nextSeat(forhont(v.dealer)))];
+      const holder = [...phase.bids].reverse().find((b) => b.bid !== 'pass')?.seat;
+      const mayHoldEqual =
+        phase.best !== null && holder !== undefined && order.indexOf(me) < order.indexOf(holder);
+      /*
        * Sedmový závazek smí slíbit jen ten, kdo drží sedmu v barvě, která se
        * pak SMÍ stát trumfem: u červeného závazku výhradně červenou, u ostatních
        * jen nečervenou (trumf tam červená být nemůže). Jinak by závazek nešlo
@@ -61,7 +70,8 @@ export function legalActions(v: PlayerView): PlayerAction[] {
       const hasCervenaSeven = v.hand.includes(card(CERVENE, R7));
       const hasNonCervenaSeven = v.hand.some((c) => rankOf(c) === R7 && suitOf(c) !== CERVENE);
       for (const b of ALL_BIDS) {
-        if (bidRank(b) <= minRank) continue;
+        const rank = bidRank(b);
+        if (rank < minRank || (rank === minRank && !mayHoldEqual)) continue;
         // „dvě sedmy" scoring neumí (viz §10) — nenabízí se ani se zapnutým configem
         if (b.kind === 'dve-sedmy' || b.kind === 'dve-sedmy-sto') continue;
         const needsSeven = b.kind === 'sedma' || b.kind === 'sto-sedma';

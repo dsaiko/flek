@@ -32,3 +32,6 @@ npm-debug.log*
 .env
 .env.*
 !.env.example
+
+# výstup smoke testu
+docs/smoke-*.png

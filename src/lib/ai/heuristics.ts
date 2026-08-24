@@ -66,19 +66,18 @@ export function estimatePoints(hand: readonly Card[], trump: Suit): number {
 }
 
 /**
- * Počet „děr" pro betl: karty, které nejde podlézt — pro každou barvu spočti,
- * kolik mých karet je výš, než kolik nižších karet barvy zbývá jinde.
- * 0 děr = prakticky jistý betl (v přirozeném pořadí).
+ * Počet „děr" pro betl: karet, které mohou být donuceny vzít štych.
+ * Zrcadlí `durchHoles`: i-tá NEJNIŽŠÍ karta musí být i-tou nejnižší v barvě
+ * (síla i), jinak nad ní visí riziko. Samotná sedma (síla 0) tedy díra není,
+ * samotné eso (síla 7) ano.
  */
 export function betlHoles(hand: readonly Card[]): number {
   const suits = bySuit(hand);
   let holes = 0;
   for (const s of [0, 1, 2, 3] as Suit[]) {
     const mine = suits[s].map((c) => strength(c, 'natural')).sort((a, b) => a - b);
-    // pro i-tou nejnižší moji kartu musí existovat aspoň i nižších karet mimo ruku
     for (let i = 0; i < mine.length; i += 1) {
-      const lowerOutside = mine[i] - i; // nižších hodnot celkem mine[i], z toho i mých
-      if (lowerOutside < 1) holes += 1;
+      if (mine[i] > i) holes += 1;
     }
   }
   return holes;
@@ -339,19 +338,20 @@ export function playPolicy(v: PlayerView, rng: Random): PlayerAction {
     return withMarriage(nonTrump[0] ?? sorted[0]);
   }
 
-  const w = winningPlay(trick, t, 'hra').card;
+  const wp = winningPlay(trick, t, 'hra');
+  const w = wp.card;
   const winning = cards.filter((c) => beats(c, w, t, 'hra'));
   const isLastInTrick = trick.length === 2;
+  // štych aktuálně drží někdo z mé strany? (aktér je sám, obránci jsou dvojice)
+  const mineWinning = (wp.seat === declarer) === iAmDeclarer;
 
-  if (winning.length > 0 && (trickPts >= 10 || isLastInTrick)) {
+  if (winning.length > 0 && !mineWinning && (trickPts >= 10 || isLastInTrick)) {
     // ber štych nejlevnější vítěznou (poslední hráč bere jistotu; jinak jen s body)
     const cheap = winning.sort((a, b) => strength(a, 'trump') - strength(b, 'trump'))[0];
     return withMarriage(cheap);
   }
   // maž nebo zahoď: nejnižší bez bodů; když parťák štych drží, přimaž body
-  const winnerSeat = winningPlay(trick, t, 'hra').seat;
-  const partnerWinning = (winnerSeat === declarer) === iAmDeclarer;
-  if (partnerWinning && isLastInTrick) {
+  if (mineWinning && isLastInTrick) {
     const points = cards.filter((c) => pointsOf(c) > 0 && !beats(c, w, t, 'hra'));
     if (points.length > 0) return withMarriage(points[0]); // mazej!
   }

@@ -98,10 +98,16 @@ export class MatchController {
     return null;
   }
 
-  /** Akce člověka (UI). Vyhazuje IllegalActionError při nelegální akci. */
+  /**
+   * Akce člověka (UI). Vyhazuje IllegalActionError při nelegální akci.
+   * Nejdřív se akce ověří (apply je čistý), TEPRVE pak se ruší běžící AI
+   * požadavek — jinak by odmítnutá akce (dvojklik!) zrušila plánovaný tah AI
+   * a smyčka by se už nikdy nerozjela.
+   */
   dispatch(action: PlayerAction): void {
+    const next = apply(this.state, action);
     this.cancelPending();
-    this.state = apply(this.state, action);
+    this.state = next;
     this.afterChange();
   }
 

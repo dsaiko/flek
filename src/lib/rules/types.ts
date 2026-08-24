@@ -218,6 +218,12 @@ export interface GameState {
    */
   unseen: Card[];
   talon: Card[]; // aktuálně odložené karty (0 nebo 2)
+  /**
+   * Trumfová karta, kterou aktér VEŘEJNĚ ukázal (volený mariáš). U volby
+   * „z lidu" je otočená karta veřejná, ale v akci je jen `'from-people'` —
+   * proto se konkrétní karta drží ve stavu, aby ji viděla i AI.
+   */
+  revealedTrump: Card | null;
   /** Kdo aktuální talon odložil (vidí ho); null = nikdo neodložil / leží z rozdání. */
   talonOwner: Seat | null;
   /** Které karty talonu/odhozu KTERÉ sedadlo fyzicky vidělo. */
@@ -238,6 +244,8 @@ export interface PlayerView {
   dealer: Seat;
   hand: Card[];
   handCounts: [number, number, number];
+  /** Veřejně ukázaná trumfová karta (viz GameState.revealedTrump). */
+  revealedTrump: Card | null;
   /** Co JÁ vím o talonu/odhozu (vlastní odhoz, převzatý talon dle configu). */
   talonKnown: Card[];
   /** Aktuální talon, pokud jsem ho odložil já (jinak null). */

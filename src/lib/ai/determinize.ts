@@ -12,6 +12,7 @@
 import { ESO, R10, rankOf, suitOf, type Card, type Suit } from '../cards';
 import { Random } from '../random';
 import type { GameState, PlayerView, Seat, TrickPlay } from '../rules/types';
+import { forhont } from '../rules/types';
 
 /** Kam smí karta padnout: sedadlo 0–2, nebo talon (-1). */
 export const TALON_SLOT = -1;
@@ -48,11 +49,6 @@ export function deriveConstraints(v: PlayerView): Constraints {
   let trick: TrickPlay[] = [];
   for (let i = start; i < v.publicHistory.length; i += 1) {
     const a = v.publicHistory[i];
-    // ukázaná trumfová karta (z ruky i „z lidu") je veřejná: skončila v ruce
-    // toho, kdo volil — nebo v jeho odhozu do talonu
-    if (a.type === 'choose-trump' && a.card !== 'from-people') {
-      allowed.set(a.card, new Set([a.seat, TALON_SLOT]));
-    }
     if (a.type !== 'play') continue;
     played.add(a.card);
     if (a.announceMarriage) {
@@ -74,17 +70,21 @@ export function deriveConstraints(v: PlayerView): Constraints {
     if (trick.length === 3) trick = [];
   }
 
-  // hlášená sedma: její držitel prokazatelně drží trumfovou sedmičku
+  /*
+   * Veřejně ukázaná trumfová karta (i „z lidu") skončila v ruce toho, kdo
+   * volil — nebo v jeho odhozu do talonu.
+   */
+  if (v.revealedTrump !== null && !played.has(v.revealedTrump)) {
+    allowed.set(v.revealedTrump, new Set([forhont(v.dealer), TALON_SLOT]));
+  }
+
+  /*
+   * Hlášená sedma: držitel ji prokazatelně MÁ V RUCE — deklarace se podává až
+   * PO odhozu a legalita ji vyžaduje v ruce, takže v talonu být nemůže.
+   */
   if (contract !== null && contract.sedma !== null && trump !== null) {
     const seven = ((trump << 3) | 0) as Card; // R7 = 0
-    if (!played.has(seven)) {
-      if (contract.sedma === contract.declarer) {
-        // aktér ji teoreticky mohl odhodit do talonu (byla by prohraná)
-        allowed.set(seven, new Set([contract.declarer, TALON_SLOT]));
-      } else {
-        mustHave[contract.sedma].add(seven); // obránce talon nedržel
-      }
-    }
+    if (!played.has(seven)) mustHave[contract.sedma].add(seven);
   }
 
   // hlášky splněné zahráním druhé karty ⇒ mustHave už jen dosud nezahrané
@@ -209,6 +209,7 @@ export function buildState(v: PlayerView, d: Determinization): GameState {
     unseen: [],
     talon: v.talon !== null ? v.talon.slice() : d.talon,
     talonOwner: null,
+    revealedTrump: v.revealedTrump,
     talonKnowledge: [[], [], []],
     history: v.publicHistory as unknown as GameState['history'],
     handResults: [],

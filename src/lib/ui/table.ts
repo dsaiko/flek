@@ -447,10 +447,23 @@ export class TableUI {
       else if (this.selected.size < 2) this.selected.add(c);
       this.rerenderSelection(v);
     } else if (phase.name === 'tricks') {
-      // preferuj hlášku, když je legální (skoro vždy správně)
+      /*
+       * Hláška je podle pravidel VOLBA hráče (§5.1) — ohlásit znamená body,
+       * ale i prozradit druhou kartu páru. Když je legální obojí, nech ho vybrat.
+       */
       const legal = legalActions(v);
       const withM = legal.find((a) => a.type === 'play' && a.card === c && a.announceMarriage);
-      const plain = legal.find((a) => a.type === 'play' && a.card === c);
+      const plain = legal.find((a) => a.type === 'play' && a.card === c && !a.announceMarriage);
+      if (withM && plain) {
+        const trump = v.contract?.trump ?? null;
+        const pts = trump !== null && suitOf(c) === trump ? 40 : 20;
+        this.showChoicePopup(
+          `${t('announceQuestion')} (${pts})`,
+          { label: t('announceYes'), onPick: () => this.cb.onAction(withM) },
+          { label: t('announceNo'), onPick: () => this.cb.onAction(plain) },
+        );
+        return;
+      }
       const action = withM ?? plain;
       if (action) this.cb.onAction(action);
     }
@@ -640,6 +653,26 @@ export class TableUI {
     });
   }
 
+  /** Dvě rovnocenné volby v panelu na stole (např. ohlásit hlášku, nebo ne). */
+  private showChoicePopup(
+    question: string,
+    primary: { label: string; onPick: () => void },
+    secondary: { label: string; onPick: () => void },
+  ): void {
+    const float = $(this.root, '#center-float');
+    float.classList.add('open');
+    float.innerHTML = `<div class="felt-panel warn">
+      <p class="warn-msg">${esc(question)}</p>
+      <div class="felt-actions">
+        <button class="action-btn" data-act="secondary">${esc(secondary.label)}</button>
+        <button class="action-btn primary" data-act="primary">${esc(primary.label)}</button>
+      </div>
+    </div>`;
+    const close = (): void => { float.classList.remove('open'); float.innerHTML = ''; };
+    float.querySelector('[data-act="primary"]')?.addEventListener('click', () => { close(); primary.onPick(); });
+    float.querySelector('[data-act="secondary"]')?.addEventListener('click', () => { close(); secondary.onPick(); });
+  }
+
   // ── zúčtování a průběh hry (integrované do stolu, po vzoru FLEK!) ──────────
 
   private settlementHtml(r: HandResult, v: PlayerView): string {
@@ -794,16 +827,17 @@ const BID_LABEL_EN: Record<string, string> = {
   betl: 'Betl', durch: 'Durch', 'dve-sedmy': 'Two sevens', 'dve-sedmy-sto': 'Two sevens & hundred',
 };
 
-function bidLabel(b: { kind: string; cervena: boolean }): string {
+export function bidLabel(b: { kind: string; cervena: boolean }): string {
   const base = (currentLang() === 'en' ? BID_LABEL_EN : BID_LABEL_CS)[b.kind] ?? esc(b.kind);
   return b.cervena ? `${base} ${suitIcon(0)}` : base;
 }
 
 /**
- * Popisek komponenty. `target` může přijít z obnoveného (nedůvěryhodného) savu,
+ * Popisek komponenty (exportováno kvůli regresním testům escapování).
+ * `target` může přijít z obnoveného (nedůvěryhodného) savu,
  * takže neznámá hodnota se escapuje — texty jdou do innerHTML.
  */
-function targetLabel(target: string): string {
+export function targetLabel(target: string): string {
   const map: Record<string, string> = {
     hra: t('hra'), sedma: t('sedma'), kilo: t('kilo'),
     betl: t('betl'), durch: t('durch'), dveSedmy: 'dvě sedmy',
@@ -824,7 +858,7 @@ function flekSummary(state: GameState): string {
   return parts.join(', ');
 }
 
-function bubbleText(a: PlayerAction, state: GameState): string | null {
+export function bubbleText(a: PlayerAction, state: GameState): string | null {
   switch (a.type) {
     case 'choose-trump':
       return a.card === 'from-people' ? t('fromPeople') : null;

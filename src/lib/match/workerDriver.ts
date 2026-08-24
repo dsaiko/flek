@@ -12,6 +12,8 @@ import type { FromWorker, ToWorker } from '../../worker/messages';
 import type { AiDriver, ThinkRequestMsg } from './controller';
 
 const GRACE_MS = 2000;
+/** První požadavek na čerstvém workeru platí i jeho start (načtení bundlu). */
+const SPAWN_GRACE_MS = 2000;
 
 /** Zrušený požadavek se NESMÍ opakovat (retry je jen pro pád/mlčení workeru). */
 class CancelledError extends Error {
@@ -64,12 +66,13 @@ export function createWorkerDriver(): AiDriver {
 
   const thinkOnce = (req: ThinkRequestMsg): Promise<{ action: PlayerAction; stats: ThinkStats }> =>
     new Promise((resolve, reject) => {
+      const fresh = worker === null;
       const w = ensureWorker();
       const timer = setTimeout(() => {
         // watchdog: worker mlčí — zabij ho a odmítni VŠECHNY čekající požadavky
         // (terminate ukončí i hledání, na které čekají ostatní)
         killWorker(new Error('AI worker neodpověděl (watchdog)'));
-      }, req.budgetMs + GRACE_MS);
+      }, req.budgetMs + GRACE_MS + (fresh ? SPAWN_GRACE_MS : 0));
       pending.set(req.requestId, { resolve, reject, timer });
       const msg: ToWorker = { type: 'think', ...req };
       w.postMessage(msg);

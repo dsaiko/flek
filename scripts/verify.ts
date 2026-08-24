@@ -747,7 +747,7 @@ const KULE = 2 as const;
     const base = defaultConfig('licitovany');
     const mkView = (hand: number[]): Parameters<typeof legalActions>[0] => ({
       seat: 0, config: base, dealer: 2, hand, handCounts: [10, 10, 10],
-      talonKnown: [], talon: null, contract: null,
+      revealedTrump: null, talonKnown: [], talon: null, contract: null,
       phase: { name: 'bidding', bids: [], toAct: 0, best: null },
       publicHistory: [], handResults: [], ledger: [0, 0, 0], handNo: 1,
     });
@@ -839,6 +839,7 @@ const KULE = 2 as const;
     assert.ok(trumpScore(hand, 1) > trumpScore(hand, CE), 'zelená musí skórovat výš než červená');
     const v = {
       seat: 0, config: cfg, dealer: 2, hand, handCounts: [10, 10, 10],
+      revealedTrump: null,
       talonKnown: [], talon: [mk2(2, 0), mk2(2, 2)], // sedma a devítka kulová — nic bodovaného
       contract: null,
       phase: { name: 'declare' as const, standing: { declarer: 0 as const, mode: null, trump: null, bid: null } },
@@ -1048,20 +1049,37 @@ const KULE = 2 as const;
     assert.equal((await pC).action.type, 'good');
 
     // (d) watchdog: mlčící worker → zabít a odmítnout VŠECHNY čekající (i19)
+    //
+    // Klíč testu (i38): druhý požadavek má DLOUHÝ budget, takže jeho vlastní
+    // watchdog by se ještě neozval. Když ho po zabití workeru někdo nevyhodí,
+    // zůstane viset na mrtvém workeru navždy. Pozorovatelný důsledek
+    // hromadného odmítnutí = OBA požadavky se zopakují na čerstvém workeru.
     FakeWorker.instances.length = 0;
     const dD = createWorkerDriver();
-    const errs: string[] = [];
-    const pD1 = dD.think(req(4, 0)).catch((e: Error) => { errs.push(`4:${e.name}`); throw e; });
-    const pD2 = dD.think(req(5, 0)).catch((e: Error) => { errs.push(`5:${e.name}`); throw e; });
-    pD1.catch(() => {}); pD2.catch(() => {});
-    const wD = FakeWorker.instances[0];
+    // zahřátí: worker existuje, další požadavky tedy nemají startovní toleranci
+    const warm = dD.think(req(9));
+    const wWarm = FakeWorker.instances[0];
+    wWarm.onmessage?.({ data: { type: 'move', requestId: 9, action: { type: 'good', seat: 0 }, stats } });
+    await warm;
+
+    const pD1 = dD.think(req(4, 0));
+    const pD2 = dD.think(req(5, 60_000));
+    const wD = FakeWorker.instances[FakeWorker.instances.length - 1];
+    assert.deepEqual(
+      wD.posted.filter((m) => m.type === 'think').map((m) => m.requestId).sort(),
+      [4, 5, 9], 'oba nové požadavky mají čekat na TÉMŽE (zahřátém) workeru',
+    );
     await nap2(2150); // budgetMs 0 + GRACE_MS 2000
     assert.equal(wD.terminated, true, 'watchdog má mlčící worker ukončit');
-    assert.ok(FakeWorker.instances.length >= 2, 'retry po watchdogu má vzniknout na novém workeru');
-    // oba požadavky dostaly odmítnutí (druhý nesmí zůstat viset)
-    dD.cancel(4); dD.cancel(5);
-    await nap2(20);
-    assert.equal(errs.length, 2, `oba čekající požadavky musí být odmítnuty (${errs.join(',')})`);
+    const wD2 = FakeWorker.instances[FakeWorker.instances.length - 1];
+    assert.notEqual(wD2, wD, 'retry po watchdogu má vzniknout na novém workeru');
+    const retried = wD2.posted.filter((m) => m.type === 'think').map((m) => m.requestId).sort();
+    assert.deepEqual(retried, [4, 5], `watchdog musí odmítnout OBA čekající (opakováno: ${retried.join(',')})`);
+    // dokonči, ať nic nevisí
+    for (const id of [4, 5]) {
+      wD2.onmessage?.({ data: { type: 'move', requestId: id, action: { type: 'good', seat: 1 }, stats } });
+    }
+    await Promise.all([pD1, pD2]);
 
     if (orig === undefined) delete g.Worker; else g.Worker = orig;
     console.log('PASS regrese i26/i36/i19 — driver: cancel odmítá bez retry, watchdog čistí vše');
@@ -1074,14 +1092,11 @@ const KULE = 2 as const;
     const mkView = (sedmaSeat: 0 | 1 | 2 | null) => ({
       seat: 1 as const, config: cfg, dealer: 2 as const,
       hand: [mk3(CE3, K3), mk3(CE3, SV3)], handCounts: [2, 2, 2],
-      talonKnown: [], talon: null,
+      revealedTrump: trumpCard, talonKnown: [], talon: null,
       contract: { mode: 'hra' as const, trump: 2 as const, declarer: 0 as const, sedma: sedmaSeat, kilo: null, dveSedmy: false },
       phase: { name: 'tricks' as const, trickNo: 0, leader: 0 as const, toAct: 1 as const,
         trick: [], played: [], won: [[], [], []] as [number[], number[], number[]], marriages: [] },
-      publicHistory: [
-        { type: 'deal' as const },
-        { type: 'choose-trump' as const, seat: 0 as const, card: trumpCard },
-      ],
+      publicHistory: [{ type: 'deal' as const }],
       handResults: [], ledger: [0, 0, 0] as [number, number, number], handNo: 1,
     });
 
@@ -1095,12 +1110,359 @@ const KULE = 2 as const;
     const c2 = deriveConstraints(mkView(2) as never);
     assert.ok(c2.mustHave[2].has(mk3(2, S73)), 'sedma proti ⇒ obránce drží trumfovou sedmu');
 
-    // sedma hlášená AKTÉREM → ruka aktéra, nebo (teoreticky) talon
+    // sedma hlášená AKTÉREM → deklarace je až PO odhozu, takže je JISTĚ v ruce
     const c3 = deriveConstraints(mkView(0) as never);
-    const allowSeven = c3.allowed.get(mk3(2, S73));
-    assert.ok(allowSeven, 'hlášená sedma aktéra musí být omezená');
-    assert.deepEqual([...(allowSeven as Set<number>)].sort((a, b) => a - b), [TALON_SLOT, 0]);
+    assert.ok(c3.mustHave[0].has(mk3(2, S73)), 'hlášená sedma aktéra je jistě v jeho ruce');
+    assert.equal(c3.allowed.has(mk3(2, S73)), false, 'sedma aktéra nesmí padnout do talonu');
     console.log('PASS regrese i5/i6 — determinizace: odhalený trumf a hlášená sedma');
+  }
+}
+
+
+// ── regrese: páté kolo fixpoint review-code (2026-08-25, po 4b29631) ────────
+
+{
+  const { initialState, apply } = await import('../src/lib/rules/engine');
+  const { legalActions } = await import('../src/lib/rules/legal');
+  const { view } = await import('../src/lib/rules/view');
+  const { defaultConfig } = await import('../src/lib/rules/sazby');
+  const { pointsOf: pts5 } = await import('../src/lib/cards');
+  type St5 = ReturnType<typeof initialState>;
+  type Act5 = ReturnType<typeof legalActions>[number];
+  const acts5 = (st: St5): Act5[] => {
+    for (const seat of [0, 1, 2] as const) {
+      const a = legalActions(view(st, seat));
+      if (a.length > 0) return a;
+    }
+    return [];
+  };
+
+  // ── i50: house rule talonOnTakeover='keep' — přebírající talon NEbere ────
+  {
+    const run = (mode: 'retake' | 'keep'): St5 => {
+      const cfg = { ...defaultConfig('voleny'), talonOnTakeover: mode };
+      let st: St5 = initialState(cfg, 2);
+      st = apply(st, { type: 'deal', seed: 11 });
+      const step = (pred: (a: Act5) => boolean, label: string): void => {
+        const a = acts5(st).find(pred);
+        assert.ok(a, `scénář i50 (${mode}): chybí akce ${label}`);
+        st = apply(st, a as Act5);
+      };
+      step((a) => a.type === 'choose-trump' && a.card !== 'from-people', 'choose-trump');
+      step((a) => a.type === 'discard' && a.cards.every((c) => pts5(c) === 0), 'discard');
+      step((a) => a.type === 'declare' && a.mode === 'hra' && !a.sedma && !a.kilo, 'declare hra');
+      // hru přebere OBRÁNCE betlem — právě tuhle větev 'keep' řeší
+      step((a) => a.type === 'takeover' && a.claim === 'betl', 'takeover betl');
+      let guard = 0;
+      while (st.phase.name === 'takeover') {
+        if ((guard += 1) > 10) throw new Error(`scénář i50 (${mode}) se zasekl`);
+        step((a) => a.type === 'takeover' && a.claim === 'good', 'takeover good');
+      }
+      return st;
+    };
+
+    const keep = run('keep');
+    assert.equal(keep.contract?.mode, 'betl', 'betl obránce musí platit');
+    assert.equal(keep.phase.name, 'fleks', 'při „keep" se talon znovu neodhazuje — rovnou fleky');
+    assert.deepEqual(
+      keep.hands.map((h) => h.length), [10, 10, 10],
+      'při „keep" nikdo talon nezvedá (10/10/10)',
+    );
+    assert.equal(keep.talon.length, 2, 'talon zůstává odložený');
+    assert.equal(keep.talonOwner, keep.contract?.declarer === 0 ? 0 : keep.talonOwner, 'talonOwner se nemění');
+
+    const retake = run('retake');
+    assert.equal(retake.phase.name, 'discard-talon', 'výchozí „retake" nechá nového aktéra odhodit');
+    assert.notEqual(retake.contract?.declarer, 0, 'scénář vyžaduje, aby přebíral obránce');
+    assert.equal(
+      retake.hands[retake.contract?.declarer as 0 | 1 | 2].length, 12,
+      'při „retake" drží nový aktér 12 karet, než odhodí',
+    );
+    console.log('PASS regrese i50 — talonOnTakeover: „keep" nechá talon ležet, „retake" ho předá');
+  }
+
+  // ── i1/i2: heuristiky — díry v betlu a nepřebíjení vlastního parťáka ─────
+  {
+    const { betlHoles, playPolicy } = await import('../src/lib/ai/heuristics');
+    const { card: mk5, CERVENE: CE5, R7: S75, R8: S85, R9: S95, R10: T5, KRAL: K5, ESO: A5 } =
+      await import('../src/lib/cards');
+    const { Random: Rnd5 } = await import('../src/lib/random');
+    const ZE5 = 1 as const; // zelené
+
+    // 7-8-9 v jedné barvě = tři nejnižší karty ⇒ žádná díra
+    assert.equal(betlHoles([mk5(CE5, S75), mk5(CE5, S85), mk5(CE5, S95)]), 0, 'nejnižší trojice nemá díru');
+    // samotné eso je díra (pod ním leží sedm cizích karet)
+    assert.equal(betlHoles([mk5(CE5, A5)]), 1, 'osamocené eso je díra');
+    // sedma + eso: sedma je bezpečná, eso ne
+    assert.equal(betlHoles([mk5(CE5, S75), mk5(CE5, A5)]), 1, 'sedma kryje, eso ne');
+    // díry se počítají po barvách nezávisle
+    assert.equal(betlHoles([mk5(CE5, A5), mk5(ZE5, A5)]), 2, 'dvě barvy, dvě díry');
+
+    /*
+     * Aktér vede eso, obránce (sedadlo 2) je poslední ve štychu a drží krále
+     * i devítku téže barvy. Přebít nemůže (eso je nejvyšší), takže maže co
+     * nejlevněji; klíčové je, že NEmaže body do štychu, který bere protistrana.
+     */
+    const vDef = {
+      seat: 2 as const, config: defaultConfig('voleny'), dealer: 2 as const,
+      hand: [mk5(CE5, K5), mk5(CE5, S95)], handCounts: [2, 2, 2], revealedTrump: null,
+      talonKnown: [], talon: null,
+      contract: { mode: 'hra' as const, trump: 2 as const, declarer: 0 as const, sedma: null, kilo: null, dveSedmy: false },
+      phase: {
+        name: 'tricks' as const, trickNo: 8, leader: 0 as const, toAct: 2 as const,
+        trick: [{ seat: 0 as const, card: mk5(CE5, A5) }, { seat: 1 as const, card: mk5(CE5, S85) }],
+        played: [], won: [[], [], []] as [number[], number[], number[]], marriages: [],
+      },
+      publicHistory: [{ type: 'deal' as const }],
+      handResults: [], ledger: [0, 0, 0] as [number, number, number], handNo: 1,
+    };
+    const pick = playPolicy(vDef as never, new Rnd5(1));
+    assert.equal(pick.type, 'play');
+    if (pick.type === 'play') {
+      assert.notEqual(pick.card, mk5(CE5, T5), 'do cizího štychu se body nemažou');
+    }
+
+    /*
+     * Táž pozice, ale vedoucí kartu drží PARŤÁK obránce (sedadlo 1 zahrálo eso,
+     * aktér 0 podložil osmičku). Obránce nesmí parťáka přebíjet — a smí mu
+     * naopak přimazat body, protože štych bere jeho strana.
+     */
+    const vPartner = {
+      ...vDef,
+      hand: [mk5(CE5, T5), mk5(CE5, S95)],
+      phase: {
+        ...vDef.phase,
+        leader: 1 as const,
+        trick: [{ seat: 1 as const, card: mk5(CE5, A5) }, { seat: 0 as const, card: mk5(CE5, S85) }],
+      },
+    };
+    const pick2 = playPolicy(vPartner as never, new Rnd5(1));
+    assert.equal(pick2.type, 'play');
+    if (pick2.type === 'play') {
+      assert.equal(pick2.card, mk5(CE5, T5), 'do parťákova štychu se body naopak mažou');
+    }
+    console.log('PASS regrese i1/i2 — betlHoles počítá díry, AI nepřebíjí vlastní stranu');
+  }
+
+  // ── i5: v licitaci smí dřívější mluvčí DRŽET stejný závazek ──────────────
+  {
+    const cfg = defaultConfig('licitovany');
+    const mkBid = (dealer: 0 | 1 | 2, me: 0 | 1 | 2, bids: { seat: 0 | 1 | 2; bid: unknown }[]) => ({
+      seat: me, config: cfg, dealer, hand: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9], handCounts: [10, 10, 10],
+      revealedTrump: null, talonKnown: [], talon: null, contract: null,
+      phase: {
+        name: 'bidding' as const, toAct: me,
+        bids, best: { kind: 'sedma', cervena: false }, passed: [],
+      },
+      publicHistory: [], handResults: [], ledger: [0, 0, 0], handNo: 1,
+    });
+    // dealer 2 ⇒ pořadí mluvení 0, 1, 2. Sedmu drží sedadlo 1.
+    // závazek je dvojice kind+červená (černá sedma ≠ červená sedma)
+    const bids5 = (v: unknown): string[] =>
+      legalActions(v as never)
+        .filter((a) => a.type === 'bid' && a.bid !== 'pass')
+        .map((a) => (a.type === 'bid' && a.bid !== 'pass' ? `${a.bid.kind}${a.bid.cervena ? '-č' : ''}` : ''));
+
+    const earlier = bids5(mkBid(2, 0, [{ seat: 1, bid: { kind: 'sedma', cervena: false } }]));
+    assert.ok(earlier.includes('sedma'), 'dřívější mluvčí (0) smí sedmu držet, ne jen přebít');
+
+    const later = bids5(mkBid(2, 2, [{ seat: 1, bid: { kind: 'sedma', cervena: false } }]));
+    assert.equal(later.includes('sedma'), false, 'pozdější mluvčí (2) musí přebít výš');
+    assert.ok(later.includes('sedma-č'), 'pozdějšímu mluvčímu zůstává červená sedma');
+    assert.ok(later.length > 0, 'pozdější mluvčí má stále co licitovat');
+    console.log('PASS regrese i5 — držení stejného závazku má jen dřívější mluvčí');
+  }
+
+  // ── i43/i49: popisky jdoucí do innerHTML (escapování + jméno fleku) ──────
+  {
+    const { targetLabel, bidLabel, bubbleText } = await import('../src/lib/ui/table');
+    const { flekName } = await import('../src/lib/ui/i18n');
+
+    // neznámý cíl/závazek z podvrženého savu se NESMÍ dostat do HTML syrový
+    const evil = '<img src=x onerror=alert(1)>';
+    assert.equal(targetLabel(evil).includes('<'), false, 'targetLabel musí escapovat neznámý cíl');
+    assert.ok(targetLabel(evil).includes('&lt;img'), 'targetLabel má escapovat, ne mazat');
+    assert.equal(targetLabel('hra').includes('&lt;'), false, 'známý cíl se překládá, ne escapuje');
+    assert.equal(bidLabel({ kind: evil, cervena: false }).includes('<'), false, 'bidLabel musí escapovat');
+    assert.ok(bidLabel({ kind: 'betl', cervena: false }).startsWith('Betl'), 'známý závazek má svůj překlad');
+
+    // jméno fleku: historie už obsahuje TENTO flek ⇒ jméno je na indexu count−1
+    const mkFlekState = (n: number) => ({
+      history: [
+        { type: 'deal' as const },
+        ...Array.from({ length: n }, (_, i) => ({
+          type: 'flek' as const, seat: (i % 3) as 0 | 1 | 2, target: 'hra' as const,
+        })),
+      ],
+    });
+    const flekAct = { type: 'flek' as const, seat: 0 as const, target: 'hra' as const };
+    assert.ok(
+      bubbleText(flekAct as never, mkFlekState(1) as never)?.startsWith(flekName(0)),
+      `první flek se hlásí jako „${flekName(0)}"`,
+    );
+    assert.ok(
+      bubbleText(flekAct as never, mkFlekState(2) as never)?.startsWith(flekName(1)),
+      `druhý flek se hlásí jako „${flekName(1)}"`,
+    );
+    assert.ok(
+      bubbleText(flekAct as never, mkFlekState(3) as never)?.startsWith(flekName(2)),
+      `třetí flek se hlásí jako „${flekName(2)}"`,
+    );
+    console.log('PASS regrese i43/i49 — popisky escapují a flek se hlásí správným jménem');
+  }
+
+  // ── i36/i44/i45: sav — negativní pokrytí archivu i známých fází ──────────
+  {
+    const store = new Map<string, string>();
+    (globalThis as { localStorage?: unknown }).localStorage = {
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: (k: string, val: string) => void store.set(k, val),
+      removeItem: (k: string) => void store.delete(k),
+    };
+    const { saveMatch, loadMatch } = await import('../src/lib/match/persist');
+
+    let st: St5 = initialState(defaultConfig('voleny'), 2);
+    st = apply(st, { type: 'deal', seed: 5 });
+    const withState = (mutate: (s: Record<string, unknown>) => void): void => {
+      saveMatch(st);
+      const parsed = JSON.parse(store.get('flek.match.v1') as string) as { v: number; state: Record<string, unknown> };
+      mutate(parsed.state);
+      store.set('flek.match.v1', JSON.stringify(parsed));
+    };
+
+    // (i36/i44) archiv výsledků: pravý projde, podvržený s HTML v note ne
+    const comp = {
+      target: 'hra', wonBy: 'declarer', baseRate: 1, flekMultiplier: 1, extraMultiplier: 1,
+      amount: 1, silent: false, note: 'čistá výhra',
+    };
+    const goodResult = {
+      handNo: 0,
+      contract: { mode: 'hra', trump: 2, declarer: 0, sedma: null, kilo: null, dveSedmy: false },
+      cardPoints: { declarer: 60, defenders: 30 },
+      marriagePoints: { declarer: 0, defenders: 0 },
+      components: [comp],
+      delta: [2, -1, -1],
+    };
+    withState((x) => { x.handResults = [goodResult]; });
+    assert.ok(loadMatch(), 'poctivý archivní výsledek musí projít');
+
+    withState((x) => { x.handResults = [{ ...goodResult, components: [{ ...comp, note: 42 }] }]; });
+    assert.equal(loadMatch(), null, 'note musí být řetězec (jde do innerHTML)');
+
+    withState((x) => { x.handResults = [{ ...goodResult, contract: { mode: 'zlodějina' } }]; });
+    assert.equal(loadMatch(), null, 'archivní kontrakt musí být platný');
+
+    withState((x) => { x.handResults = [{ ...goodResult, components: 'nic' }]; });
+    assert.equal(loadMatch(), null, 'components musí být pole');
+
+    withState((x) => { x.handResults = [{ ...goodResult, delta: [1, 1, 1] }]; });
+    assert.equal(loadMatch(), null, 'archiv s nenulovým součtem delt musí být odmítnut');
+
+    withState((x) => { x.handResults = ['<img src=x onerror=alert(1)>']; });
+    assert.equal(loadMatch(), null, 'řetězec místo výsledku musí být odmítnut');
+
+    // (i45) známá fáze s poškozeným payloadem — typeof null === 'object'
+    withState((x) => {
+      x.phase = { name: 'fleks', fleks: { levels: null, lastRaiser: {}, toAct: 0, passed: [] } };
+    });
+    assert.equal(loadMatch(), null, 'fleks.levels = null musí být odmítnuto');
+
+    withState((x) => {
+      x.phase = { name: 'fleks', fleks: { levels: {}, lastRaiser: null, toAct: 0, passed: [] } };
+    });
+    assert.equal(loadMatch(), null, 'fleks.lastRaiser = null musí být odmítnuto');
+
+    withState((x) => {
+      x.phase = { name: 'tricks', trickNo: 0, leader: 0, toAct: 0, trick: null, played: [], won: [[], [], []], marriages: [] };
+    });
+    assert.equal(loadMatch(), null, 'tricks.trick = null musí být odmítnuto');
+
+    withState((x) => { x.contract = { mode: 'zlodějina', trump: null, declarer: 0, sedma: null, kilo: null, dveSedmy: false }; });
+    assert.equal(loadMatch(), null, 'neznámý mód kontraktu musí být odmítnut');
+
+    delete (globalThis as { localStorage?: unknown }).localStorage;
+    console.log('PASS regrese i36/i44/i45 — sav: archiv i payloady známých fází');
+  }
+
+  // ── i47: determinizace karty opravdu UMÍSŤUJE podle omezení ─────────────
+  {
+    const { determinize } = await import('../src/lib/ai/determinize');
+    const { Random } = await import('../src/lib/random');
+    const { card: mk6, CERVENE: CE6, R7: S76, R8: S86, R9: S96, KRAL: K6, SVRSEK: SV6 } =
+      await import('../src/lib/cards');
+    const ZE6 = 1 as const; // zelené
+
+    const trumpCard = mk6(2, SV6); // kulový svršek — veřejně ukázaný trumf
+    const seven = mk6(2, S76); // kulová sedma — hlášená aktérem
+    // realistická pozice před posledními třemi štychy: 3+3+3 v rukou, 2 v talonu,
+    // 21 karet je odehráno (jinak by se determinizace neměla do čeho trefit)
+    const myHand = [mk6(CE6, K6), mk6(CE6, SV6), mk6(ZE6, S86)];
+    const unseen = [trumpCard, seven, mk6(ZE6, S76), mk6(ZE6, S96), mk6(3, S76), mk6(3, S86), mk6(3, S96), mk6(CE6, S76)];
+    const rest = Array.from({ length: 32 }, (_, i) => i).filter(
+      (c) => !myHand.includes(c) && !unseen.includes(c),
+    );
+    assert.equal(rest.length, 21, 'scénář i47: 21 odehraných karet');
+    const won: [number[], number[], number[]] = [rest.slice(0, 7), rest.slice(7, 14), rest.slice(14, 21)];
+
+    const v = {
+      seat: 1 as const, config: defaultConfig('voleny'), dealer: 2 as const,
+      hand: myHand, handCounts: [3, 3, 3], revealedTrump: trumpCard, talonKnown: [], talon: null,
+      contract: { mode: 'hra' as const, trump: 2 as const, declarer: 0 as const, sedma: 0 as const, kilo: null, dveSedmy: false },
+      phase: {
+        name: 'tricks' as const, trickNo: 7, leader: 0 as const, toAct: 1 as const,
+        trick: [], played: rest, won, marriages: [],
+      },
+      publicHistory: [{ type: 'deal' as const }],
+      handResults: [], ledger: [0, 0, 0] as [number, number, number], handNo: 1,
+    };
+
+    for (let seed = 1; seed <= 60; seed += 1) {
+      const d = determinize(v as never, new Random(seed));
+      // konzervace karet
+      const all = [...d.hands[0], ...d.hands[1], ...d.hands[2], ...d.talon];
+      assert.equal(new Set(all).size, all.length, `seed ${seed}: karta dvakrát`);
+      assert.deepEqual(d.hands[1].slice().sort((a, b) => a - b), v.hand.slice().sort((a, b) => a - b),
+        `seed ${seed}: moje ruka se nesmí měnit`);
+      assert.deepEqual(d.hands.map((h) => h.length), [3, 3, 3], `seed ${seed}: velikosti rukou`);
+      assert.equal(d.talon.length, 2, `seed ${seed}: talon má dvě karty`);
+      // hlášená sedma aktéra: v jeho ruce, nikdy jinde
+      assert.ok(d.hands[0].includes(seven), `seed ${seed}: hlášená sedma patří aktérovi`);
+      assert.equal(d.talon.includes(seven), false, `seed ${seed}: sedma nesmí do talonu`);
+      // ukázaný trumf: jen u volícího (forhont = sedadlo 0), nebo v talonu
+      assert.equal(d.hands[2].includes(trumpCard), false, `seed ${seed}: ukázaný trumf nesmí u obránce`);
+      assert.ok(d.hands[0].includes(trumpCard) || d.talon.includes(trumpCard),
+        `seed ${seed}: ukázaný trumf patří volícímu, nebo do talonu`);
+    }
+    void S96;
+    console.log('PASS regrese i47 — determinizace umísťuje ukázaný trumf i hlášenou sedmu');
+  }
+
+  // ── i27: dvojklik nesmí zabít rozmyšlený tah AI ─────────────────────────
+  {
+    const { MatchController: MC5 } = await import('../src/lib/match/controller');
+    const nap5 = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+    let cancels = 0;
+    const driver = {
+      think: async (r: { requestId: number }) => {
+        await nap5(30);
+        return { action: null as never, stats: { iterations: 0, elapsedMs: 0, evaluations: [] }, requestId: r.requestId };
+      },
+      cancel: () => { cancels += 1; },
+    };
+    const ctrl = new MC5(driver as never, {
+      config: defaultConfig('voleny'), humanSeat: 0, difficulty: 'easy', budgetMs: 0,
+      seedSource: () => 7, aiDelayMs: 0, autoGood: false,
+    });
+    ctrl.dealNext();
+    const first = ctrl.humanLegal().find((a) => a.type === 'choose-trump' && a.card !== 'from-people');
+    assert.ok(first, 'scénář i27 čeká volbu trumfu');
+    ctrl.dispatch(first as never);
+    const before = cancels;
+    // druhý (už nelegální) klik na tutéž akci — typický dvojklik
+    assert.throws(() => ctrl.dispatch(first as never), /.*/, 'nelegální akce musí vyhodit chybu');
+    assert.equal(cancels, before, 'odmítnutá akce nesmí zrušit běžící hledání AI');
+    ctrl.stop();
+    console.log('PASS regrese i27 — dispatch nejdřív ověří, teprve pak ruší AI');
   }
 }
 

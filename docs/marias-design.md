@@ -773,3 +773,35 @@ odhalila i skutečnou dírou v modelu (nevalidovaný `handResults`).
 | i27 | medium | test `talonForbidsTrump` ověřoval jen absenci deadlocku, ne vynucení pravidla | u barevného závazku se kontroluje, že žádná nabídnutá hra nemá trumf ležící v talonu |
 
 `make verify` má nyní **30 PASS bloků**.
+
+## 15. Fixpoint review kódu — čtvrté kolo (2026-08-25, po 4b29631)
+
+Nálezů 50, 29 zamítl judge. Zbylých **21 otevřených jsem prošel proti kódu a všechny
+potvrdil** — mezi nimi dvě regrese z vlastních oprav třetího kola (i7, i8) a jednu chybu,
+která uměla natrvalo zastavit AI smyčku (i27). Osm nálezů byly testovací mezery u záruk
+z předchozích kol; jedna z nich (i45) odhalila i skutečnou díru ve validaci savu.
+
+| Nález | Sev | Podstata | Oprava |
+|---|---|---|---|
+| i1 | high | `betlHoles` počítal díry obráceně — nejnižší karty bral jako díry a eso nikdy | `if (mine[i] > i) holes += 1`; test: 7‑8‑9 = 0 děr, osamocené eso = 1 |
+| i5 | high | v licitaci nešlo **držet** stejný závazek — dřívější mluvčí musel vždy přebíjet výš | `mayHoldEqual` podle pořadí mluvení od forhonta; test drží i zamítá |
+| i6 | high | člověk byl nucen ohlásit **každou** hlášku — přitom je to volba (body vs. prozrazení páru) | popup na stole „Ohlásit (20/40)" / „Zahrát bez hlášky"; auto jen když je legální jedna varianta |
+| i10 | high | `?seed=0` kvůli `\|\| 1` dalo prvním dvěma hrám tentýž seed a slíbený determinismus neplatil | prostý `seedCounter++`, náhodný seed bez přepisu nuly |
+| i2 | low | `playPolicy` přebíjel vlastního parťáka na posledním místě ve štychu a nemazal mu body | rozhoduje strana vítězné karty (`mineWinning`), ne jen „kdo teď vede" |
+| i7 | medium | **regrese z i6 (3. kolo)**: hlášená sedma se směla vzorkovat do talonu, i když je prokazatelně v ruce | deklarace je až PO odhozu ⇒ sedma je nepodmíněné `mustHave` |
+| i8 | medium | **regrese z i5 (3. kolo)**: veřejně otočená karta „z lidu" se v akci nese jen jako `'from-people'`, takže ji AI ztratila | nové pole `revealedTrump` ve stavu i v `PlayerView` (engine → view → determinizace → sav) |
+| i27 | medium | `dispatch()` rušil běžící požadavek AI **před** validací — dvojklik tak nelegální akcí zabil AI smyčku napořád | `apply()` nejdřív, `cancelPending()` až po něm; test na dvojklik |
+| i20 | medium | analytika `count.js` bez SRI a nikde žádná CSP | verzovaná `count.v4.js` + `integrity`/`crossorigin` a `<meta>` CSP (skripty jen self + gc.zgo.at, `object-src 'none'`) |
+| i21 | low | nastavení z localStorage se rozprostřelo do stavu bez validace | každá hodnota se ověřuje proti povolené množině, jinak výchozí |
+| i22 | low | obnovený `contract` se nekontroloval strukturálně | `isContract()` (mód, rozsah trumfu, sedadla) + rozsah `revealedTrump` |
+| i29 | low | watchdog měřil i **start** workeru, takže první požadavek mohl zemřít dřív, než worker vůbec začal | `SPAWN_GRACE_MS` navíc pro první požadavek na čerstvém workeru |
+| i30 | low | 32 souběžných `sharp` zápisů + kontrola „stačí počet souborů" uměly natrvalo zakešovat uříznuté WebP | zápis do `.tmp` + `renameSync`, dávky po 4, jmenovitá kontrola všech 32 karet, úklid zbytků |
+| i36, i44 | high | `isHandResult` (bariéra proti XSS ze savu) neprošel testem ani jednou — archiv byl v testech vždy prázdný | 6 negativních testů (číselné `note`, rozbité `components`, cizí kontrakt, řetězec místo výsledku) + archiv musí být **zero‑sum** |
+| i43 | high | test escapování volal jen `esc()`, ne skutečné sinky | `targetLabel`/`bidLabel` exportovány a testovány přímo |
+| i49 | high | oprava off‑by‑one ve jménu fleku nebyla nikde připíchnutá | `bubbleText` exportován; test na první/druhý/třetí flek |
+| i50 | high | větev house rule `talonOnTakeover: 'keep'` neměla test | scénář s převzetím betlem od obránce; „keep" → 10/10/10 a rovnou fleky, „retake" → 12 karet a odhoz |
+| i38 | medium | test watchdogu neověřoval hromadné odmítnutí (oba požadavky měly vlastní časovač) | druhý požadavek má dlouhý budget; pozorovaný důsledek = **oba** se opakují na čerstvém workeru |
+| i45 | medium | payload známé fáze se nevalidoval do hloubky — `typeof null === 'object'` propustil `fleks.levels = null` a obnova pak spadla v `legalActions` | `isRecord()` místo `typeof`, kontrola prvků `trick`/`played`; 4 negativní testy |
+| i47 | medium | determinizace se testovala jen po `deriveConstraints`, ne po umístění karet | 60 seedů přes `determinize()`: ukázaný trumf jen u volícího/v talonu, hlášená sedma vždy v ruce aktéra |
+
+`make verify` má nyní **37 PASS bloků**; smoke test potvrzuje, že CSP nic v prohlížeči nerozbila.

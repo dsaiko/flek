@@ -47,9 +47,11 @@ for (let i = 0; i < 200; i += 1) {
     }
   };
 
-  // varovný popup (rizikový odhoz) je potřeba potvrdit, ne ho brát za konec hry
+  // popup na stole (varování u odhozu, volba hlášky) je potřeba potvrdit,
+  // ne ho brát za konec hry
   if ((await page.locator('.felt-panel.warn').count()) > 0) {
-    await page.click('[data-act="confirm"]');
+    const confirm = page.locator('[data-act="confirm"]');
+    await ((await confirm.count()) > 0 ? confirm : page.locator('[data-act="primary"]')).click();
     confirmedWarnings += 1;
     continue;
   }
