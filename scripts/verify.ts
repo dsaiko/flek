@@ -453,6 +453,8 @@ const KULE = 2 as const;
 
   let seedCounter = 100;
   let saves = 0;
+  /** akce, které ručně poslal test — cokoli navíc v historii udělal controller sám */
+  const dispatchedByTest: string[] = [];
   const mc = new MatchController(driver, {
     config: defaultConfig('voleny'),
     humanSeat: 0,
@@ -461,6 +463,7 @@ const KULE = 2 as const;
     seedSource: () => (seedCounter += 1),
     autosave: () => { saves += 1; },
     aiDelayMs: 0,
+    autoGood: true,
   });
 
   // odehraj 2 kompletní hry: člověk = heuristika volaná synchronně přes dispatch
@@ -474,18 +477,252 @@ const KULE = 2 as const;
       const actor = mc.actor();
       if (actor === 0) {
         const v = mc.humanView();
-        const rng = new Random(guard);
-        mc.dispatch(v.phase.name === 'tricks' ? playPolicy(v, rng) : decideAuction(v, 'easy', rng));
+        const legalHuman = mc.humanLegal();
+        const forced =
+          legalHuman.length === 1 &&
+          (legalHuman[0].type === 'good' ||
+            (legalHuman[0].type === 'bid' && legalHuman[0].bid === 'pass'));
+        if (forced) {
+          // NEdispatchovat ručně — vynucenou „dobrou" musí potvrdit maybeAutoGood
+          const before = mc.state.history.length;
+          for (let w = 0; w < 200 && mc.state.history.length === before; w += 1) await sleep(5);
+          assert.ok(mc.state.history.length > before, 'auto-dobrá nepotvrdila vynucenou akci');
+        } else {
+          const rng = new Random(guard);
+          const act = v.phase.name === 'tricks' ? playPolicy(v, rng) : decideAuction(v, 'easy', rng);
+          dispatchedByTest.push(JSON.stringify(act));
+          mc.dispatch(act);
+        }
       } else {
         await sleep(2); // AI jede asynchronně přes driver
       }
     }
   }
   assert.equal(mc.state.handResults.length, 2);
-  assert.ok(saves > 20, 'autosave se nevolá');
+  // každé apply → přesně jeden autosave (žádné magické číslo závislé na pravidlech)
+  assert.equal(saves, mc.state.history.length, 'autosave neodpovídá počtu akcí');
+  // i28: lidských „dobrá"/pasů je v historii víc, než kolik jich poslal test →
+  // rozdíl potvrdila auto-dobrá (počítáme MNOŽSTVÍ, akce jsou hodnotově identické)
+  const isForcedish = (a: { type: string; seat?: number; bid?: unknown }): boolean =>
+    a.seat === 0 && (a.type === 'good' || (a.type === 'bid' && a.bid === 'pass'));
+  const inHistory = mc.state.history.filter(isForcedish).length;
+  const fromTest = dispatchedByTest.filter((j) => isForcedish(JSON.parse(j))).length;
+  assert.ok(inHistory > fromTest, `maybeAutoGood se nikdy neuplatnil (${inHistory} vs ${fromTest})`);
   assert.equal(mc.state.ledger[0] + mc.state.ledger[1] + mc.state.ledger[2], 0);
   mc.stop();
   console.log('PASS match controller — 2 hry: člověk (dispatch) + 2 AI (async driver), autosave');
+}
+
+
+// ── regrese: nálezy z fixpoint review-code (2026-08-24) ──────────────────────
+
+{
+  const { initialState, apply } = await import('../src/lib/rules/engine');
+  const { legalActions, actionMatchesLegal } = await import('../src/lib/rules/legal');
+  const { view } = await import('../src/lib/rules/view');
+  const { defaultConfig } = await import('../src/lib/rules/sazby');
+  const { discardWarnings } = await import('../src/lib/ui/discardWarnings');
+  const { pointsOf: pts2, card: mk, CERVENE: CERV, KRAL: K, SVRSEK: SV, R7: S7, ESO: A } =
+    await import('../src/lib/cards');
+  type St = ReturnType<typeof initialState>;
+  type Act = ReturnType<typeof legalActions>[number];
+
+  const sleep2 = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+  const actorOf = (st: St): 0 | 1 | 2 | null => {
+    for (const seat of [0, 1, 2] as const) if (legalActions(view(st, seat)).length > 0) return seat;
+    return null;
+  };
+  const actsOf = (st: St): Act[] => {
+    const seat = actorOf(st);
+    return seat === null ? [] : legalActions(view(st, seat));
+  };
+
+  // ── i27: „dobrá hra se nehraje" — přesná výplata i vypnutelnost ───────────
+  const playToDecision = (cfg: ReturnType<typeof defaultConfig>, seed: number, flek = false): St => {
+    let st: St = initialState(cfg, 2);
+    st = apply(st, { type: 'deal', seed });
+    let guard = 0;
+    while (st.phase.name !== 'scored' && st.phase.name !== 'tricks') {
+      if ((guard += 1) > 200) throw new Error('scénář prosté hry se zasekl');
+      const acts = actsOf(st);
+      const pick =
+        acts.find((a) => a.type === 'declare' && a.mode === 'hra' && !a.sedma && !a.kilo) ??
+        acts.find((a) => a.type === 'takeover' && a.claim === 'good') ??
+        (flek ? acts.find((a) => a.type === 'flek' && a.target === 'hra') : undefined) ??
+        acts.find((a) => a.type === 'good') ??
+        acts.find((a) => a.type === 'discard' && a.cards.every((c) => pts2(c) === 0)) ??
+        acts.find((a) => a.type === 'choose-trump' && a.card !== 'from-people') ??
+        acts[0];
+      st = apply(st, pick);
+    }
+    return st;
+  };
+
+  const cfgOn = defaultConfig('voleny');
+  const settled = playToDecision(cfgOn, 3);
+  assert.equal(settled.phase.name, 'scored', 'neflekovaná prostá hra se nemá hrát');
+  if (settled.phase.name === 'scored') {
+    const r = settled.phase.result;
+    assert.equal(r.components.length, 1, 'auto-zúčtování má právě jednu komponentu');
+    const comp = r.components[0];
+    const cerveny = r.contract.trump === CERV ? cfgOn.sazby.cervenyMultiplier : 1;
+    const amount = cfgOn.sazby.hra * cerveny;
+    assert.equal(comp.target, 'hra');
+    assert.equal(comp.wonBy, 'declarer');
+    assert.equal(comp.flekMultiplier, 1);
+    assert.equal(comp.amount, amount, 'auto-zúčtování platí základní sazbu');
+    const d = r.contract.declarer;
+    assert.equal(r.delta[d], 2 * amount, 'aktér inkasuje od obou soupeřů');
+    assert.equal(r.delta[0] + r.delta[1] + r.delta[2], 0);
+    assert.deepEqual(settled.ledger, r.delta);
+  }
+
+  // flek vynutí sehrávku (jinak by se flek „zdarma" pohltil základní sazbou)
+  const flekked = playToDecision(cfgOn, 3, true);
+  assert.equal(flekked.phase.name, 'tricks', 'flekovaná hra se musí hrát');
+
+  // přepínač vypnutý → hraje se vždy
+  const offSettled = playToDecision({ ...cfgOn, autoSettlePlainHra: false }, 3);
+  assert.equal(offSettled.phase.name, 'tricks', 's vypnutým pravidlem se hra musí hrát');
+  console.log('PASS regrese i27 — auto-zúčtování: výplata, flek vynutí hru, vypnutelnost');
+
+  // ── i1: aktér smí přebrat vlastní hru durchem a nárok se nesmí zahodit ────
+  {
+    let st: St = initialState(cfgOn, 2);
+    st = apply(st, { type: 'deal', seed: 11 });
+    // volba trumfu + odhoz + prostá hra
+    const step = (pred: (a: Act) => boolean, label: string) => {
+      const acts = actsOf(st);
+      const a = acts.find(pred);
+      assert.ok(a, `scénář i1: chybí akce ${label}`);
+      st = apply(st, a as Act);
+    };
+    step((a) => a.type === 'choose-trump' && a.card !== 'from-people', 'choose-trump');
+    step((a) => a.type === 'discard' && a.cards.every((c) => pts2(c) === 0), 'discard');
+    step((a) => a.type === 'declare' && a.mode === 'hra' && !a.sedma && !a.kilo, 'declare hra');
+    const declarer = st.contract?.declarer;
+    // obránce přebere betlem
+    step((a) => a.type === 'takeover' && a.claim === 'betl', 'takeover betl');
+    // původní aktér přebere durchem
+    const durchTaker = actorOf(st);
+    step((a) => a.type === 'takeover' && a.claim === 'durch', 'takeover durch');
+    // zbytek pasuje
+    let guard = 0;
+    while (st.phase.name === 'takeover') {
+      if ((guard += 1) > 10) throw new Error('scénář i1 se zasekl');
+      step((a) => a.type === 'takeover' && a.claim === 'good', 'takeover good');
+    }
+    assert.equal(st.contract?.mode, 'durch', 'durch nároku se nesmí zahodit');
+    assert.equal(st.contract?.declarer, durchTaker, 'aktérem je ten, kdo durch ohlásil');
+    assert.equal(st.contract?.trump, null, 'durch nemá trumf');
+    void declarer;
+    console.log('PASS regrese i1 — převzetí durchem (i vlastní hry) se zachová');
+  }
+
+  // ── i2/i6/i7: v licitovaném nesmí žádný legální odhoz zamknout deklaraci ──
+  {
+    let checkedDiscards = 0;
+    for (let seed = 1; seed <= 40; seed += 1) {
+      let st: St = initialState(defaultConfig('licitovany'), 2);
+      st = apply(st, { type: 'deal', seed });
+      let guard = 0;
+      // dolicituj: kdo může, přihodí nejvyšší dostupný závazek (stresuje sedmy)
+      while (st.phase.name === 'bidding') {
+        if ((guard += 1) > 40) throw new Error('licitace se zasekla');
+        const acts = actsOf(st);
+        const bid = seed % 2 === 0
+          ? acts.filter((a) => a.type === 'bid' && a.bid !== 'pass').pop()
+          : acts.find((a) => a.type === 'bid' && a.bid !== 'pass');
+        st = apply(st, bid ?? (acts.find((a) => a.type === 'bid') as Act));
+      }
+      if (st.phase.name !== 'discard-talon') continue;
+      const discards = actsOf(st);
+      assert.ok(discards.length > 0, `seed ${seed}: žádný legální odhoz`);
+      for (const d of discards) {
+        const after = apply(st, d);
+        const acts = actsOf(after);
+        assert.ok(
+          acts.length > 0,
+          `seed ${seed}: odhoz ${JSON.stringify(d)} zamkl fázi ${after.phase.name}`,
+        );
+        checkedDiscards += 1;
+      }
+    }
+    assert.ok(checkedDiscards > 100, 'málo prověřených odhozů');
+    console.log(`PASS regrese i2/i6/i7 — ${checkedDiscards} legálních odhozů, žádný deadlock`);
+  }
+
+  // ── i13: validace akcí nesmí ztrácet vnořená pole (bid) ──────────────────
+  {
+    const legalBids: Act[] = [
+      { type: 'bid', seat: 0, bid: { kind: 'sedma', cervena: false } },
+      { type: 'bid', seat: 0, bid: 'pass' },
+    ];
+    assert.equal(
+      actionMatchesLegal({ type: 'bid', seat: 0, bid: { kind: 'sedma', cervena: false } }, legalBids),
+      true,
+    );
+    assert.equal(
+      actionMatchesLegal({ type: 'bid', seat: 0, bid: { kind: 'betl', cervena: false } }, legalBids),
+      false,
+      'jiný závazek nesmí projít jako shodný',
+    );
+    assert.equal(
+      actionMatchesLegal({ type: 'bid', seat: 0, bid: { kind: 'sedma', cervena: true } }, legalBids),
+      false,
+      'červená varianta nesmí projít jako nečervená',
+    );
+    console.log('PASS regrese i13 — kanonické porovnání akcí včetně vnořeného bid');
+  }
+
+
+  // ── i8/i20: requestId se nesmí opakovat mezi controllery (sdílený driver) ─
+  {
+    const { MatchController: MC } = await import('../src/lib/match/controller');
+    const seen: number[] = [];
+    const spyDriver = {
+      think: async (req: { requestId: number; view: unknown }) => {
+        seen.push(req.requestId);
+        // odpověď nikdy nepřijde — simuluje běžící výpočet zrušeného požadavku
+        return new Promise<never>(() => {});
+      },
+      cancel: () => {},
+    };
+    const mkCtrl = () =>
+      new MC(spyDriver as never, {
+        config: defaultConfig('voleny'), humanSeat: 0, difficulty: 'easy', budgetMs: 0,
+        seedSource: () => 42, aiDelayMs: 0,
+      });
+    for (let i = 0; i < 3; i += 1) {
+      const c = mkCtrl();
+      c.dealNext();
+      // dotlač stav k tahu AI, ať driver dostane požadavek
+      let guard = 0;
+      while (c.actor() === 0 && guard++ < 50) {
+        const acts = c.humanLegal();
+        c.dispatch(acts[0]);
+      }
+      await sleep2(10);
+      c.stop();
+    }
+    assert.ok(seen.length >= 3, `driver dostal jen ${seen.length} požadavků`);
+    assert.equal(new Set(seen).size, seen.length, `requestId se opakují: ${seen.join(',')}`);
+    console.log(`PASS regrese i8/i20 — ${seen.length} požadavků, žádná kolize requestId`);
+  }
+
+  // ── i30: varování před odhozem ──────────────────────────────────────────
+  {
+    const hand = [mk(CERV, K), mk(CERV, SV), mk(1, A), mk(2, S7), mk(3, S7)];
+    assert.deepEqual(discardWarnings(hand, [mk(2, S7), mk(3, S7)]), [], 'nezávadný odhoz nevaruje');
+    assert.deepEqual(discardWarnings(hand, [mk(1, A), mk(2, S7)]), [{ kind: 'valuable' }]);
+    assert.deepEqual(discardWarnings(hand, [mk(CERV, K), mk(2, S7)]), [{ kind: 'marriage', suit: CERV }]);
+    assert.deepEqual(
+      discardWarnings(hand, [mk(CERV, K), mk(CERV, SV)]),
+      [{ kind: 'marriage', suit: CERV }],
+      'odhoz obou půlek hlášky musí varovat také',
+    );
+    console.log('PASS regrese i30 — varování odhozu (eso/desítka, rozbitá i pohřbená hláška)');
+  }
 }
 
 console.log('OK: vše prošlo');

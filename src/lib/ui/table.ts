@@ -14,6 +14,7 @@ import { forhont } from '../rules/types';
 import { view } from '../rules/view';
 import { backSrc, cardName, cardSrc, suitIcon, suitName, type Pattern } from './cardAssets';
 import { aiNames, compLabel, currentLang, flekName, fmtMoney, marriageWarn, t } from './i18n';
+import { discardWarnings } from './discardWarnings';
 
 export interface TableCallbacks {
   onAction: (action: PlayerAction) => void;
@@ -495,15 +496,9 @@ export class TableUI {
             );
             if (!action) return;
             // rizikové odhozy potvrdit popupem vestavěným do stolu
-            const warns: string[] = [];
-            if (cards.some((c) => pointsOf(c) > 0)) warns.push(t('talonWarn'));
-            const breaks = cards.find((c) => {
-              const r = rankOf(c);
-              if (r !== KRAL && r !== SVRSEK) return false;
-              const partner = mkCard(suitOf(c), r === KRAL ? SVRSEK : KRAL);
-              return v.hand.includes(partner) && !cards.includes(partner);
-            });
-            if (breaks !== undefined) warns.push(marriageWarn(suitOf(breaks)));
+            const warns = discardWarnings(v.hand, cards).map((w) =>
+              w.kind === 'valuable' ? t('talonWarn') : marriageWarn(w.suit),
+            );
             if (warns.length > 0) this.showConfirmPopup(warns, t('discardConfirm'), () => this.cb.onAction(action));
             else this.cb.onAction(action);
           }, { primary: true, disabled: this.selected.size !== 2, id: 'discard-confirm' });
@@ -807,13 +802,14 @@ function bubbleText(a: PlayerAction, state: GameState): string | null {
     case 'takeover':
       return a.claim === 'good' ? t('good') : `${t(a.claim)}!`;
     case 'flek': {
-      let level = 0;
+      // historie už obsahuje TENTO flek — jeho jméno je tedy na indexu count-1
+      let count = 0;
       for (let i = state.history.length - 1; i >= 0; i -= 1) {
         const h = state.history[i];
         if (h.type === 'deal') break;
-        if (h.type === 'flek' && h.target === a.target) level += 1;
+        if (h.type === 'flek' && h.target === a.target) count += 1;
       }
-      return `${flekName(level)} ${t('na')} ${targetLabel(a.target)}`;
+      return `${flekName(Math.max(0, count - 1))} ${t('na')} ${targetLabel(a.target)}`;
     }
     case 'good':
       return t('good');

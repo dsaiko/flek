@@ -45,8 +45,14 @@ for (let i = 0; i < 200; i += 1) {
     }
   };
 
+  // varovný popup (rizikový odhoz) je potřeba potvrdit, ne ho brát za konec hry
+  if ((await page.locator('.felt-panel.warn').count()) > 0) {
+    await page.click('[data-act="confirm"]');
+    continue;
+  }
+
   // výsledková obrazovka (panel na stole) → konec smoke testu
-  if ((await page.locator('.felt-panel').count()) > 0) {
+  if ((await page.locator('.felt-panel:not(.warn)').count()) > 0) {
     await page.screenshot({ path: join(outDir, 'smoke-5-result.png'), clip: await tableClip() });
     console.log('OK: dohráno až k zúčtování');
     break;

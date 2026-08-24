@@ -108,6 +108,12 @@ function biddingHolder(state: GameState & { phase: { name: 'bidding' } }): Seat 
   return forhont(state.dealer);
 }
 
+/** Sedadla v pořadí mluvení (od forhonta), bez vyjmenovaných. */
+function speakingOrder(dealer: Seat, skip: Seat): Seat[] {
+  const start = forhont(dealer);
+  return [start, nextSeat(start), nextSeat(nextSeat(start))].filter((s) => s !== skip);
+}
+
 function startFleks(state: GameState, contract: Contract): GameState {
   const fleks: FlekState = {
     levels: {},
@@ -137,9 +143,13 @@ function resolveTakeover(state: GameState, standing: Standing): GameState {
   const original = state.contract;
   if (!original) throw new InvariantError('takeover bez kontraktu');
 
-  if (standing.declarer === original.declarer) return startFleks(state, original);
+  // nikdo nepřihodil vyšší závazek — hraje se původní kontrakt beze změny
+  if (standing.declarer === original.declarer && standing.mode === original.mode) {
+    return startFleks(state, original);
+  }
 
-  // hru přebral obránce betlem/durchem
+  // hru přebral betlem/durchem obránce — NEBO ji přebral sám aktér
+  // (po cizím betlu smí ohlásit durch; jeho nárok se nesmí zahodit)
   const contract: Contract = {
     mode: standing.mode as 'betl' | 'durch',
     trump: null,
@@ -149,8 +159,9 @@ function resolveTakeover(state: GameState, standing: Standing): GameState {
     dveSedmy: false,
   };
 
-  if (state.config.talonOnTakeover === 'keep') {
-    return startFleks({ ...state, talonOwner: null }, contract);
+  // původní aktér už talon odhodil a drží 10 karet; talon znovu nebere
+  if (standing.declarer === original.declarer || state.config.talonOnTakeover === 'keep') {
+    return startFleks(state, contract);
   }
 
   // retake: nový aktér zvedne talon (vidí ho) a odhodí dvě karty
@@ -322,8 +333,8 @@ function reduce(state: GameState, action: PlayerAction): GameState {
       };
       const s = { ...state, contract };
       if (state.config.variant === 'voleny' && st.mode === null) {
-        // po deklaraci mohou obránci hru přebrat betlem/durchem
-        const toAct = defendersOf(action.seat)[0];
+        // po deklaraci mohou obránci hru přebrat betlem/durchem (v pořadí mluvení)
+        const toAct = speakingOrder(state.dealer, action.seat)[0];
         return {
           ...s,
           phase: {
@@ -339,7 +350,7 @@ function reduce(state: GameState, action: PlayerAction): GameState {
       if (phase.name !== 'takeover') throw new InvariantError('takeover mimo fázi');
       if (action.claim === 'good') {
         const passed = [...phase.passed, action.seat];
-        const others = ([0, 1, 2] as Seat[]).filter((x) => x !== phase.standing.declarer);
+        const others = speakingOrder(state.dealer, phase.standing.declarer);
         if (others.every((o) => passed.includes(o))) {
           return resolveTakeover(state, phase.standing);
         }
@@ -348,7 +359,7 @@ function reduce(state: GameState, action: PlayerAction): GameState {
       }
       // vyšší nárok: nový držitel, pasy se ruší, slovo dostávají ostatní
       const standing: Standing = { declarer: action.seat, mode: action.claim, trump: null, bid: null };
-      const others = ([0, 1, 2] as Seat[]).filter((x) => x !== action.seat);
+      const others = speakingOrder(state.dealer, action.seat);
       return { ...state, phase: { name: 'takeover', standing, passed: [], toAct: others[0] } };
     }
 

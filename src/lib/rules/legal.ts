@@ -52,19 +52,60 @@ export function legalActions(v: PlayerView): PlayerAction[] {
       if (me !== phase.toAct) break;
       out.push({ type: 'bid', seat: me, bid: 'pass' });
       const minRank = phase.best ? bidRank(phase.best) : 0;
+      // Sedmový závazek smí slíbit jen ten, kdo příslušnou sedmu drží — jinak
+      // by ho ve fázi `declare` nemohl pokrýt a hra by se zasekla bez legální akce.
+      const sevens = v.hand.filter((c) => rankOf(c) === R7);
+      const hasCervenaSeven = v.hand.includes(card(CERVENE, R7));
       for (const b of ALL_BIDS) {
         if (bidRank(b) <= minRank) continue;
         if (!v.config.enableDveSedmy && (b.kind === 'dve-sedmy' || b.kind === 'dve-sedmy-sto')) continue;
+        const needsSeven = b.kind === 'sedma' || b.kind === 'sto-sedma';
+        const needsTwoSevens = b.kind === 'dve-sedmy' || b.kind === 'dve-sedmy-sto';
+        if ((needsSeven || needsTwoSevens) && (b.cervena ? !hasCervenaSeven : sevens.length === 0)) continue;
+        if (needsTwoSevens && sevens.length < 2) continue;
         out.push({ type: 'bid', seat: me, bid: b });
       }
       break;
     }
 
     case 'discard-talon': {
-      if (me !== phase.standing.declarer || v.hand.length !== 12) break;
+      const stDiscard = phase.standing;
+      if (me !== stDiscard.declarer || v.hand.length !== 12) break;
+
+      /*
+       * Ve voleném se odhazuje PŘED ohlášením, takže se nabízí vše — kdo si
+       * odhodí eso/desítku, prostě pak smí hrát jen betl/durch (UI varuje).
+       * V licitovaném je ale mód dán závazkem: u barevného závazku by odhoz
+       * esa/desítky (nebo poslední potřebné sedmy) nechal fázi `declare` bez
+       * jediné legální akce — proto se takové odhozy nenabízejí.
+       */
+      const bidD = stDiscard.bid;
+      const colourCommitment = v.config.variant === 'licitovany' && stDiscard.mode === null;
+      const needSedmaD = bidD !== null && (bidD.kind === 'sedma' || bidD.kind === 'sto-sedma'
+        || bidD.kind === 'dve-sedmy' || bidD.kind === 'dve-sedmy-sto');
+      const allowedTrumps: Suit[] = bidD?.cervena
+        ? [CERVENE]
+        : bidD === null
+          ? ([0, 1, 2, 3] as Suit[])
+          : ([0, 1, 2, 3] as Suit[]).filter((s) => s !== CERVENE);
+
+      const discardOk = (pair: readonly [Card, Card]): boolean => {
+        if (!colourCommitment) return true;
+        if (pair.some(isValuable)) return false;
+        const rest = v.hand.filter((c) => c !== pair[0] && c !== pair[1]);
+        const sevensLeft = allowedTrumps.filter((s) => rest.includes(card(s, R7)));
+        if (needSedmaD && sevensLeft.length === 0) return false;
+        if (v.config.talonForbidsTrump) {
+          const candidates = needSedmaD ? sevensLeft : allowedTrumps;
+          if (!candidates.some((s) => !pair.some((c) => suitOf(c) === s))) return false;
+        }
+        return true;
+      };
+
       for (let i = 0; i < v.hand.length; i += 1) {
         for (let j = i + 1; j < v.hand.length; j += 1) {
-          out.push({ type: 'discard', seat: me, cards: [v.hand[i], v.hand[j]] });
+          const pair: [Card, Card] = [v.hand[i], v.hand[j]];
+          if (discardOk(pair)) out.push({ type: 'discard', seat: me, cards: pair });
         }
       }
       break;
@@ -206,6 +247,18 @@ export function legalActions(v: PlayerView): PlayerAction[] {
   return out;
 }
 
+/**
+ * Stabilní serializace nezávislá na pořadí klíčů — REKURZIVNĚ.
+ * (`JSON.stringify(o, keys)` filtruje klíče ve všech úrovních, takže by
+ * vnořený `bid` přišel o obsah a jakákoli licitace by prošla jako jakákoli jiná.)
+ */
+function canonical(value: unknown): string {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value) ?? 'null';
+  if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
+  const o = value as Record<string, unknown>;
+  return `{${Object.keys(o).sort().map((k) => `${JSON.stringify(k)}:${canonical(o[k])}`).join(',')}}`;
+}
+
 /** Porovnání akcí pro validaci v apply (deal se porovnává bez seedu/configu). */
 export function actionMatchesLegal(action: PlayerAction, legal: PlayerAction[]): boolean {
   if (action.type === 'deal') return legal.some((l) => l.type === 'deal');
@@ -213,8 +266,7 @@ export function actionMatchesLegal(action: PlayerAction, legal: PlayerAction[]):
     const o: Record<string, unknown> = { ...a };
     if (a.type === 'discard') o.cards = [...a.cards].sort((x, y) => x - y);
     if (a.type === 'declare' && a.dveSedmy === undefined) o.dveSedmy = false;
-    // stabilní serializace nezávislá na pořadí klíčů
-    return JSON.stringify(o, Object.keys(o).sort());
+    return canonical(o);
   };
   const target = norm(action);
   return legal.some((l) => norm(l) === target);

@@ -15,6 +15,14 @@ import { legalActions } from '../rules/legal';
 import type { GameState, PlayerAction, PlayerView, RulesConfig, Seat } from '../rules/types';
 import { view } from '../rules/view';
 
+/*
+ * requestId musí být unikátní napříč VŠEMI controllery: main.ts sdílí jeden
+ * worker driver mezi zápasy, takže per-instance počítadlo od nuly kolidovalo —
+ * odpověď na zrušený požadavek starého zápasu se spárovala s novým a `apply`
+ * ji odmítl (zaseknutá hra). Modulové počítadlo kolizi vylučuje.
+ */
+let nextRequestId = 0;
+
 export interface ThinkRequestMsg {
   requestId: number;
   view: PlayerView;
@@ -49,9 +57,10 @@ export class MatchController {
   private readonly opts: MatchOptions;
   private readonly driver: AiDriver;
   private listeners: ((state: GameState) => void)[] = [];
-  private requestId = 0;
   private pendingRequest: number | null = null;
   private stopped = false;
+  /** kolikrát po sobě selhalo použití AI tahu (ochrana proti smyčce) */
+  private aiFailures = 0;
 
   constructor(driver: AiDriver, opts: MatchOptions, resumeState?: GameState) {
     this.driver = driver;
@@ -135,7 +144,7 @@ export class MatchController {
     const seat = this.actor();
     if (seat === null || seat === this.opts.humanSeat) return;
 
-    const requestId = (this.requestId += 1);
+    const requestId = (nextRequestId += 1);
     this.pendingRequest = requestId;
     const v = view(this.state, seat);
     const seed = Random.derive(this.state.seed, this.state.history.length * 3 + seat);
@@ -162,7 +171,30 @@ export class MatchController {
     // opožděná odpověď (cancel/restart/nové rozdání) se zahazuje
     if (this.pendingRequest !== requestId || this.stopped) return;
     this.pendingRequest = null;
-    this.state = apply(this.state, action);
+
+    try {
+      this.state = apply(this.state, action);
+      this.aiFailures = 0;
+    } catch (e) {
+      // Tah už není legální (stav se pohnul, cizí odpověď…). Zkus heuristiku
+      // na hlavním vlákně a hlavně nedopusť, aby smyčka umřela a hra zamrzla.
+      console.error('AI tah odmítnut, zkouším heuristiku:', e);
+      this.aiFailures += 1;
+      if (this.aiFailures > 3) {
+        console.error('AI opakovaně selhává, smyčka se zastavuje');
+        return;
+      }
+      try {
+        const actor = this.actor();
+        if (actor === null || actor === this.opts.humanSeat) return;
+        this.state = apply(this.state, playPolicy(view(this.state, actor), new Random(seed + this.aiFailures)));
+        this.aiFailures = 0;
+      } catch (e2) {
+        console.error('Heuristický fallback také selhal:', e2);
+        void this.maybeRunAi(); // ještě jeden pokus s čerstvým požadavkem
+        return;
+      }
+    }
     this.afterChange();
   }
 

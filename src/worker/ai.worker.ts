@@ -10,12 +10,19 @@ import { think } from '../lib/ai/think';
 import type { FromWorker, ToWorker } from './messages';
 
 const cancelledIds = new Set<number>();
+/** requestId je globálně rostoucí, takže staré položky už nikdy nesedí — drž jen ocas. */
+const MAX_CANCELLED = 64;
 
 self.onmessage = (ev: MessageEvent<ToWorker>) => {
   const msg = ev.data;
 
   if (msg.type === 'cancel') {
     cancelledIds.add(msg.requestId);
+    while (cancelledIds.size > MAX_CANCELLED) {
+      const oldest = cancelledIds.values().next().value;
+      if (oldest === undefined) break;
+      cancelledIds.delete(oldest);
+    }
     return;
   }
 

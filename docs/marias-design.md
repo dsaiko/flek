@@ -703,3 +703,29 @@ neoprávněné zamítnuty:
 
 Zamítnutí judge (52 nálezů) jsem přezkoumal namátkou a souhlasím s nimi — typicky duplicity,
 spekulace bez konkrétního selhání, nebo restaty už zdokumentovaných rozhodnutí.
+
+## 12. Fixpoint review kódu — validace nálezů (2026-08-24)
+
+Druhá revize (fixpoint `review-code`, 3 revizoři × 4 lens: bugs / concurrency / security /
+tests, 35 nálezů, 17 zamítl judge). Zbylých **18 otevřených jsem prošel proti kódu a všechny
+potvrdil jako reálné — všechny opraveny**, každý s cíleným regresním testem:
+
+| Nález | Sev | Podstata | Oprava |
+|---|---|---|---|
+| i1 | high | aktér smí po cizím betlu ohlásit durch, ale `resolveTakeover` porovnával jen `declarer` → nárok se zahodil a hra se skórovala jako barevná | porovnání i `mode`; vlastní převzetí talon znovu nebere |
+| i2, i6 | high | v licitovaném šlo odhodit eso/desítku → `declare` bez jediné legální akce (deadlock, betl/durch fallback je jen pro volený) | odhozy u barevného závazku filtruje `discard-talon` |
+| i7 | high | licitace nabízela sedmu i bez sedmy v ruce → deklaraci nešlo pokrýt | sedmový závazek smí slíbit jen držitel příslušné sedmy |
+| i8, i20 | high | `requestId` se počítal per-controller, ale worker driver je sdílený → odpověď zrušeného zápasu se spárovala s novým a `apply` ji odmítl (zamrznutí) | modulové globální počítadlo |
+| i22 | medium | `apply` v fire-and-forget AI smyčce bez `try/catch` → jedna odmítnutá akce zabila AI navždy | ošetřeno + heuristický fallback + strop opakování |
+| i27 | high | test auto-zúčtování byl tautologický (prošel i s vadnou podmínkou) | assert na přesnou výplatu, flek vynutí sehrávku, test s `autoSettlePlainHra: false` |
+| i13 | medium | `JSON.stringify(o, keys)` filtruje klíče i ve vnořených objektech → `bid` se porovnával prázdný, jakákoli licitace prošla jako jakákoli jiná | rekurzivní kanonická serializace |
+| i3 | medium | bublina fleku byla o stupeň výš („Re!" u prvního fleku) | index `count-1` |
+| i4 | medium | AI v licitovaném brala první nabídnutou deklaraci = naslepo červenou (dvojnásobné sazby) | `trumpScore` + volba nejlepší barvy |
+| i10 | medium | pořadí odpovědí na převzetí podle čísla sedadla | `speakingOrder` od forhonta |
+| i16 | medium | `loadMatch` castoval nevalidovaný JSON na `GameState` | strukturální kontrola |
+| i21 | medium | `cancelledIds` ve workeru rostl bez omezení | ocas 64 (id jsou rostoucí, staré nikdy nesedí) |
+| i28, i29, i30, i31 | medium/low | netestovaná auto-dobrá, smoke bral varovný popup za zúčtování, netestovaná varování odhozu, autosave assert na magickém čísle | testy: auto-dobrá přes rozdíl historie, `.felt-panel.warn` se potvrzuje, čistý modul `ui/discardWarnings.ts`, `saves === history.length` |
+
+Nové regresní testy v `scripts/verify.ts`: i27 (výplata + vypnutelnost), i1 (převzetí durchem),
+i2/i6/i7 (**2640 legálních odhozů, žádný deadlock**), i8/i20 (unikátní requestId), i13
+(kanonické porovnání), i30 (varování odhozu).

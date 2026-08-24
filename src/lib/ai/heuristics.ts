@@ -98,6 +98,15 @@ export function durchHoles(hand: readonly Card[]): number {
   return holes;
 }
 
+/**
+ * Hodnocení barvy jako trumfu při deklaraci: body + délka; červená je
+ * penalizovaná, protože zdvojnásobuje sazby (riziko i výhra).
+ */
+export function trumpScore(hand: readonly Card[], s: Suit): number {
+  const len = hand.filter((c) => suitOf(c) === s).length;
+  return estimatePoints(hand, s) + len * 8 - (s === CERVENE ? 30 : 0);
+}
+
 /** Nejlepší trumfová barva z daných karet (délka, síla, hlášky). */
 export function bestTrumpSuit(cards: readonly Card[], full: readonly Card[]): Suit {
   const suits = bySuit(full);
@@ -159,18 +168,35 @@ export function decideAuction(v: PlayerView, difficulty: Difficulty, rng: Random
       if (durchOpt && dh <= t.durchHoles) return durchOpt;
       if (betlOpt && bh <= t.betlHoles) return betlOpt;
 
-      // hra: sedma/kilo dle síly
-      const trump = st.trump;
+      // hra: v licitovaném se trumf volí až tady — vyber nejlepší barvu z ruky
+      // (jinak by AI vzala první nabídnutou, tj. naslepo červenou za dvojnásob)
+      const offeredTrumps = [
+        ...new Set(
+          declares.flatMap((a) =>
+            a.type === 'declare' && a.mode === 'hra' && a.trump !== undefined ? [a.trump] : [],
+          ),
+        ),
+      ];
+      const trump =
+        st.trump ??
+        (offeredTrumps.length > 0
+          ? offeredTrumps.reduce((best, s) => (trumpScore(hand, s) > trumpScore(hand, best) ? s : best))
+          : null);
+
       const wantSedma =
         trump !== null &&
         hand.includes(card(trump, R7)) &&
         hand.filter((c) => suitOf(c) === trump).length >= t.sedmaTrumps;
       const wantKilo = trump !== null && estimatePoints(hand, trump) >= t.kiloEstimate;
-      const match = declares.filter((a) => a.type === 'declare' && a.mode === 'hra')
-        .filter((a) => a.type === 'declare' && a.sedma === wantSedma && a.kilo === wantKilo);
+      const forChosenTrump = declares.filter(
+        (a) => a.type === 'declare' && a.mode === 'hra' && (a.trump === undefined || a.trump === trump),
+      );
+      const match = forChosenTrump.filter(
+        (a) => a.type === 'declare' && a.sedma === wantSedma && a.kilo === wantKilo,
+      );
       if (match.length > 0) return match[0];
-      const plain = declares.find((a) => a.type === 'declare' && a.mode === 'hra' && !a.sedma && !a.kilo);
-      return plain ?? declares[0];
+      const plain = forChosenTrump.find((a) => a.type === 'declare' && !a.sedma && !a.kilo);
+      return plain ?? forChosenTrump[0] ?? declares[0];
     }
 
     case 'bidding': {
