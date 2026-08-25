@@ -269,19 +269,22 @@ function reduce(state: GameState, action: PlayerAction): GameState {
       const bids = [...phase.bids, { seat: action.seat, bid: action.bid }];
       const withBids = { ...state, phase: { ...phase, bids } };
 
+      const withdrawn = withdrawnFromBidding(bids);
+
       if (action.bid !== 'pass') {
-        // nový držitel; slovo dostává další v pořadí (mimo držitele)
+        // nový držitel; slovo dostává další v pořadí (mimo držitele a odstoupené)
         return {
           ...withBids,
-          phase: { ...withBids.phase, best: action.bid, toAct: nextNonHolder(action.seat, action.seat) },
+          phase: {
+            ...withBids.phase, best: action.bid,
+            toAct: nextNonHolder(action.seat, action.seat, withdrawn),
+          },
         };
       }
 
-      // pass: konec, když oba ne-držitelé pasovali od posledního přihození
+      // pass: konec, jakmile odstoupili oba ne-držitelé (odstoupení je konečné)
       const holder = biddingHolder(withBids as GameState & { phase: { name: 'bidding' } });
-      let trailingPasses = 0;
-      for (let i = bids.length - 1; i >= 0 && bids[i].bid === 'pass'; i -= 1) trailingPasses += 1;
-      if (trailingPasses >= 2) {
+      if (withdrawn.length >= 2) {
         // vítěz zvedá talon a odhazuje
         const hands = withBids.hands.map((h) => h.slice()) as [Card[], Card[], Card[]];
         hands[holder] = sortHand(hands[holder].concat(withBids.talon));
@@ -305,7 +308,7 @@ function reduce(state: GameState, action: PlayerAction): GameState {
       }
       return {
         ...withBids,
-        phase: { ...withBids.phase, toAct: nextNonHolder(action.seat, holder) },
+        phase: { ...withBids.phase, toAct: nextNonHolder(action.seat, holder, withdrawn) },
       };
     }
 
@@ -528,10 +531,24 @@ function flekLevelsFromHistory(state: GameState): Partial<Record<import('./types
 }
 
 /** Další hráč na slovu v licitaci (přeskakuje aktuálního držitele). */
-function nextNonHolder(from: Seat, holder: Seat): Seat {
+/**
+ * Další na slovo v licitaci: přeskoč držitele i každého, kdo už pasoval.
+ * Kdo odstoupí, do licitace se nevrací (Obecná pravidla ČSM Čl. V/3).
+ */
+function nextNonHolder(from: Seat, holder: Seat, withdrawn: readonly Seat[] = []): Seat {
   let s = nextSeat(from);
-  if (s === holder) s = nextSeat(s);
+  for (let i = 0; i < 3; i += 1) {
+    if (s !== holder && !withdrawn.includes(s)) return s;
+    s = nextSeat(s);
+  }
   return s;
+}
+
+/** Sedadla, která už v této licitaci pasovala (a tím z ní vypadla). */
+function withdrawnFromBidding(bids: readonly { seat: Seat; bid: unknown }[]): Seat[] {
+  const out: Seat[] = [];
+  for (const b of bids) if (b.bid === 'pass' && !out.includes(b.seat)) out.push(b.seat);
+  return out;
 }
 
 // ── replay ───────────────────────────────────────────────────────────────────

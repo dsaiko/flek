@@ -11,7 +11,10 @@ import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { chromium } from 'playwright';
 
-const url = process.argv[2] ?? 'http://127.0.0.1:8083/';
+// Pevný seed: smoke musí být reprodukovatelný. Se seedem 10 vede odhoz, který
+// smoke volí (první a poslední karta v ruce), na varovný popup — bez toho by
+// kontrola „popup přežije přepnutí jazyka" nemusela vůbec proběhnout.
+const url = process.argv[2] ?? 'http://127.0.0.1:8083/?seed=10';
 const outDir = process.argv[3] ?? 'docs';
 mkdirSync(outDir, { recursive: true });
 
@@ -45,6 +48,7 @@ let shots = 2;
 let reachedSettlement = false;
 let confirmedWarnings = 0;
 let marriageChoices = 0;
+let popupSurvivedLang = false;
 for (let i = 0; i < 200; i += 1) {
   await page.waitForTimeout(350);
 
@@ -59,6 +63,29 @@ for (let i = 0; i < 200; i += 1) {
   // popup na stole je potřeba potvrdit, ne ho brát za konec hry.
   // U volby hlášky se střídá „ohlásit" a „bez hlášky", ať se odzkouší obě větve.
   if ((await page.locator('.felt-panel.warn').count()) > 0) {
+    /*
+     * Přepnutí jazyka překresluje stůl TÝMŽ stavem — otevřený popup i s
+     * čekající volbou to nesmí zahodit (jinak hráč klikl a nic se nestalo).
+     * Ověř to na prvním popupu, který v běhu nastane.
+     */
+    if (!popupSurvivedLang) {
+      await page.click('.langpill button[data-lang="en"]');
+      await page.waitForTimeout(250);
+      const stillThere = await page.locator('.felt-panel.warn').count();
+      if (stillThere === 0) {
+        console.error('CHYBA: přepnutí jazyka zahodilo otevřený popup i s čekající volbou');
+        await browser.close();
+        process.exit(1);
+      }
+      await page.click('.langpill button[data-lang="cs"]');
+      await page.waitForTimeout(250);
+      if ((await page.locator('.felt-panel.warn').count()) === 0) {
+        console.error('CHYBA: popup nepřežil přepnutí jazyka zpět');
+        await browser.close();
+        process.exit(1);
+      }
+      popupSurvivedLang = true;
+    }
     const confirm = page.locator('[data-act="confirm"]');
     if ((await confirm.count()) > 0) {
       await confirm.click();
@@ -108,6 +135,11 @@ await browser.close();
 console.log(
   `Screenshoty v ${outDir}/ (potvrzených varování: ${confirmedWarnings}, voleb hlášky: ${marriageChoices})`,
 );
+
+if (!popupSurvivedLang) {
+  console.error('CHYBA: v běhu nenastal žádný popup — kontrola přepnutí jazyka neproběhla');
+  process.exit(1);
+}
 
 if (cspViolations.length > 0) {
   console.error(`CHYBA: CSP zablokovala ${cspViolations.length} zdroj(ů):`);

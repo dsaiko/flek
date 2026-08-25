@@ -91,8 +91,17 @@ export class TableUI {
     // Přechod animuj jen tehdy, když stav opravdu pokročil právě o jednu akci.
     // (Překreslení TÍMŽ stavem — změna jazyka/vzoru karet — jinak přehrávalo
     //  animaci štychu znovu a s duplikovanou kartou.)
-    if (!prev || prev === state || prev.history.length + 1 !== state.history.length) return false;
     const a = state.history[state.history.length - 1];
+    /*
+     * Nový zápas dostane čerstvý controller, jehož historie začíná od nuly —
+     * `prev` ale patří tomu starému a je delší. Bez téhle výjimky by se
+     * rozdávání nového zápasu (i po změně varianty/obtížnosti) nikdy
+     * neanimovalo.
+     */
+    const newMatchDeal = a?.type === 'deal' && state.history.length === 1;
+    if (!newMatchDeal && (!prev || prev === state || prev.history.length + 1 !== state.history.length)) {
+      return false;
+    }
 
     // rozdání po vzoru FLEK!: karty se v ruce objevují postupně
     if (a?.type === 'deal') {
@@ -107,7 +116,7 @@ export class TableUI {
     }
 
     // „z lidu": otočená karta se ukazuje všem — chvíli ji vystav uprostřed
-    if (a?.type === 'choose-trump' && a.card === 'from-people' && prev.unseen.length > 0) {
+    if (a?.type === 'choose-trump' && a.card === 'from-people' && prev !== null && prev.unseen.length > 0) {
       const flipped = prev.unseen[0];
       const trickEl = $(this.root, '#trick');
       this.root.classList.add('animating');
@@ -124,7 +133,7 @@ export class TableUI {
     }
 
     // dohraný štych → pauza, zvýraznění vítězné karty, odlet do paklu vítěze
-    if (a?.type === 'play' && prev.phase.name === 'tricks' && prev.contract) {
+    if (a?.type === 'play' && prev !== null && prev.phase.name === 'tricks' && prev.contract) {
       const prevTrick = prev.phase.trick;
       if (prevTrick.length === 2) {
         const full = [...prevTrick, { seat: a.seat, card: a.card }];
@@ -762,13 +771,20 @@ const BID_LABEL_CS: Record<string, string> = {
   sedma: 'Sedma', sto: 'Sto', 'sto-sedma': 'Sto a sedma',
   betl: 'Betl', durch: 'Durch', 'dve-sedmy': 'Dvě sedmy', 'dve-sedmy-sto': 'Dvě sedmy a sto',
 };
+const BID_LABEL_DE: Record<string, string> = {
+  sedma: 'Sieben', sto: 'Hundert', 'sto-sedma': 'Hundert und Sieben',
+  betl: 'Bettel', durch: 'Durchmarsch', 'dve-sedmy': 'Zwei Siebener',
+  'dve-sedmy-sto': 'Zwei Siebener und Hundert',
+};
 const BID_LABEL_EN: Record<string, string> = {
   sedma: 'Seven', sto: 'Hundred', 'sto-sedma': 'Hundred & seven',
   betl: 'Betl', durch: 'Durch', 'dve-sedmy': 'Two sevens', 'dve-sedmy-sto': 'Two sevens & hundred',
 };
 
 export function bidLabel(b: { kind: string; cervena: boolean }): string {
-  const base = (currentLang() === 'en' ? BID_LABEL_EN : BID_LABEL_CS)[b.kind] ?? esc(b.kind);
+  const lang = currentLang();
+  const table = lang === 'en' ? BID_LABEL_EN : lang === 'de' ? BID_LABEL_DE : BID_LABEL_CS;
+  const base = table[b.kind] ?? esc(b.kind);
   return b.cervena ? `${base} ${suitIcon(0)}` : base;
 }
 

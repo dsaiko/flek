@@ -82,6 +82,7 @@ const STRINGS = {
     en: ['hearts', 'leaves', 'bells', 'acorns'],
     de: ['Herz', 'Grün', 'Schellen', 'Eichel'],
   },
+  drawZero: { cs: 'Bez změny', en: 'No change', de: 'Unverändert' },
   announceQuestion: {
     cs: 'Ohlásit hlášku?',
     en: 'Announce the marriage?',

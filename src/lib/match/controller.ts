@@ -141,7 +141,12 @@ export class MatchController {
     const legal = this.humanLegal();
     if (legal.length !== 1) return;
     const a = legal[0];
-    const forced = a.type === 'good' || (a.type === 'bid' && a.bid === 'pass');
+    // „dobrá" existuje ve třech podobách: fleky (`good`), licitace (`pass`)
+    // a převzetí (`takeover`/`good` — po cizím durchu už nic jiného nezbývá)
+    const forced =
+      a.type === 'good' ||
+      (a.type === 'bid' && a.bid === 'pass') ||
+      (a.type === 'takeover' && a.claim === 'good');
     if (!forced) return;
     const historyLen = this.state.history.length;
     setTimeout(() => {

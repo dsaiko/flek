@@ -54,7 +54,10 @@ export function settlementHtml(r: HandResult, v: PlayerView, deps: HtmlDeps): st
     .join('');
 
   const myDelta = r.delta[me];
-  const deltaLine = `<tr class="sum"><td>${esc(myDelta < 0 ? t('youLost') : t('youWon'))}:</td><td class="money">${esc(fmtMoney(Math.abs(myDelta)))}</td></tr>`;
+  // nula není výhra — „Vyhrál jsi 0,00 Kč" je nesmysl a nastane, když se
+  // komponenty přesně vyruší
+  const deltaWord = myDelta === 0 ? t('drawZero') : myDelta < 0 ? t('youLost') : t('youWon');
+  const deltaLine = `<tr class="sum"><td>${esc(deltaWord)}:</td><td class="money">${esc(fmtMoney(Math.abs(myDelta)))}</td></tr>`;
   const totalLine = `<tr><td>${esc(t('nowTotal'))}:</td><td class="money">${esc(fmtMoney(v.ledger[me]))}</td></tr>`;
   const others = ([0, 1, 2] as Seat[])
     .filter((x) => x !== me)

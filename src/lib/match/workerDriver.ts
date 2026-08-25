@@ -27,6 +27,8 @@ type Pending = {
   resolve: (r: { action: PlayerAction; stats: ThinkStats }) => void;
   reject: (e: Error) => void;
   timer: ReturnType<typeof setTimeout>;
+  /** Kolik času si požadavek vyžádal — další ve frontě na něj musí počkat. */
+  budgetMs: number;
 };
 
 export function createWorkerDriver(): AiDriver {
@@ -46,7 +48,15 @@ export function createWorkerDriver(): AiDriver {
 
   const spawn = (): Worker => {
     const w = new Worker(new URL('../../worker/ai.worker.ts', import.meta.url), { type: 'module' });
+    /*
+     * Handlery musí patřit SVÉ generaci workeru: retry posílá TÝŽ requestId,
+     * takže opožděná odpověď zabitého workeru by jinak vyřídila požadavek
+     * čekající na workeru novém — ten by pak dál marně počítal, `worker` by
+     * zůstal „obsazený" a další požadavek by se zařadil za mrtvé hledání.
+     */
+    const isCurrent = (): boolean => worker === w;
     w.onmessage = (ev: MessageEvent<FromWorker>) => {
+      if (!isCurrent()) return;
       const msg = ev.data;
       const p = pending.get(msg.requestId);
       if (!p) return; // opožděná/zrušená odpověď
@@ -56,6 +66,7 @@ export function createWorkerDriver(): AiDriver {
       else p.reject(new Error(msg.message));
     };
     w.onerror = () => {
+      if (!isCurrent()) return; // chyba už vyměněného workeru nikoho nezajímá
       // pád workeru: odmítni vše čekající (controller má fallback), restartuj
       killWorker(new Error('AI worker havaroval'));
     };
@@ -68,12 +79,20 @@ export function createWorkerDriver(): AiDriver {
     new Promise((resolve, reject) => {
       const fresh = worker === null;
       const w = ensureWorker();
+      /*
+       * Worker zpracovává `think` sériově (hledání je synchronní), takže
+       * požadavek zařazený do fronty nemůže začít dřív, než doběhnou ty před
+       * ním. Lhůta proto musí pokrýt i čekání ve frontě — jinak by druhý
+       * požadavek vypršel ještě před svým startem a strhl s sebou i první.
+       */
+      let queuedAhead = 0;
+      for (const [, p] of pending) queuedAhead += p.budgetMs + GRACE_MS;
       const timer = setTimeout(() => {
         // watchdog: worker mlčí — zabij ho a odmítni VŠECHNY čekající požadavky
         // (terminate ukončí i hledání, na které čekají ostatní)
         killWorker(new Error('AI worker neodpověděl (watchdog)'));
-      }, req.budgetMs + GRACE_MS + (fresh ? SPAWN_GRACE_MS : 0));
-      pending.set(req.requestId, { resolve, reject, timer });
+      }, req.budgetMs + GRACE_MS + queuedAhead + (fresh ? SPAWN_GRACE_MS : 0));
+      pending.set(req.requestId, { resolve, reject, timer, budgetMs: req.budgetMs });
       const msg: ToWorker = { type: 'think', ...req };
       w.postMessage(msg);
     });

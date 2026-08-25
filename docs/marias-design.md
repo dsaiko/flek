@@ -846,3 +846,33 @@ odstoupení), ale **pořadí prvního slova je zjednodušené**. Zapsáno jako k
 k dořešení, pokud se budeme chtít měřit s turnajovými pravidly.
 
 `make verify` má nyní **43 PASS bloků**; smoke navíc padá na porušení CSP.
+
+## 17. Fixpoint review kódu — šesté kolo (2026-08-25, po 987d0d1)
+
+37 nálezů, 19 zamítl judge. Zbylých **18 jsem prošel proti kódu i proti pravidlům ČSM
+a všechny potvrdil** — tentokrát bez kritického, ale se dvěma reálnými chybami v pravidlech
+(licitace, auto-dobrá) a s několika testy, které jen vypadaly jako testy.
+
+| Nález | Sev | Podstata | Oprava |
+|---|---|---|---|
+| i8 | medium | `nextNonHolder` přeskakoval jen držitele, takže hráč, který **už pasoval**, dostal znovu slovo a mohl licitaci i vyhrát — proti ČSM Čl. V/3 („po odstoupení jednoho z hráčů…") | odstoupení je konečné: rotace přeskakuje i odstoupené a licitace končí, jakmile odstoupí oba ne-držitelé |
+| i12 | medium | po cizím durchu zbývá v převzetí jediná legální akce `takeover/'good'`, ale `maybeAutoGood` znala jen `good` a `bid/pass` — člověk musel klikat na něco, co nemá alternativu (proti vlastní UX zásadě) | `forced` pokrývá i `takeover/'good'`; test měří **historií** (auto-potvrzení proletí mezi pollingy) |
+| i10 | medium | sav v sehrávce **bez kontraktu** prošel oběma vrstvami, ale `legalActions` pak nevrátí žádný tah → obnovená hra zamrzne natrvalo; `sazby: {}` prošlo taky a dělalo `NaN` v zúčtování | kontrakt je povinný ve fázích `fleks`/`tricks`, `isSazby` kontroluje všechny sazby i `kiloScaling` |
+| i13 | medium | akce v historii se ověřovaly jen jako „objekt s `type: string`". Sav s `{"type":"play","seat":5,…}` prošel, `renderMelds` pak spadl na `bySeat[5].unshift` — a protože se to stane **před** `renderActions`, zůstal stůl bez ovládání; opakované renderování padá na tomtéž místě a poškozený sav se načítá i po reloadu | `isHistoryAction` validuje každou akci po typu (sedadlo, karta, `announceMarriage`, mód, claim) |
+| i20 | medium | handlery workeru nekontrolovaly svou generaci. Retry posílá **týž** requestId, takže opožděná odpověď zabitého workeru vyřídila požadavek čekající na novém — nový pak dál marně počítal, `worker` zůstal „obsazený" a další požadavek se zařadil za mrtvé hledání | `isCurrent()` v `onmessage`/`onerror`; test doručí starou odpověď a ověří, že se jí nevěří |
+| i21 | medium | lhůta watchdogu se zapínala při **zařazení** do fronty, ale worker hledá sériově — druhý požadavek tak vypršel ještě před svým startem a `killWorker` strhl i ten první | lhůta zahrnuje rozpočty požadavků čekajících před ním |
+| i1 | medium | `buildState` kopíroval do simulace historii **celého zápasu**; `apply` ji klonuje a `view` mapuje dvakrát na akci, přitom se čte jen úsek po posledním `deal` | historie se řeže od posledního rozdání |
+| i9 | medium | `?seed=N` po obnovení zápasu začínal znovu od `N`, takže slíbená deterministická posloupnost se opakovala | `advanceSeedTo(saved.handNo)` |
+| i3 | low | ukázaná trumfová karta byla přišpendlená k forhontovi i po převzetí — s výchozím `talonOnTakeover: 'retake'` ji ale nový aktér mohl zvednout z forhontova talonu | `allowed` obsahuje i nového aktéra, pokud opravdu bral talon; test rozlišuje `keep` vs. `retake` |
+| i2 | low | animace rozdávání se u **nového zápasu** nepřehrála (TableUI si drží `prevState` starého controlleru, jehož historie je delší) | rozdání s historií délky 1 se animuje vždy |
+| i5 | low | odměna v ISMCTS je finanční delta (±1 až ±128), ale explorační konstanta UCB předpokládá omezený rozsah — u nejvyšších sázek průměr explorační člen přebil o dva řády | explorační člen se škáluje rozsahem odměn viděným v hledání |
+| i6 | low | přesně nulové vyúčtování se hlásilo jako „Vyhrál jsi 0,00 Kč" | nový stav `drawZero` („Bez změny" / „No change" / „Unverändert") |
+| i11 | low | `bidLabel` měl tabulku jen pro `en`, takže **němčina dostávala české** závazky („Sedma", „Sto a sedma") | `BID_LABEL_DE` (Sieben, Hundert, Bettel, Durchmarsch…) |
+| i24 | high | popup přežívající přepnutí jazyka (i12 z pátého kola) neměl test — verify neumí DOM a smoke popup hned odklikl | smoke jede na **pevném seedu 10** (ten spolehlivě vyvolá varovný popup), přepne jazyk tam a zpět a popup musí zůstat; ověřeno i **negativní kontrolou** (bez opravy smoke padá) |
+| i29 | high | test CSP/SRI kontroloval jen přítomnost direktiv — `worker-src *` by prošel; `integrity`/`crossorigin` se hledaly kdekoliv v souboru, ne na tom skriptu | politika se rozpadá na direktivy: žádná nesmí být `*`, celé schéma ani `unsafe-eval`; `script-src` je whitelist; SRI se hledá **v tagu** analytiky |
+| i26 | low | `assert.ok(points === 20 \|\| points === 40)` je při typu `20 \| 40` tautologie — obrácená podmínka by testem prošla | čtyři kombinace barva×trumf s přesnou očekávanou sazbou |
+| i27 | low | propojení `revealedTrump` reducer → stav → pohled netestovalo nic (všechny testy si `PlayerView` skládaly ručně) | test jede přes engine: volba karty i „z lidu", a kartu musí vidět **všechna** sedadla |
+| i28 | low | nové kontroly prvků (`lastRaiser`, `passed`, karta ve štychu) byly testované jen s `null`, ne s platným kontejnerem a vadným prvkem | `lastRaiser: { hra: 7 }`, `passed: ['x']`, `trick: [{ seat: 0, card: 99 }]` |
+
+`make verify` má nyní **50 PASS bloků**; smoke jede deterministicky a padá na porušení CSP
+i na zahozeném popupu.

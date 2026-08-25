@@ -63,6 +63,10 @@ const urlSeed = seedParam !== null && seedParam !== '' && Number.isFinite(Number
   ? Number(seedParam)
   : null;
 let seedCounter = urlSeed ?? 0;
+/** Obnovený zápas pokračuje v posloupnosti, ne od začátku (jinak by ?seed= lhal). */
+const advanceSeedTo = (handsPlayed: number): void => {
+  if (urlSeed !== null) seedCounter = urlSeed + handsPlayed;
+};
 // Random si se seedem 0 poradí, takže se nic nepřepisuje — jinak by ?seed=0
 // dalo dvěma prvním hrám stejný seed a slíbený determinismus by neplatil.
 const randomSeed = (): number => {
@@ -113,6 +117,7 @@ function newMatch(): void {
 const saved = loadMatch();
 if (saved && saved.config.variant === settings.variant && saved.phase.name !== 'idle') {
   if (window.confirm(t('resume'))) {
+    advanceSeedTo(saved.handNo);
     controller = makeController(saved);
     table.render(controller.state);
     controller.kick();

@@ -32,6 +32,14 @@ const newNode = (): Node => ({ visits: 0, rewards: [0, 0, 0], children: new Map(
 const keyOf = (a: PlayerAction): string => JSON.stringify(a);
 
 const UCB_C = 1.4;
+/**
+ * UCB předpokládá odměny v omezeném rozsahu (typicky [0,1]), ale naše odměna je
+ * finanční delta v jednotkách: prostá hra ±1, vyflekované kilo v červených i
+ * ±128. S pevnou konstantou by průměr přebil explorační člen právě u her
+ * s nejvyšší sázkou. Explorační člen proto škálujeme rozsahem, který jsme
+ * v tomto hledání skutečně viděli.
+ */
+const MIN_REWARD_SCALE = 1;
 
 export interface ThinkStats {
   iterations: number;
@@ -76,6 +84,8 @@ export function ismctsMove(v: PlayerView, opts: IsmctsOptions): { action: Player
   if (v.phase.name !== 'tricks') throw new Error('ismctsMove: jen pro sehrávku');
   const rng = new Random(opts.seed);
   const root = newNode();
+  // rozsah odměn viděný v tomto hledání (viz MIN_REWARD_SCALE)
+  let rewardScale = MIN_REWARD_SCALE;
   const started = Date.now();
   const budgetMs = opts.budgetMs ?? 1500;
   const maxIters = opts.iterations ?? Number.MAX_SAFE_INTEGER;
@@ -123,7 +133,8 @@ export function ismctsMove(v: PlayerView, opts: IsmctsOptions): { action: Player
           break;
         }
         const mean = child.visits > 0 ? child.rewards[actor] / child.visits : 0;
-        const ucb = mean + UCB_C * Math.sqrt(Math.log(node.visits + 1) / (child.visits + 1));
+        const ucb =
+          mean + rewardScale * UCB_C * Math.sqrt(Math.log(node.visits + 1) / (child.visits + 1));
         if (ucb > bestScore) {
           bestScore = ucb;
           bestChild = child;
@@ -140,6 +151,7 @@ export function ismctsMove(v: PlayerView, opts: IsmctsOptions): { action: Player
 
     // 3) playout + 4) backpropagace
     const delta = state.phase.name === 'scored' ? state.phase.result.delta : playout(state, rng);
+    rewardScale = Math.max(rewardScale, Math.abs(delta[0]), Math.abs(delta[1]), Math.abs(delta[2]));
     for (const n of path) {
       n.visits += 1;
       n.rewards[0] += delta[0];

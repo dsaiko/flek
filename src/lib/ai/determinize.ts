@@ -75,7 +75,18 @@ export function deriveConstraints(v: PlayerView): Constraints {
    * volil — nebo v jeho odhozu do talonu.
    */
   if (v.revealedTrump !== null && !played.has(v.revealedTrump)) {
-    allowed.set(v.revealedTrump, new Set([forhont(v.dealer), TALON_SLOT]));
+    const seats = new Set<number>([forhont(v.dealer), TALON_SLOT]);
+    /*
+     * Při převzetí betlem/durchem s house rule 'retake' zvedne nový aktér
+     * forhontův talon — ukázaná karta tak může skončit i v JEHO ruce.
+     */
+    if (
+      contract !== null && contract.declarer !== forhont(v.dealer) &&
+      v.config.talonOnTakeover === 'retake'
+    ) {
+      seats.add(contract.declarer);
+    }
+    allowed.set(v.revealedTrump, seats);
   }
 
   /*
@@ -201,6 +212,15 @@ export function determinize(v: PlayerView, rng: Random): Determinization {
  * Historie = veřejná (stačí: settle čte jen fleky, sehrávka běží z fáze).
  */
 export function buildState(v: PlayerView, d: Determinization): GameState {
+  /*
+   * Historie se v zápase kumuluje, ale čte se z ní VŽDY jen úsek po posledním
+   * `deal` (fleky, omezení). Simulace ji přitom kopíruje (`apply`) a mapuje
+   * (`view`) desetitisíckrát za tah, takže starší hry jsou čistá režie.
+   */
+  let handStart = 0;
+  for (let i = v.publicHistory.length - 1; i >= 0; i -= 1) {
+    if (v.publicHistory[i].type === 'deal') { handStart = i; break; }
+  }
   return {
     config: v.config,
     dealer: v.dealer,
@@ -211,7 +231,7 @@ export function buildState(v: PlayerView, d: Determinization): GameState {
     talonOwner: null,
     revealedTrump: v.revealedTrump,
     talonKnowledge: [[], [], []],
-    history: v.publicHistory as unknown as GameState['history'],
+    history: v.publicHistory.slice(handStart) as unknown as GameState['history'],
     handResults: [],
     ledger: [0, 0, 0],
     handNo: v.handNo,
