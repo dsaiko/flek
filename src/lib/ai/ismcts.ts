@@ -41,6 +41,19 @@ const UCB_C = 1.4;
  */
 const MIN_REWARD_SCALE = 1;
 
+/**
+ * Skóre UCB1 pro jedno dítě. Vytaženo, aby šlo testovat, že explorační člen
+ * škáluje s rozsahem odměn (bez toho ho průměr u vysokých sázek přebije).
+ */
+export function ucbScore(
+  mean: number,
+  rewardScale: number,
+  parentVisits: number,
+  childVisits: number,
+): number {
+  return mean + rewardScale * UCB_C * Math.sqrt(Math.log(parentVisits + 1) / (childVisits + 1));
+}
+
 export interface ThinkStats {
   iterations: number;
   elapsedMs: number;
@@ -133,8 +146,7 @@ export function ismctsMove(v: PlayerView, opts: IsmctsOptions): { action: Player
           break;
         }
         const mean = child.visits > 0 ? child.rewards[actor] / child.visits : 0;
-        const ucb =
-          mean + rewardScale * UCB_C * Math.sqrt(Math.log(node.visits + 1) / (child.visits + 1));
+        const ucb = ucbScore(mean, rewardScale, node.visits, child.visits);
         if (ucb > bestScore) {
           bestScore = ucb;
           bestChild = child;

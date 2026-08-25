@@ -60,10 +60,15 @@ a EN verze (`docs/rules/`) sepíšeme **vlastními slovy** (samotná pravidla hr
 jen jejich konkrétní text). Totéž platí pro originální binárky FLEK!/RE! — v repu nejsou
 (copyright J. Pivoňka), odkazujeme na retrogames.cz.
 
-Sazebník z křížového voleného (násobky základní sazby): **hra 1×, sedma 2×, sto 4×, betl 10×,
-durch 20×, červené dvojnásob**; tichá sedma = polovina hlášené; tiché sto zvyšuje hodnotu
-vyflekované hry 2× (neplatí při hlášených hrách sto, sto a sedm). Renonc paušál 1 = 10×,
-paušál 2 = 50×, limit 500×/750×.
+Sazebník **dvacetihaléřového bodovaného voleného** (ČSM, platný od 8. 5. 2007; násobky základní
+sazby): **hra 1×, sedma 2×, sto 4×, betl 15×, durch 30×, červené dvojnásob**; tichá sedma =
+polovina hlášené; tiché sto zvyšuje hodnotu vyflekované hry 2× (neplatí při hlášených hrách sto,
+sto a sedm). Renonc paušál 1 = 10×, paušál 2 = 50×, limit 500×/750×.
+
+> **Pozor na záměnu:** sazebník **betl 10× / durch 20×** patří **křížovému** mariáši (4 hráči,
+> desetihaléřový, ČSM 2007), který nehrajeme. Obě naše varianty — volený i licitovaný — mají
+> shodně betl 15× a durch 30× (licitovaný to má v tabulce jako 3,00 / 6,00 Kč při základu 0,20).
+> Dřívější formulace v tomto dokumentu tvrdila opak a svedla i jedno review (§18, i7).
 
 ### 3.2 Společné jádro
 
@@ -648,7 +653,8 @@ Před deployem `make build && make preview` + `make deploy-s3-dryrun`.
    sedma < sedma červená < sto < sto a sedma < sto červených < sto a sedma červených
    < betl < durch < dvě sedmy < dvě sedmy a sto < dvě sedmy červená < dvě sedmy červená a sto.
    Sazebník licitovaného (násobky hry): sedma 2×, sto 4×, **betl 15×, durch 30×, dvě sedmy 40×**,
-   tichá sedma 1×, omyl 6× — jiné poměry než volený (betl 10×, durch 20×) ⇒ preset per varianta.
+   tichá sedma 1×, omyl 6× — **shodné poměry s voleným** (betl 15×, durch 30×), takže obě
+   varianty sdílejí `SAZBY_CSM`; odchylku 10×/20× má jen křížový mariáš, který nehrajeme.
    Závazek **dvě sedmy** (trumfová 7 poslední + pomocná 7 předposlední štych) je v typech,
    v1 za config přepínačem `enableDveSedmy`. Chování originálu RE! stále ověřit v DOSBoxu.
 2. Defaulty house-rules (`talonForbidsTrump`, `talonOnTakeover`,
@@ -876,3 +882,40 @@ a všechny potvrdil** — tentokrát bez kritického, ale se dvěma reálnými c
 
 `make verify` má nyní **50 PASS bloků**; smoke jede deterministicky a padá na porušení CSP
 i na zahozeném popupu.
+
+## 18. Fixpoint review kódu — sedmé kolo (2026-08-25, po 8ede9c5)
+
+34 nálezů, 22 zamítl judge. Zbylých 12 jsem prošel: **11 potvrdil a opravil, 1 zamítl** —
+a to zamítnutí je poučné, protože reviewera svedl **můj vlastní design dokument**.
+
+| Nález | Sev | Podstata | Oprava |
+|---|---|---|---|
+| i1 | medium | prvky `bids` v obnovené licitaci se nevalidovaly (jediná fáze, kde ne). `legal.ts` i reducer z nich čtou `.bid`/`.seat`, takže `null` v poli shodí `legalActions` — a protože se to děje v `actor()` volaném z async `maybeRunAi`, projeví se to jako nezachycený reject a **AI smyčka se nikdy nerozjede** | `isBidEntry`/`isBid` (známý `kind` + boolean `cervena`); 7 negativních testů |
+| i2 | low | `trickNo` se ověřovalo jen jako „finite number". Hra končí na `trickNo === 9`, takže hodnota mimo 0..9 (nebo neceločíselná) dá stav, ze kterého se **nikdy nedojde k zúčtování** — a autosave ho zapíše zpátky | `inRange(0, 9)`; testy pro −1, 10, 2.5, 1e9 i legitimní 9 |
+| i9 | medium | `standing.mode` bral libovolný řetězec, `resolveTakeover` ho přetypuje do `contract.mode` a UI pak volá `t(mode)` — neznámý klíč **vyhodí výjimku uvnitř renderu**, tabule přestane reagovat a poškozený stav se načte i po reloadu | validace na `null\|hra\|betl\|durch` + rozsah trumfu; navíc `t()` na neznámém klíči vrací klíč místo výjimky (obrana do hloubky) |
+| i16 | medium | animace spí až ~1,8 s a jsou ve frontě `chain`, takže nový zápas čekal za animacemi toho **opuštěného** (a při opakovaných klicích za několika) | `TableUI.reset()` zvyšuje generaci: opuštěné animace se zkrátí a nový zápas kreslí hned; smoke to hlídá dvěma rychlými kliky (**negativní kontrola: bez opravy padá**) |
+| i3 | low | moje výjimka pro animaci nového zápasu (i2 z 6. kola) byla ORovaná **před** ochranou `prev === state`, takže přepnutí jazyka hned po rozdání znovu přehrálo rozdávání a přeskočilo obnovení popupu | podmínka doplněna o `prev !== state`; smoke to kontroluje hned po rozdání (**negativní kontrola: bez opravy padá**) |
+| i4 | low | `currentActorName` vracelo pro `choose-trump` `null`, takže se místo „Na tahu: Franta…" psalo jen „…" — a protože rozdávající rotuje, ve **dvou ze tří her** | volbu dělá vždy forhont → `forhont(v.dealer)` |
+| i5 | low | ve voleném akce `declare` trumf nenese (je dán volbou), takže bublina hlásila „Hra" bez barvy — a nesouhlasila s tlačítkem, které fallback používá | `bubbleText` předává trumf z kontraktu/stojícího závazku; test čeká ikonu barvy |
+| i19 | medium | test seedové posloupnosti si **zkopíroval logiku z `main.ts`** a testoval kopii; produkční `advanceSeedTo` nespouštěl nikdo (main.ts je browserový entry) | logika vytažena do `seedSequence.ts` (bez DOM) a testuje se produkční modul, včetně `?seed=0` a náhodné větve |
+| i21 | medium | škálování odměn v UCB (i5 z 6. kola) neověřovalo nic — self-play testy projdou i s vráceným pevným `UCB_C` | `ucbScore` vytažena a testována: explorace roste **lineárně** s rozsahem, a u sázky ±128 se má dál zkoumat tam, kde u ±1 už rozhoduje průměr |
+| i23 | low | `currentLang()` čte `document`, který v Node neexistuje, takže **anglická i německá větev popisků byly pod testem mrtvý kód** | verify stubuje `document`; testuje se, že žádný závazek nepropadne na slug a že se jazyky navzájem liší, plus existence klíčových textů ve všech třech |
+| i30 | low | tvrzení o řezu historie v `buildState` by prošlo i s `slice(0, 3)` (délka 3, začíná dealem — ale předchozí hra) | přesná shoda s očekávaným úsekem + kontrola, že akce předchozí hry tam nejsou |
+
+### Zamítnuto (s odůvodněním)
+
+**i7 (high) — „Volený mariáš používá sazby licitované varianty (betl 10×/20× vs. 15×/30×)."**
+Nález tvrdí, že volený má mít betl 10× a durch 20×. Podle PDF **ČSM „Pravidla dvacetihaléřového
+bodovaného voleného mariáše" (platná od 8. 5. 2007), čl. A** je ale sazebník: hra 1×, sedma 2×,
+sto 4×, **betl 15×, durch 30×** — tedy shodný s licitovaným (2014: betl 3,00 / durch 6,00 při
+základu 0,20 Kč = 15×/30×). Sazebník **10×/20× patří křížovému mariáši** (4 hráči,
+desetihaléřový), který nehrajeme. `SAZBY_CSM` je pro obě naše varianty správný.
+
+**Poučení:** reviewer měl pravdu v tom, že něco nesedí — jenom to bylo v dokumentaci, ne v kódu.
+§3.1 tohoto dokumentu tvrdila „sazebník z křížového voleného … betl 10×, durch 20×" a §11
+mluvila o „jiných poměrech než volený". Obojí je opravené a doplněné varováním před záměnou;
+sazebník je navíc připíchnutý testem.
+
+`make verify` má nyní **55 PASS bloků**; smoke kontroluje tři věci, které verify bez DOM neumí
+(popup přes přepnutí jazyka, žádná animace při překreslení týmž stavem, nový zápas nečeká na
+opuštěné animace) — a všechny tři jsou ověřené negativní kontrolou.

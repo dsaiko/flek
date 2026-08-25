@@ -1216,7 +1216,7 @@ const KULE = 2 as const;
   // ── i1/i2: heuristiky — díry v betlu a nepřebíjení vlastního parťáka ─────
   {
     const { betlHoles, playPolicy } = await import('../src/lib/ai/heuristics');
-    const { card: mk5, CERVENE: CE5, R7: S75, R8: S85, R9: S95, R10: T5, KRAL: K5, ESO: A5 } =
+    const { card: mk5, CERVENE: CE5, R7: S75, R8: S85, R9: S95, R10: T5, ESO: A5 } =
       await import('../src/lib/cards');
     const { Random: Rnd5 } = await import('../src/lib/random');
     const ZE5 = 1 as const; // zelené
@@ -1871,7 +1871,7 @@ const KULE = 2 as const;
   const { legalActions } = await import('../src/lib/rules/legal');
   const { view } = await import('../src/lib/rules/view');
   const { defaultConfig } = await import('../src/lib/rules/sazby');
-  const { pointsOf: pts8, card: mk8, R7: S78 } = await import('../src/lib/cards');
+  const { pointsOf: pts8 } = await import('../src/lib/cards');
   type St8 = ReturnType<typeof initialState>;
   type Act8 = ReturnType<typeof legalActions>[number];
   const acts8 = (st: St8): Act8[] => {
@@ -2125,32 +2125,119 @@ const KULE = 2 as const;
       publicHistory: older, handResults: [], ledger: [0, 0, 0] as [number, number, number], handNo: 2,
     };
     const built = buildState(v as never, { hands: [[1], [2], [3]], talon: [] } as never);
-    assert.equal(built.history.length, 3, 'simulace nese jen úsek od posledního rozdání');
-    assert.equal(built.history[0].type, 'deal', 'úsek začíná rozdáním (fleky se z něj počítají)');
+    // přesná shoda s úsekem od POSLEDNÍHO rozdání (slice(0,3) by taky měl
+    // délku 3 a začínal dealem, ale nesl by předchozí hru)
+    assert.deepEqual(built.history, older.slice(2), 'simulace nese právě aktuální hru');
+    assert.equal(
+      built.history.some((h) => h.type === 'good' && h.seat === 0), false,
+      'akce z předchozí hry se do simulace nesmí dostat',
+    );
     console.log('PASS regrese i1 — buildState nevláčí historii předchozích her');
   }
 
-  // ── i9: obnovený zápas pokračuje v seedové posloupnosti ────────────────
+  // ── i9/i19: seedová posloupnost — PRODUKČNÍ modul, ne kopie logiky ─────
   {
-    // logika z main.ts: ?seed=N + handNo obnoveného stavu
-    const seq = (urlSeed: number | null, resumedHandNo: number, hands: number): number[] => {
-      let counter = urlSeed ?? 0;
-      if (urlSeed !== null) counter = urlSeed + resumedHandNo;
-      const out: number[] = [];
-      for (let i = 0; i < hands; i += 1) out.push(urlSeed !== null ? counter++ : -1);
-      return out;
-    };
-    assert.deepEqual(seq(5, 0, 3), [5, 6, 7], 'nový zápas jde od seedu');
-    assert.deepEqual(seq(5, 2, 2), [7, 8], 'po obnovení dvou her se pokračuje, ne restartuje');
-    assert.deepEqual(seq(0, 1, 2), [1, 2], 'seed 0 se chová stejně jako každý jiný');
-    // a stejná posloupnost skutečně dává stejná rozdání
-    const deal = (seed: number): string => {
-      const st = apply(initialState(defaultConfig('voleny'), 2), { type: 'deal', seed });
-      return JSON.stringify(st.hands);
-    };
+    const { createSeedSequence, parseSeedParam } = await import('../src/lib/match/seedSequence');
+
+    assert.equal(parseSeedParam('?seed=10'), 10);
+    assert.equal(parseSeedParam('?seed=0'), 0, 'seed 0 je platný seed, ne „bez seedu"');
+    assert.equal(parseSeedParam('?seed='), null);
+    assert.equal(parseSeedParam('?seed=abc'), null);
+    assert.equal(parseSeedParam(''), null);
+
+    // nový zápas: N, N+1, N+2
+    const fresh = createSeedSequence(5);
+    assert.deepEqual([fresh.next(), fresh.next(), fresh.next()], [5, 6, 7]);
+
+    // obnovený zápas po dvou odehraných hrách pokračuje, nerestartuje
+    const resumed = createSeedSequence(5);
+    resumed.resumeAfter(2);
+    assert.deepEqual([resumed.next(), resumed.next()], [7, 8], 'po obnovení se pokračuje');
+
+    // seed 0 se nesmí chovat jinak (dřívější past `|| 1`)
+    const zero = createSeedSequence(0);
+    zero.resumeAfter(1);
+    assert.deepEqual([zero.next(), zero.next()], [1, 2]);
+
+    // bez ?seed= je každé rozdání náhodné (a nesahá na counter)
+    let calls = 0;
+    const random = createSeedSequence(null, () => (calls += 1) * 100);
+    random.resumeAfter(3); // nesmí mít žádný efekt
+    assert.deepEqual([random.next(), random.next()], [100, 200]);
+
+    // a tatáž posloupnost dává tatáž rozdání
+    const deal = (seed: number): string =>
+      JSON.stringify(apply(initialState(defaultConfig('voleny'), 2), { type: 'deal', seed }).hands);
     assert.equal(deal(7), deal(7), 'týž seed = totéž rozdání');
     assert.notEqual(deal(7), deal(8), 'jiný seed = jiné rozdání');
-    console.log('PASS regrese i9 — seedová posloupnost přežije obnovení zápasu');
+    console.log('PASS regrese i9/i19 — seedová posloupnost přežije obnovení zápasu');
+  }
+
+  // ── i21: explorační člen UCB škáluje s rozsahem odměn ─────────────────
+  {
+    const { ucbScore } = await import('../src/lib/ai/ismcts');
+
+    // bez odměn se rozhoduje čistě explorace: méně navštívené dítě má víc
+    assert.ok(ucbScore(0, 1, 100, 1) > ucbScore(0, 1, 100, 50), 'méně navštívené se má zkoumat');
+
+    // klíč opravy: explorační člen roste LINEÁRNĚ s rozsahem odměn
+    const explore = (scale: number) => ucbScore(0, scale, 100, 4);
+    assert.ok(Math.abs(explore(64) - 64 * explore(1)) < 1e-9, 'explorace musí škálovat lineárně');
+
+    /*
+     * A hlavně: u vysokých sázek nesmí průměr exploraci utlumit. Dítě s
+     * průměrem +8 a 50 návštěvami vs. sotva zkoumané dítě s průměrem 0:
+     * v rozsahu ±128 se to ještě zkoumat MÁ, v rozsahu ±1 už ne.
+     */
+    const exploited = (scale: number) => ucbScore(8, scale, 400, 50);
+    const fresh2 = (scale: number) => ucbScore(0, scale, 400, 0);
+    assert.ok(fresh2(128) > exploited(128), 've hře o 128 jednotek se má dál zkoumat');
+    assert.ok(fresh2(1) < exploited(1), 'v drobné hře už průměr rozhoduje');
+    console.log('PASS regrese i21 — UCB explorace škáluje rozsahem odměn');
+  }
+
+  // ── i23: popisky ve všech třech jazycích (currentLang čte document) ────
+  {
+    const classes = new Set<string>();
+    (globalThis as { document?: unknown }).document = {
+      documentElement: { classList: { contains: (c: string) => classes.has(c) } },
+    };
+    const { bidLabel } = await import('../src/lib/ui/table');
+    const { t: t9, flekName: flekName9 } = await import('../src/lib/ui/i18n');
+    const setLang = (lang: 'cs' | 'en' | 'de'): void => {
+      classes.clear();
+      if (lang !== 'cs') classes.add(`lang-${lang}`);
+    };
+
+    const kinds = ['sedma', 'sto', 'sto-sedma', 'betl', 'durch'];
+    for (const lang of ['cs', 'en', 'de'] as const) {
+      setLang(lang);
+      for (const kind of kinds) {
+        const label = bidLabel({ kind, cervena: false });
+        assert.notEqual(label, kind, `${lang}: závazek „${kind}" nesmí propadnout na slug`);
+        assert.equal(label.includes('-'), false, `${lang}: „${label}" vypadá jako slug`);
+      }
+    }
+    // a jazyky se opravdu liší (jinak by němčina zase brala češtinu)
+    setLang('cs'); const cs = bidLabel({ kind: 'sto-sedma', cervena: false });
+    setLang('en'); const en = bidLabel({ kind: 'sto-sedma', cervena: false });
+    setLang('de'); const de = bidLabel({ kind: 'sto-sedma', cervena: false });
+    assert.notEqual(cs, en, 'EN popisek se musí lišit od CS');
+    assert.notEqual(cs, de, 'DE popisek se musí lišit od CS');
+
+    // klíčové texty musí existovat ve všech jazycích
+    for (const lang of ['cs', 'en', 'de'] as const) {
+      setLang(lang);
+      for (const key of ['hra', 'betl', 'durch', 'sedma', 'kilo', 'drawZero', 'youWon', 'youLost'] as const) {
+        const val = t9(key);
+        assert.ok(val.length > 0, `${lang}: chybí text ${key}`);
+      }
+      assert.ok(flekName9(0).length > 0, `${lang}: chybí jméno fleku`);
+    }
+    // neznámý klíč nesmí shodit render (obrana do hloubky, viz i9)
+    assert.equal(t9('naprosto-neznamy-klic' as never), 'naprosto-neznamy-klic');
+    delete (globalThis as { document?: unknown }).document;
+    console.log('PASS regrese i23 — popisky závazků a texty ve všech třech jazycích');
   }
 
   // ── i20/i21: generace workeru a lhůta zahrnující čekání ve frontě ──────
@@ -2221,6 +2308,151 @@ const KULE = 2 as const;
 
     if (orig === undefined) delete g.Worker; else g.Worker = orig;
     console.log('PASS regrese i20/i21 — generace workeru a lhůta zahrnující frontu');
+  }
+}
+
+
+// ── regrese: sedmé kolo fixpoint review-code (2026-08-25, po 8ede9c5) ───────
+
+{
+  const { initialState, apply } = await import('../src/lib/rules/engine');
+  const { legalActions } = await import('../src/lib/rules/legal');
+  const { view } = await import('../src/lib/rules/view');
+  const { defaultConfig } = await import('../src/lib/rules/sazby');
+  const { pointsOf: pts9 } = await import('../src/lib/cards');
+  type St9 = ReturnType<typeof initialState>;
+  type Act9 = ReturnType<typeof legalActions>[number];
+  const acts9 = (st: St9): Act9[] => {
+    for (const seat of [0, 1, 2] as const) {
+      const a = legalActions(view(st, seat));
+      if (a.length > 0) return a;
+    }
+    return [];
+  };
+
+  // ── i7: sazby voleného i licitovaného podle ČSM (betl 15×, durch 30×) ──
+  {
+    const { SAZBY_CSM } = await import('../src/lib/rules/sazby');
+    /*
+     * ČSM „dvacetihaléřový bodovaný volený" (2007) i „soutěžní licitovaný"
+     * (2014) mají shodně betl 15× a durch 30×. Sazebník 10×/20× patří
+     * KŘÍŽOVÉMU mariáši (4 hráči), který nehrajeme — viz §17.
+     */
+    assert.equal(SAZBY_CSM.hra, 1);
+    assert.equal(SAZBY_CSM.sedma, 2);
+    assert.equal(SAZBY_CSM.kilo, 4);
+    assert.equal(SAZBY_CSM.betl, 15, 'betl je v obou našich variantách 15× (10× je křížový)');
+    assert.equal(SAZBY_CSM.durch, 30, 'durch je v obou našich variantách 30× (20× je křížový)');
+    assert.equal(SAZBY_CSM.tichaSedma, SAZBY_CSM.sedma / 2, 'tichá sedma je poloviční');
+    for (const variant of ['voleny', 'licitovany'] as const) {
+      assert.deepEqual(defaultConfig(variant).sazby, SAZBY_CSM, `${variant} má sazebník ČSM`);
+    }
+    console.log('PASS regrese i7 — sazebník ČSM (betl 15×, durch 30×) v obou variantách');
+  }
+
+  // ── i1/i2/i9: sav — licitace, číslo štychu, mód závazku ────────────────
+  {
+    const store = new Map<string, string>();
+    (globalThis as { localStorage?: unknown }).localStorage = {
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: (k: string, val: string) => void store.set(k, val),
+      removeItem: (k: string) => void store.delete(k),
+    };
+    const { saveMatch, loadMatch } = await import('../src/lib/match/persist');
+
+    // (i1) licitace: prvky `bids` čte legal.ts i reducer
+    let bid: St9 = initialState(defaultConfig('licitovany'), 2);
+    bid = apply(bid, { type: 'deal', seed: 6 });
+    const firstBid = acts9(bid).find((a) => a.type === 'bid' && a.bid !== 'pass');
+    bid = apply(bid, firstBid as Act9);
+    saveMatch(bid);
+    assert.ok(loadMatch(), 'poctivá licitace se musí obnovit');
+
+    const patch = (from: St9, mutate: (s: Record<string, unknown>) => void): void => {
+      saveMatch(from);
+      const parsed = JSON.parse(store.get('flek.match.v1') as string) as { v: number; state: Record<string, unknown> };
+      mutate(parsed.state);
+      store.set('flek.match.v1', JSON.stringify(parsed));
+    };
+
+    for (const bad of [
+      null, 'pass', 42,
+      { seat: 5, bid: 'pass' },
+      { seat: 0, bid: { kind: 'vymyslene', cervena: false } },
+      { seat: 0, bid: { kind: 'sedma' } },
+      { seat: 0 },
+    ]) {
+      patch(bid, (x) => { (x.phase as Record<string, unknown>).bids = [bad]; });
+      assert.equal(loadMatch(), null, `vadný záznam licitace ${JSON.stringify(bad)} musí být odmítnut`);
+    }
+    patch(bid, (x) => { (x.phase as Record<string, unknown>).best = { kind: 'nic', cervena: false }; });
+    assert.equal(loadMatch(), null, 'neznámý nejvyšší závazek musí být odmítnut');
+
+    // (i2) trickNo mimo 0..9 → hra nikdy nedojde k zúčtování
+    let tr: St9 = initialState({ ...defaultConfig('voleny'), autoSettlePlainHra: false }, 2);
+    tr = apply(tr, { type: 'deal', seed: 3 });
+    let guard = 0;
+    while (tr.phase.name !== 'tricks') {
+      if ((guard += 1) > 200) throw new Error('scénář i2 se zasekl');
+      const a = acts9(tr);
+      tr = apply(tr,
+        a.find((x) => x.type === 'choose-trump' && x.card !== 'from-people') ??
+        a.find((x) => x.type === 'discard' && x.cards.every((c) => pts9(c) === 0)) ??
+        a.find((x) => x.type === 'declare' && x.mode === 'hra' && !x.sedma && !x.kilo) ??
+        a.find((x) => x.type === 'takeover' && x.claim === 'good') ??
+        a.find((x) => x.type === 'good') ?? a[0]);
+    }
+    for (const bad of [-1, 10, 2.5, 1e9]) {
+      patch(tr, (x) => { (x.phase as Record<string, unknown>).trickNo = bad; });
+      assert.equal(loadMatch(), null, `trickNo ${bad} musí být odmítnuto (hra by nikdy neskončila)`);
+    }
+    patch(tr, (x) => { (x.phase as Record<string, unknown>).trickNo = 9; });
+    assert.ok(loadMatch(), 'trickNo 9 (poslední štych) je legitimní');
+
+    // (i9) mód stojícího závazku teče do contract.mode a odtud do t()
+    let tk: St9 = initialState(defaultConfig('voleny'), 2);
+    tk = apply(tk, { type: 'deal', seed: 11 });
+    guard = 0;
+    while (tk.phase.name !== 'takeover') {
+      if ((guard += 1) > 50) throw new Error('scénář i9 se zasekl');
+      const a = acts9(tk);
+      tk = apply(tk,
+        a.find((x) => x.type === 'choose-trump' && x.card !== 'from-people') ??
+        a.find((x) => x.type === 'discard' && x.cards.every((c) => pts9(c) === 0)) ??
+        a.find((x) => x.type === 'declare' && x.mode === 'hra' && !x.sedma && !x.kilo) ?? a[0]);
+    }
+    saveMatch(tk);
+    assert.ok(loadMatch(), 'poctivé převzetí se musí obnovit');
+    patch(tk, (x) => {
+      const st = ((x.phase as Record<string, unknown>).standing) as Record<string, unknown>;
+      st.mode = 'zlodejina';
+    });
+    assert.equal(loadMatch(), null, 'neznámý mód závazku musí být odmítnut (t() by spadl)');
+    patch(tk, (x) => {
+      const st = ((x.phase as Record<string, unknown>).standing) as Record<string, unknown>;
+      st.trump = 9;
+    });
+    assert.equal(loadMatch(), null, 'trumf mimo 0..3 musí být odmítnut');
+
+    delete (globalThis as { localStorage?: unknown }).localStorage;
+    console.log('PASS regrese i1/i2/i9 — sav: licitace, číslo štychu, mód i trumf závazku');
+  }
+
+  // ── i5: bublina deklarace hlásí i trumf (ve voleném ho akce nenese) ────
+  {
+    const { bubbleText } = await import('../src/lib/ui/table');
+    let st: St9 = initialState(defaultConfig('voleny'), 2);
+    st = apply(st, { type: 'deal', seed: 11 });
+    st = apply(st, acts9(st).find((a) => a.type === 'choose-trump' && a.card !== 'from-people') as Act9);
+    st = apply(st, acts9(st).find((a) => a.type === 'discard' && a.cards.every((c) => pts9(c) === 0)) as Act9);
+    const declare = acts9(st).find((a) => a.type === 'declare' && a.mode === 'hra' && !a.sedma && !a.kilo);
+    assert.ok(declare, 'scénář i5 čeká deklaraci prosté hry');
+    assert.equal((declare as { trump?: number }).trump, undefined, 've voleném akce trumf nenese');
+    const after = apply(st, declare as Act9);
+    const bubble = bubbleText(declare as never, after as never);
+    assert.ok(bubble, 'deklarace musí mít bublinu');
+    assert.match(bubble as string, /<svg/, 'bublina musí ukázat i ikonu trumfové barvy');
+    console.log('PASS regrese i5 — bublina deklarace ukazuje trumf i ve voleném');
   }
 }
 

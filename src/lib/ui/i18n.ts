@@ -105,7 +105,14 @@ const STRINGS = {
 type Key = keyof typeof STRINGS;
 
 export function t(key: Key): string {
-  const v = STRINGS[key][currentLang()];
+  /*
+   * Obrana do hloubky: klíč může přijít z obnoveného stavu (mód kontraktu,
+   * cíl fleku). Chybějící překlad se dřív projevil výjimkou uvnitř renderu —
+   * a protože se stav autosavuje, tabule zůstala mrtvá i po reloadu.
+   */
+  const row = STRINGS[key] as Record<string, unknown> | undefined;
+  if (row === undefined) return String(key);
+  const v = row[currentLang()] ?? row.cs;
   return typeof v === 'string' ? v : String(v);
 }
 

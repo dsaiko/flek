@@ -43,6 +43,23 @@ await page.click('#actions .action-btn.primary');
 await page.waitForTimeout(400);
 await page.screenshot({ path: join(outDir, 'smoke-1-deal.png'), clip: await tableClip() });
 
+/*
+ * i3: přepnutí jazyka hned po rozdání (historie má délku 1) nesmí znovu
+ * přehrát animaci rozdávání — výjimka pro nový zápas nesmí obejít ochranu
+ * proti překreslení TÝMŽ stavem.
+ */
+await page.waitForTimeout(1400); // ať animace rozdávání skončí
+const animatingBefore = await page.locator('#table.animating').count();
+await page.click('.langpill button[data-lang="de"]');
+await page.waitForTimeout(200);
+if ((await page.locator('#table.animating').count()) > animatingBefore) {
+  console.error('CHYBA: přepnutí jazyka po rozdání znovu spustilo animaci rozdávání');
+  await browser.close();
+  process.exit(1);
+}
+await page.click('.langpill button[data-lang="cs"]');
+await page.waitForTimeout(200);
+
 // hraj: klikej na primární tlačítka a hratelné karty, dokud se hra hýbe
 let shots = 2;
 let reachedSettlement = false;
@@ -131,10 +148,27 @@ for (let i = 0; i < 200; i += 1) {
   void status;
 }
 
-await browser.close();
 console.log(
   `Screenshoty v ${outDir}/ (potvrzených varování: ${confirmedWarnings}, voleb hlášky: ${marriageChoices})`,
 );
+
+/*
+ * i16: dva rychlé kliky na „Nový zápas" nesmí zařadit nový zápas do fronty za
+ * animacemi opuštěných — bez zrušení by se čekalo ~2,5 s místo ~1,3 s.
+ */
+await page.click('#btn-new');
+await page.waitForTimeout(50);
+await page.click('#btn-new');
+await page.waitForTimeout(1800);
+const dealtAfterRestarts = await page.locator('#hand .card-btn').count();
+const stillAnimating = await page.locator('#table.animating').count();
+if (dealtAfterRestarts === 0 || stillAnimating > 0) {
+  console.error(
+    `CHYBA: nový zápas uvízl za animacemi opuštěných (karet: ${dealtAfterRestarts}, animuje: ${stillAnimating})`,
+  );
+  await browser.close();
+  process.exit(1);
+}
 
 if (!popupSurvivedLang) {
   console.error('CHYBA: v běhu nenastal žádný popup — kontrola přepnutí jazyka neproběhla');
@@ -146,6 +180,8 @@ if (cspViolations.length > 0) {
   for (const v of cspViolations) console.error(`  ${v}`);
   process.exit(1);
 }
+
+await browser.close();
 
 // vyčerpání smyčky NENÍ úspěch — jinak by test procházel, i když hra uvízne
 if (!reachedSettlement) {

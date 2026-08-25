@@ -66,15 +66,19 @@ function isValidPhase(p: Record<string, unknown>): boolean {
   const standingOk = (x: unknown): boolean => {
     if (!isRecord(x)) return false;
     const st = x as Record<string, unknown>;
-    return isSeat(st.declarer) && (st.mode === null || isStr(st.mode)) &&
-      (st.trump === null || isNum(st.trump)) && (st.bid === null || isRecord(st.bid));
+    return isSeat(st.declarer) &&
+      // mód teče přes resolveTakeover do contract.mode a odtud do t() —
+      // neznámý klíč by shodil render a poškozený stav se autosavem zvěční
+      (st.mode === null || st.mode === 'hra' || st.mode === 'betl' || st.mode === 'durch') &&
+      (st.trump === null || inRange(st.trump, 0, 3)) && (st.bid === null || isRecord(st.bid));
   };
   switch (p.name) {
     case 'idle':
     case 'choose-trump':
       return true;
     case 'bidding':
-      return Array.isArray(p.bids) && isSeat(p.toAct) && (p.best === null || isRecord(p.best));
+      return Array.isArray(p.bids) && p.bids.every(isBidEntry) &&
+        isSeat(p.toAct) && (p.best === null || isBid(p.best));
     case 'discard-talon':
     case 'declare':
       return standingOk(p.standing);
@@ -89,7 +93,9 @@ function isValidPhase(p: Record<string, unknown>): boolean {
         isSeat(f.toAct) && Array.isArray(f.passed) && (f.passed as unknown[]).every(isSeat);
     }
     case 'tricks':
-      return isNum(p.trickNo) && isSeat(p.leader) && isSeat(p.toAct) &&
+      // hra končí na trickNo === 9; jiná hodnota (nebo neceločíselná) znamená
+      // stav, ze kterého se nikdy nedostane k zúčtování
+      return inRange(p.trickNo, 0, 9) && isSeat(p.leader) && isSeat(p.toAct) &&
         isPlayArray(p.trick) &&
         // POZOR: `played` jsou DOHRANÉ ŠTYCHY { plays, winner }, ne karty
         Array.isArray(p.played) && p.played.every(isTrickResult) &&
@@ -120,7 +126,7 @@ function isHistoryAction(x: unknown): boolean {
     case 'choose-trump':
       return a.card === 'from-people' || isCard(a.card);
     case 'bid':
-      return a.bid === 'pass' || isRecord(a.bid);
+      return a.bid === 'pass' || isBid(a.bid);
     case 'discard':
       return Array.isArray(a.cards) && a.cards.length === 2 && a.cards.every(isCard);
     case 'declare':
@@ -140,6 +146,20 @@ function isHistoryAction(x: unknown): boolean {
       return false;
   }
 }
+
+const BID_KINDS = ['sedma', 'sto', 'sto-sedma', 'betl', 'durch', 'dve-sedmy', 'dve-sedmy-sto'];
+
+/** Závazek z licitace — `kind` se používá jako klíč popisků, `cervena` v sazbách. */
+const isBid = (x: unknown): boolean =>
+  isRecord(x) && BID_KINDS.includes(String((x as Record<string, unknown>).kind)) &&
+  typeof (x as Record<string, unknown>).cervena === 'boolean';
+
+/** Záznam licitace: `legal.ts` i reducer z něj čtou `.seat` a `.bid`. */
+const isBidEntry = (x: unknown): boolean => {
+  if (!isRecord(x)) return false;
+  const b = x as Record<string, unknown>;
+  return isSeat(b.seat) && (b.bid === 'pass' || isBid(b.bid));
+};
 
 /** Kontrakt řídí pravidla i zúčtování — musí být kompletní a v rozsahu. */
 function isContract(x: unknown): boolean {

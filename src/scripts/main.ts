@@ -5,6 +5,7 @@
 import type { Difficulty } from '../lib/ai/heuristics';
 import { MatchController } from '../lib/match/controller';
 import { clearMatch, loadMatch, saveMatch } from '../lib/match/persist';
+import { createSeedSequence, parseSeedParam } from '../lib/match/seedSequence';
 import { createWorkerDriver } from '../lib/match/workerDriver';
 import { defaultConfig } from '../lib/rules/sazby';
 import type { GameState, Variant } from '../lib/rules/types';
@@ -57,24 +58,9 @@ const settings = loadSettings();
 const driver = createWorkerDriver();
 
 // ?seed=NNN → deterministická rozdání (testy, sdílení zajímavých rozdání);
-// další hry v zápase dostávají seed+1, seed+2, …
-const seedParam = new URLSearchParams(location.search).get('seed');
-const urlSeed = seedParam !== null && seedParam !== '' && Number.isFinite(Number(seedParam))
-  ? Number(seedParam)
-  : null;
-let seedCounter = urlSeed ?? 0;
-/** Obnovený zápas pokračuje v posloupnosti, ne od začátku (jinak by ?seed= lhal). */
-const advanceSeedTo = (handsPlayed: number): void => {
-  if (urlSeed !== null) seedCounter = urlSeed + handsPlayed;
-};
-// Random si se seedem 0 poradí, takže se nic nepřepisuje — jinak by ?seed=0
-// dalo dvěma prvním hrám stejný seed a slíbený determinismus by neplatil.
-const randomSeed = (): number => {
-  if (urlSeed !== null) return seedCounter++;
-  const buf = new Uint32Array(1);
-  crypto.getRandomValues(buf);
-  return buf[0];
-};
+// další hry v zápase dostávají seed+1, seed+2, … (logika v seedSequence.ts)
+const seeds = createSeedSequence(parseSeedParam(location.search));
+const randomSeed = (): number => seeds.next();
 
 const BUDGETS: Record<Difficulty, number> = { easy: 300, normal: 1000, hard: 2200 };
 
@@ -109,6 +95,7 @@ const table = new TableUI($('table'), {
 function newMatch(): void {
   controller?.stop();
   clearMatch();
+  table.reset(); // opuštěné animace starého zápasu nesmí blokovat nový
   controller = makeController();
   controller.dealNext();
 }
@@ -117,7 +104,7 @@ function newMatch(): void {
 const saved = loadMatch();
 if (saved && saved.config.variant === settings.variant && saved.phase.name !== 'idle') {
   if (window.confirm(t('resume'))) {
-    advanceSeedTo(saved.handNo);
+    seeds.resumeAfter(saved.handNo);
     controller = makeController(saved);
     table.render(controller.state);
     controller.kick();

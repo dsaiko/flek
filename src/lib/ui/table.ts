@@ -51,6 +51,12 @@ export class TableUI {
    * hráče tiše zahodilo — proto se umí znovu postavit.
    */
   private openPopup: (() => void) | null = null;
+  /**
+   * Generace zápasu. Animace spí až ~1,8 s a jsou zařazené do `chain`, takže
+   * nový zápas by čekal za animacemi toho starého (a při opakovaných klicích
+   * na „Nový zápas" i za několika). Zvýšení generace opuštěné animace zkrátí.
+   */
+  private gen = 0;
   private resultView: 'summary' | 'replay' = 'summary';
 
   constructor(root: HTMLElement, opts: TableOptions, cb: TableCallbacks) {
@@ -63,16 +69,28 @@ export class TableUI {
    * Překreslení podle stavu. Přechody hodné animace (rozdání, dohraný štych)
    * se serializují do fronty — stavy se nikdy nepřeskočí, jen pozdrží.
    */
+  /** Nový zápas: zapomeň minulý stav a nech opuštěné animace doběhnout naprázdno. */
+  reset(): void {
+    this.gen += 1;
+    this.prevState = null;
+    this.openPopup = null;
+    this.selected.clear();
+    this.chain = Promise.resolve();
+  }
+
   render(state: GameState): void {
     const prev = this.prevState;
     this.prevState = state;
     // skutečný posun hry popup zneplatňuje (obnovuje se jen při překreslení
     // TÝMŽ stavem, tedy při přepnutí jazyka nebo vzoru karet)
     if (prev !== null && prev !== state) this.openPopup = null;
+    const gen = this.gen;
     this.chain = this.chain
       .then(async () => {
         try {
-          const handled = await this.playTransitions(prev, state);
+          // mezitím začal jiný zápas → jen dokresli, žádné animace
+          if (gen !== this.gen) { this.renderNow(state); return; }
+          const handled = await this.playTransitions(prev, state, gen);
           if (!handled) this.renderNow(state);
         } catch (e) {
           console.error(e);
@@ -87,7 +105,7 @@ export class TableUI {
   }
 
   /** Vrací true, když přechod sám vykreslil finální stav. */
-  private async playTransitions(prev: GameState | null, state: GameState): Promise<boolean> {
+  private async playTransitions(prev: GameState | null, state: GameState, gen = this.gen): Promise<boolean> {
     // Přechod animuj jen tehdy, když stav opravdu pokročil právě o jednu akci.
     // (Překreslení TÍMŽ stavem — změna jazyka/vzoru karet — jinak přehrávalo
     //  animaci štychu znovu a s duplikovanou kartou.)
@@ -98,7 +116,10 @@ export class TableUI {
      * rozdávání nového zápasu (i po změně varianty/obtížnosti) nikdy
      * neanimovalo.
      */
-    const newMatchDeal = a?.type === 'deal' && state.history.length === 1;
+    // POZOR: výjimka nesmí obejít `prev === state` — překreslení TÝMŽ stavem
+    // (přepnutí jazyka/vzoru) by jinak znovu přehrálo rozdávání a přeskočilo
+    // obnovení otevřeného popupu
+    const newMatchDeal = a?.type === 'deal' && state.history.length === 1 && prev !== state;
     if (!newMatchDeal && (!prev || prev === state || prev.history.length + 1 !== state.history.length)) {
       return false;
     }
@@ -112,7 +133,7 @@ export class TableUI {
         await sleep(n * REVEAL_STEP_MS + 350);
         this.root.classList.remove('animating');
       }
-      return true;
+      return gen === this.gen; // opuštěný zápas nechá překreslit ten nový
     }
 
     // „z lidu": otočená karta se ukazuje všem — chvíli ji vystav uprostřed
@@ -143,6 +164,7 @@ export class TableUI {
         const vNew = view(state, this.opts.humanSeat);
         this.renderHand(vNew, []); // bez klikání, animace kliky stejně blokuje
         this.renderOpponents(vNew);
+        if (gen !== this.gen) return false; // zápas se mezitím vyměnil
         await this.animateTrickEnd(full, winner, state, prev.contract.trump);
       }
     }
@@ -640,7 +662,9 @@ export class TableUI {
       p.name === 'bidding' || p.name === 'takeover' ? p.toAct
       : p.name === 'fleks' ? p.fleks.toAct
       : p.name === 'tricks' ? p.toAct
-      : p.name === 'choose-trump' ? null
+      // volbu trumfu dělá vždy forhont — „…" bez jména se ukazovalo ve dvou
+      // ze tří her (rozdávající rotuje)
+      : p.name === 'choose-trump' ? forhont(v.dealer)
       : p.name === 'discard-talon' || p.name === 'declare' ? p.standing.declarer
       : null;
     if (seat === null || seat === this.opts.humanSeat) return null;
@@ -814,6 +838,15 @@ function flekSummary(state: GameState): string {
   return parts.join(', ');
 }
 
+export /** Trumf ze stojícího závazku (fáze declare/takeover) — pro popisky. */
+function standingTrumpOf(state: GameState): number | null {
+  const p = state.phase;
+  if (p.name === 'declare' || p.name === 'discard-talon' || p.name === 'takeover') {
+    return p.standing.trump;
+  }
+  return null;
+}
+
 export function bubbleText(a: PlayerAction, state: GameState): string | null {
   switch (a.type) {
     case 'choose-trump':
@@ -821,7 +854,12 @@ export function bubbleText(a: PlayerAction, state: GameState): string | null {
     case 'bid':
       return a.bid === 'pass' ? t('good') : bidLabel(a.bid);
     case 'declare':
-      return declareLabel(a);
+      /*
+       * Ve voleném akce `declare` trumf NEnese (je určený už volbou), takže
+       * bez fallbacku by bublina hlásila „Hra" bez barvy — a nesouhlasila by
+       * s tlačítkem, které fallback používá.
+       */
+      return declareLabel(a, state.contract?.trump ?? standingTrumpOf(state));
     case 'takeover':
       return a.claim === 'good' ? t('good') : `${t(a.claim)}!`;
     case 'flek': {

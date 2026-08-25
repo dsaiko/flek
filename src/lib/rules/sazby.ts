@@ -7,8 +7,11 @@
  * za každých 10 bodů (čl. V.5). Tiché varianty = polovina hlášené sazby.
  * Červené dvojnásob (jen barevné hry).
  *
- * Poznámky: soutěžní křížový volený (2007) má odchylku betl 10 / durch 20;
- * hospodská tradice sto zdvojnásobuje (kiloScaling 'double'). Preset FLEK!
+ * Pozor na záměnu sazebníků: betl 10× / durch 20× patří KŘÍŽOVÉMU mariáši
+ * (4 hráči, desetihaléřový, ČSM 2007), který nehrajeme. Naše dvě varianty —
+ * dvacetihaléřový bodovaný volený (ČSM 2007) i soutěžní licitovaný (ČSM 2014,
+ * betl 3,00 / durch 6,00 při základu 0,20) — mají shodně betl 15× a durch 30×.
+ * Hospodská tradice sto zdvojnásobuje (kiloScaling 'double'). Preset FLEK!
  * (podle chování originálu) se doladí ve fázi 4.
  */
 
