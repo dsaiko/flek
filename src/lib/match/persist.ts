@@ -33,6 +33,19 @@ const isTriple = (x: unknown, item: (y: unknown) => boolean): boolean =>
   Array.isArray(x) && x.length === 3 && x.every(item);
 /** Pozor: `typeof null === 'object'` — mapy fleků se z nich indexují. */
 const isRecord = (x: unknown): boolean => x !== null && typeof x === 'object' && !Array.isArray(x);
+const inRange = (x: unknown, lo: number, hi: number): boolean =>
+  typeof x === 'number' && Number.isInteger(x) && x >= lo && x <= hi;
+const isCard = (x: unknown): boolean => inRange(x, 0, 31);
+/** Jedna zahraná karta ve štychu — `card` MUSÍ být číslo, jinak z ní `suitOf` udělá kartu 0. */
+const isPlay = (x: unknown): boolean =>
+  isRecord(x) && isSeat((x as Record<string, unknown>).seat) && isCard((x as Record<string, unknown>).card);
+const isPlayArray = (x: unknown): boolean => Array.isArray(x) && x.every(isPlay);
+/** Dohraný štych: `{ plays, winner }` (Phase.tricks.played), NE pole karet. */
+const isTrickResult = (x: unknown): boolean => {
+  if (!isRecord(x)) return false;
+  const t = x as Record<string, unknown>;
+  return isPlayArray(t.plays) && (t.plays as unknown[]).length === 3 && isSeat(t.winner);
+};
 
 /** Payload fáze musí odpovídat jejímu jménu — UI na něj sahá bez dalších kontrol. */
 function isValidPhase(p: Record<string, unknown>): boolean {
@@ -56,14 +69,20 @@ function isValidPhase(p: Record<string, unknown>): boolean {
     case 'fleks': {
       if (!isRecord(p.fleks)) return false;
       const f = p.fleks as Record<string, unknown>;
-      return isRecord(f.levels) && isRecord(f.lastRaiser) &&
-        isSeat(f.toAct) && Array.isArray(f.passed);
+      // levels jdou do 2**level v scoringu, lastRaiser do porovnání stran
+      return isRecord(f.levels) && Object.values(f.levels as object).every((l) => inRange(l, 0, 16)) &&
+        isRecord(f.lastRaiser) && Object.values(f.lastRaiser as object).every(isSeat) &&
+        isSeat(f.toAct) && Array.isArray(f.passed) && (f.passed as unknown[]).every(isSeat);
     }
     case 'tricks':
       return isNum(p.trickNo) && isSeat(p.leader) && isSeat(p.toAct) &&
-        Array.isArray(p.trick) &&
-        (p.trick as unknown[]).every((t) => isRecord(t) && isSeat((t as Record<string, unknown>).seat)) &&
-        isCardArray(p.played) && Array.isArray(p.marriages) &&
+        isPlayArray(p.trick) &&
+        // POZOR: `played` jsou DOHRANÉ ŠTYCHY { plays, winner }, ne karty
+        Array.isArray(p.played) && p.played.every(isTrickResult) &&
+        Array.isArray(p.marriages) && p.marriages.every(
+          (m) => isRecord(m) && isSeat((m as Record<string, unknown>).seat) &&
+            inRange((m as Record<string, unknown>).suit, 0, 3),
+        ) &&
         isTriple(p.won, (w) => isCardArray(w));
     case 'scored':
       return isHandResult(p.result);

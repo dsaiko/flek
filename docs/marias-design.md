@@ -805,3 +805,44 @@ z předchozích kol; jedna z nich (i45) odhalila i skutečnou díru ve validaci 
 | i47 | medium | determinizace se testovala jen po `deriveConstraints`, ne po umístění karet | 60 seedů přes `determinize()`: ukázaný trumf jen u volícího/v talonu, hlášená sedma vždy v ruce aktéra |
 
 `make verify` má nyní **37 PASS bloků**; smoke test potvrzuje, že CSP nic v prohlížeči nerozbila.
+
+## 16. Fixpoint review kódu — páté kolo (2026-08-25, po 959131f)
+
+35 nálezů, 17 zamítl judge. Ze zbylých 18 jsem **16 potvrdil a opravil, 2 zamítl**
+(rozpor s autoritativními pravidly ČSM — viz níže). Nejvážnější byla **kritická regrese
+z mého vlastního čtvrtého kola**: „zpřesněná" validace savu zneplatnila každý rozehraný
+zápas.
+
+| Nález | Sev | Podstata | Oprava |
+|---|---|---|---|
+| i1, i3, i5, i25 | critical/high | `isValidPhase` kontrolovala `played` přes `isCardArray`, ale `Phase.tricks.played` jsou **dohrané štychy** `{ plays, winner }`. Po prvním dohraném štychu tedy `loadMatch()` vracel `null` → autosave se tiše zahazoval po celý zbytek hry a nabídka „pokračovat" se nikdy neobjevila | `isTrickResult` (3 karty + vítěz); round-trip test odehraje 5 a 27 karet a savu se musí obnovit hodnotově shodný |
+| i6 | medium | `phase.trick[].card` nekontroloval **ani jeden** ze dvou obranných valů: `assertValid` používá relační porovnání (`null < 0` je `false`), takže `{"seat":0,"card":null}` prošlo a `suitOf` z něj udělalo červenou sedmu ležící zároveň v ruce | `isCard`/`isPlay` v savu, `Number.isInteger` v `assertValid`; validují se i `marriages` a hodnoty `fleks.levels` (jdou do `2**level`) |
+| i7 | low | `showConfirmPopup` interpoloval `confirmLabel` do `innerHTML` bez `esc()` — jediné neescapované místo v celém souboru | `esc(confirmLabel)` |
+| i12 | low | přepnutí jazyka překreslí stůl **týmž stavem**, což vyčistilo `#center-float` — otevřený popup i s čekající volbou hlášky zmizel a karta se nezahrála | `openPopup` se umí znovu postavit; skutečný posun hry ho zneplatní |
+| i15 | medium | `deploy: deploy-s3 deploy-invalidate` — `make -j` mohl invalidovat CloudFront ještě před dokončením syncu | `.NOTPARALLEL:` + invalidace jako krok v recepci po `deploy-s3` |
+| i17 | high | test i27 (dvojklik nezabije AI) byl **vakuózní**: dealer 2 ⇒ forhont je člověk, takže žádný požadavek AI nikdy neběžel a `cancels` bylo 0 v obou případech | scénář s dealerem 0 (forhont = AI), driver rozmýšlí 400 ms; test ověří, že odmítnutá akce nezvýší `cancels` a AI svůj tah dokončí |
+| i18 | medium | `assert.equal(keep.talonOwner, keep.contract?.declarer === 0 ? 0 : keep.talonOwner)` je tautologie — invariant o tom, kdo smí vidět talon, se netestoval | porovnává se se skutečným `talonOwner` před převzetím |
+| i19 | medium | nová volba „ohlásit / bez hlášky" neměla žádný test; smoke klikal vždy jen „ohlásit" | rozhodnutí vytaženo do `playChoice.ts` (bez DOM) a testováno; „bez hlášky" musí projít enginem a **nic nenaskórovat**, smoke obě větve střídá |
+| i20 | high | `SPAWN_GRACE_MS` (i29 z minulého kola) test obcházel — schválně zahřívá worker, takže větev `fresh === true` nikdy neproběhla | test drží první požadavek přes 2,6 s (bez tolerance by ho watchdog zabil) a pak ověří, že po plné toleranci zabít MUSÍ |
+| i21 | high | CSP ani SRI nic neověřovalo a smoke nemohl na jejich porušení spadnout (zablokovaný worker jen degraduje na fallback) | verify čte `Layout.astro` (direktivy, žádný `*` v `script-src`, verzovaná URL, `integrity`, `crossorigin`); smoke sbírá CSP porušení a končí **exit 1** |
+| i22 | low | oba testy `revealedTrump` používaly dealer 2 / aktéra 0, kde `forhont(2) === 0` — nešlo rozlišit správné pravidlo od chybného | přidán případ po převzetí betlem: aktér je 2, kartu ale ukázal forhont 0 |
+| i26 | high | test escapování volal jen `esc()`; skutečné sinky (`settlementHtml`, `replayHtml`) byly private metody s DOM a testovat se nedaly | skladače vytaženy do `resultHtml.ts` (bez DOM) a testovány s `note`/`target`/jménem hráče = `<img src=x onerror=…>` |
+| i29 | low | test tvrdil „AI nemaže body do cizího štychu", ale desítku ani neměla v ruce | desítka je v ruce a test žádá konkrétní kartu (devítku) |
+
+### Zamítnuto (s odůvodněním)
+
+| Nález | Proč ne |
+|---|---|
+| i2 (medium) — „hlášku lze hlásit jen při výnosu" | Naším zdrojem pravdy jsou pravidla ČSM (§3.1), a ta v **Čl. III/3** říkají: „Hláška se považuje za nahlášenou, odloží‑li její majitel stranou (na své zdvihy) první z příslušné dvojice karet **v okamžiku, kdy tuto kartu odehrává**." Žádná podmínka výnosu tam není. Citovaný pagat.com popisuje jinou (také rozšířenou) konvenci; kdo ji chce, patří to do house‑rule přepínače, ne do opravy chyby. |
+| i4 (medium) — „dřívější hráč smí držet stejné převzetí" | Pravidlo o držení shodného stupně existuje jen v **licitaci** (Obecná Čl. V/3: „Forhontovi stačí výši závazku vyrovnávat odpovědí »Mám«"), ne u převzetí. Pro volený platí Čl. V/1: „Z ohlášeného Betla mohou zbývající dva hráči přebrat hru **ještě na Durcha**" — shodný betl se tedy nepřebírá. Chování je správné. |
+
+### Poznámka k licitaci (nalezeno při validaci i4)
+
+Obecná pravidla ČSM Čl. V/3 určují, že licitaci **začíná zadák** a forhont jen vyrovnává
+„Mám"; po odstoupení forhonta přebírá jeho postavení prostřední hráč. Náš model mluví
+v pořadí od forhonta a privilegium držet shodný stupeň dává hráči dřívějšímu v tomto
+pořadí — což ve výsledku odpovídá ČSM (forhont drží proti zadákovi, prostřední po jeho
+odstoupení), ale **pořadí prvního slova je zjednodušené**. Zapsáno jako known deviation
+k dořešení, pokud se budeme chtít měřit s turnajovými pravidly.
+
+`make verify` má nyní **43 PASS bloků**; smoke navíc padá na porušení CSP.

@@ -13,7 +13,7 @@ import {
 } from '../cards';
 import { legalActions } from '../rules/legal';
 import { winningPlay, beats } from '../rules/tricks';
-import type { PlayerAction, PlayerView, Seat } from '../rules/types';
+import type { PlayerAction, PlayerView } from '../rules/types';
 import { Random } from '../random';
 
 export type Difficulty = 'easy' | 'normal' | 'hard';

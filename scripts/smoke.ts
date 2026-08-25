@@ -19,8 +19,16 @@ const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1200, height: 900 }, deviceScaleFactor: 2 });
 page.setDefaultTimeout(8000); // kliky mohou čekat na konec animací
 page.on('dialog', (d) => void d.dismiss());
+// CSP porušení hlásí prohlížeč jako console error — blokovaný worker by jinak
+// jen tiše spadl do fallbacku na hlavním vlákně a test by prošel
+const cspViolations: string[] = [];
 page.on('console', (msg) => {
-  if (msg.type() === 'error') console.log('CONSOLE ERROR:', msg.text());
+  if (msg.type() !== 'error') return;
+  const text = msg.text();
+  console.log('CONSOLE ERROR:', text);
+  if (/content security policy|refused to (load|execute|connect|create)/i.test(text)) {
+    cspViolations.push(text);
+  }
 });
 page.on('pageerror', (e) => console.log('PAGE ERROR:', e.message));
 
@@ -36,6 +44,7 @@ await page.screenshot({ path: join(outDir, 'smoke-1-deal.png'), clip: await tabl
 let shots = 2;
 let reachedSettlement = false;
 let confirmedWarnings = 0;
+let marriageChoices = 0;
 for (let i = 0; i < 200; i += 1) {
   await page.waitForTimeout(350);
 
@@ -47,12 +56,18 @@ for (let i = 0; i < 200; i += 1) {
     }
   };
 
-  // popup na stole (varování u odhozu, volba hlášky) je potřeba potvrdit,
-  // ne ho brát za konec hry
+  // popup na stole je potřeba potvrdit, ne ho brát za konec hry.
+  // U volby hlášky se střídá „ohlásit" a „bez hlášky", ať se odzkouší obě větve.
   if ((await page.locator('.felt-panel.warn').count()) > 0) {
     const confirm = page.locator('[data-act="confirm"]');
-    await ((await confirm.count()) > 0 ? confirm : page.locator('[data-act="primary"]')).click();
-    confirmedWarnings += 1;
+    if ((await confirm.count()) > 0) {
+      await confirm.click();
+      confirmedWarnings += 1;
+    } else {
+      const decline = marriageChoices % 2 === 1;
+      await page.locator(decline ? '[data-act="secondary"]' : '[data-act="primary"]').click();
+      marriageChoices += 1;
+    }
     continue;
   }
 
@@ -90,7 +105,15 @@ for (let i = 0; i < 200; i += 1) {
 }
 
 await browser.close();
-console.log(`Screenshoty v ${outDir}/ (potvrzených varování: ${confirmedWarnings})`);
+console.log(
+  `Screenshoty v ${outDir}/ (potvrzených varování: ${confirmedWarnings}, voleb hlášky: ${marriageChoices})`,
+);
+
+if (cspViolations.length > 0) {
+  console.error(`CHYBA: CSP zablokovala ${cspViolations.length} zdroj(ů):`);
+  for (const v of cspViolations) console.error(`  ${v}`);
+  process.exit(1);
+}
 
 // vyčerpání smyčky NENÍ úspěch — jinak by test procházel, i když hra uvízne
 if (!reachedSettlement) {

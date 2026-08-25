@@ -196,7 +196,12 @@ export function assertValid(state: GameState): void {
     const seen = new Set<Card>();
     const add = (cards: readonly Card[], where: string) => {
       for (const c of cards) {
-        if (c < 0 || c > 31 || seen.has(c)) throw new InvariantError(`karta ${c} dvakrát/mimo rozsah (${where})`);
+        // POZOR na relační porovnání: `null < 0` je false, takže bez
+        // Number.isInteger by nečíselná karta prošla a `suitOf` by z ní
+        // udělala kartu 0 (červenou sedmu) ležící zároveň v ruce
+        if (!Number.isInteger(c) || c < 0 || c > 31 || seen.has(c)) {
+          throw new InvariantError(`karta ${String(c)} dvakrát/mimo rozsah (${where})`);
+        }
         seen.add(c);
       }
     };

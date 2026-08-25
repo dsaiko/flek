@@ -87,4 +87,9 @@ deploy-invalidate:
 		--distribution-id $(CLOUDFRONT_DIST) \
 		--paths "/*"
 
-deploy: deploy-s3 deploy-invalidate
+# Invalidace MUSÍ jít až po nahrání — jinak by CloudFront s `make -j` mohl
+# naplnit cache starým obsahem ještě před dokončením syncu.
+.NOTPARALLEL:
+
+deploy: deploy-s3
+	@$(MAKE) deploy-invalidate

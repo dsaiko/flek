@@ -6,15 +6,19 @@
  * karty. Žádný přístup ke GameState mimo humanView + veřejné části.
  */
 
-import { pointsOf, rankOf, suitOf, KRAL, SVRSEK, card as mkCard, type Card } from '../cards';
+import { suitOf, type Card } from '../cards';
 import { legalActions } from '../rules/legal';
 import { trickWinner } from '../rules/tricks';
-import type { GameState, HandResult, PlayerAction, PlayerView, Seat } from '../rules/types';
+import type { GameState, PlayerAction, PlayerView, Seat } from '../rules/types';
 import { forhont } from '../rules/types';
 import { view } from '../rules/view';
 import { backSrc, cardName, cardSrc, suitIcon, suitName, type Pattern } from './cardAssets';
-import { aiNames, compLabel, currentLang, flekName, fmtMoney, marriageWarn, t } from './i18n';
+import { aiNames, currentLang, flekName, fmtMoney, marriageWarn, t } from './i18n';
 import { discardWarnings } from './discardWarnings';
+import { playChoice } from './playChoice';
+import { esc, replayHtml, settlementHtml, type HtmlDeps } from './resultHtml';
+
+export { esc };
 
 export interface TableCallbacks {
   onAction: (action: PlayerAction) => void;
@@ -41,6 +45,12 @@ export class TableUI {
   private bubbleTimers = new Map<Seat, ReturnType<typeof setTimeout>>();
   private prevState: GameState | null = null;
   private chain: Promise<void> = Promise.resolve();
+  /**
+   * Otevřený popup na stole. Překreslení TÝMŽ stavem (přepnutí jazyka nebo
+   * vzoru karet) čistí `#center-float`, což by jinak popup i s čekající volbou
+   * hráče tiše zahodilo — proto se umí znovu postavit.
+   */
+  private openPopup: (() => void) | null = null;
   private resultView: 'summary' | 'replay' = 'summary';
 
   constructor(root: HTMLElement, opts: TableOptions, cb: TableCallbacks) {
@@ -56,6 +66,9 @@ export class TableUI {
   render(state: GameState): void {
     const prev = this.prevState;
     this.prevState = state;
+    // skutečný posun hry popup zneplatňuje (obnovuje se jen při překreslení
+    // TÝMŽ stavem, tedy při přepnutí jazyka nebo vzoru karet)
+    if (prev !== null && prev !== state) this.openPopup = null;
     this.chain = this.chain
       .then(async () => {
         try {
@@ -146,6 +159,8 @@ export class TableUI {
     this.renderActions(v, legal);
     this.renderStatus(v, legal);
     this.showLastActionBubble(state);
+    // popup přežije překreslení týmž stavem (jazyk, vzor karet)
+    this.openPopup?.();
   }
 
   // ── animace ────────────────────────────────────────────────────────────────
@@ -331,8 +346,8 @@ export class TableUI {
       </div>`;
       float.innerHTML =
         this.resultView === 'summary'
-          ? this.settlementHtml(v.phase.result, v)
-          : this.replayHtml(state, v.phase.result);
+          ? settlementHtml(v.phase.result, v, this.htmlDeps)
+          : replayHtml(state, v.phase.result, this.htmlDeps);
       // tlačítka dovnitř panelu
       const host = float.querySelector('.felt-panel, .replay');
       if (host) host.insertAdjacentHTML('beforeend', buttons);
@@ -447,25 +462,18 @@ export class TableUI {
       else if (this.selected.size < 2) this.selected.add(c);
       this.rerenderSelection(v);
     } else if (phase.name === 'tricks') {
-      /*
-       * Hláška je podle pravidel VOLBA hráče (§5.1) — ohlásit znamená body,
-       * ale i prozradit druhou kartu páru. Když je legální obojí, nech ho vybrat.
-       */
-      const legal = legalActions(v);
-      const withM = legal.find((a) => a.type === 'play' && a.card === c && a.announceMarriage);
-      const plain = legal.find((a) => a.type === 'play' && a.card === c && !a.announceMarriage);
-      if (withM && plain) {
-        const trump = v.contract?.trump ?? null;
-        const pts = trump !== null && suitOf(c) === trump ? 40 : 20;
+      // rozhodnutí (ohlásit / neohlásit / bez ptaní) je v playChoice — bez DOM
+      const choice = playChoice(v, legalActions(v), c);
+      if (choice.ask) {
+        const { withMarriage, plain, points } = choice.ask;
         this.showChoicePopup(
-          `${t('announceQuestion')} (${pts})`,
-          { label: t('announceYes'), onPick: () => this.cb.onAction(withM) },
+          `${t('announceQuestion')} (${points})`,
+          { label: t('announceYes'), onPick: () => this.cb.onAction(withMarriage) },
           { label: t('announceNo'), onPick: () => this.cb.onAction(plain) },
         );
         return;
       }
-      const action = withM ?? plain;
-      if (action) this.cb.onAction(action);
+      if (choice.single) this.cb.onAction(choice.single);
     }
   }
 
@@ -633,20 +641,27 @@ export class TableUI {
   // ── potvrzovací popup vestavěný do stolu ─────────────────────────────────────
 
   private showConfirmPopup(messages: string[], confirmLabel: string, onConfirm: () => void): void {
+    this.openPopup = () => this.paintConfirmPopup(messages, confirmLabel, onConfirm);
+    this.paintConfirmPopup(messages, confirmLabel, onConfirm);
+  }
+
+  private paintConfirmPopup(messages: string[], confirmLabel: string, onConfirm: () => void): void {
     const float = $(this.root, '#center-float');
     float.classList.add('open');
     float.innerHTML = `<div class="felt-panel warn">
       ${messages.map((m) => `<p class="warn-msg">⚠️ ${esc(m)}</p>`).join('')}
       <div class="felt-actions">
         <button class="action-btn" data-act="cancel">${t('back')}</button>
-        <button class="action-btn primary" data-act="confirm">${confirmLabel}</button>
+        <button class="action-btn primary" data-act="confirm">${esc(confirmLabel)}</button>
       </div>
     </div>`;
     float.querySelector('[data-act="cancel"]')?.addEventListener('click', () => {
+      this.openPopup = null;
       if (this.prevState) this.renderNow(this.prevState);
       else { float.classList.remove('open'); float.innerHTML = ''; }
     });
     float.querySelector('[data-act="confirm"]')?.addEventListener('click', () => {
+      this.openPopup = null;
       float.classList.remove('open');
       float.innerHTML = '';
       onConfirm();
@@ -655,6 +670,15 @@ export class TableUI {
 
   /** Dvě rovnocenné volby v panelu na stole (např. ohlásit hlášku, nebo ne). */
   private showChoicePopup(
+    question: string,
+    primary: { label: string; onPick: () => void },
+    secondary: { label: string; onPick: () => void },
+  ): void {
+    this.openPopup = () => this.paintChoicePopup(question, primary, secondary);
+    this.paintChoicePopup(question, primary, secondary);
+  }
+
+  private paintChoicePopup(
     question: string,
     primary: { label: string; onPick: () => void },
     secondary: { label: string; onPick: () => void },
@@ -668,94 +692,19 @@ export class TableUI {
         <button class="action-btn primary" data-act="primary">${esc(primary.label)}</button>
       </div>
     </div>`;
-    const close = (): void => { float.classList.remove('open'); float.innerHTML = ''; };
+    const close = (): void => {
+      this.openPopup = null;
+      float.classList.remove('open');
+      float.innerHTML = '';
+    };
     float.querySelector('[data-act="primary"]')?.addEventListener('click', () => { close(); primary.onPick(); });
     float.querySelector('[data-act="secondary"]')?.addEventListener('click', () => { close(); secondary.onPick(); });
   }
 
   // ── zúčtování a průběh hry (integrované do stolu, po vzoru FLEK!) ──────────
 
-  private settlementHtml(r: HandResult, v: PlayerView): string {
-    const me = this.opts.humanSeat;
-    const mydSide = r.contract.declarer === me ? 'declarer' : 'defenders';
-    const lang = currentLang();
-
-    const head =
-      r.contract.mode === 'hra'
-        ? `${esc(t('hra'))} ${r.contract.trump !== null ? suitIcon(r.contract.trump) : ''}`
-        : esc(t(r.contract.mode));
-    const pts =
-      r.contract.mode === 'hra'
-        ? `<div class="felt-sub">${esc(t('declarerSide'))} ${esc(r.cardPoints.declarer + r.marriagePoints.declarer)}
-           · ${esc(t('defendersSide'))} ${esc(r.cardPoints.defenders + r.marriagePoints.defenders)} ${esc(t('units'))}</div>`
-        : '';
-
-    const flekWord = lang === 'de' ? 'Kontra' : 'flek';
-    const rows = r.components
-      .map((comp) => {
-        const won = comp.wonBy === mydSide;
-        let label = esc(compLabel(comp.target, won));
-        if (comp.silent) label += ` (${esc(t('silentWord'))})`;
-        if (comp.flekMultiplier > 1) label += `, ${esc(Math.log2(comp.flekMultiplier))}× ${esc(flekWord)}`;
-        if (comp.note) label += ` <em>(${esc(comp.note)})</em>`;
-        return `<tr><td>${label}:</td><td class="money">${esc(fmtMoney(comp.amount))}</td></tr>`;
-      })
-      .join('');
-
-    const myDelta = r.delta[me];
-    const deltaLine = `<tr class="sum"><td>${esc(myDelta < 0 ? t('youLost') : t('youWon'))}:</td><td class="money">${esc(fmtMoney(Math.abs(myDelta)))}</td></tr>`;
-    const totalLine = `<tr><td>${esc(t('nowTotal'))}:</td><td class="money">${esc(fmtMoney(v.ledger[me]))}</td></tr>`;
-    const others = ([0, 1, 2] as Seat[])
-      .filter((x) => x !== me)
-      .map((x) => `${esc(this.nameOf(x))} ${r.delta[x] >= 0 ? '+' : ''}${esc(fmtMoney(r.delta[x]))}`)
-      .join(' · ');
-
-    return `<div class="felt-panel">
-      <h3>${esc(t('vyuctovani'))}:</h3>
-      <div class="felt-sub">${head} — ${esc(this.nameOf(r.contract.declarer))}</div>
-      ${pts}
-      <table><tbody>${rows}${deltaLine}${totalLine}</tbody></table>
-      <div class="felt-others">${others}</div>
-    </div>`;
-  }
-
-  private replayHtml(state: GameState, r: HandResult): string {
-    // rekonstrukce štychů z historie aktuální hry
-    let start = 0;
-    for (let i = state.history.length - 1; i >= 0; i -= 1) {
-      if (state.history[i].type === 'deal') { start = i + 1; break; }
-    }
-    const plays: { seat: Seat; card: Card }[] = [];
-    for (let i = start; i < state.history.length; i += 1) {
-      const a = state.history[i];
-      if (a.type === 'play') plays.push({ seat: a.seat, card: a.card });
-    }
-
-    const cardImg = (c: Card, cls = ''): string =>
-      `<img class="${esc(cls)}" src="${esc(cardSrc(c, this.opts.pattern()))}" alt="${esc(cardName(c))}">`;
-
-    const tricksHtml: string[] = [];
-    for (let i = 0; i + 2 < plays.length; i += 3) {
-      const trick = plays.slice(i, i + 3);
-      const winner = trickWinner(trick, r.contract.trump, r.contract.mode);
-      tricksHtml.push(`<div class="rtrick">
-        <div>${trick.map((p) => cardImg(p.card)).join('')}</div>
-        <div class="rwin">${esc(i / 3 + 1)}. ${esc(this.nameOf(winner))}</div>
-      </div>`);
-    }
-
-    const talon = state.talon.length > 0
-      ? `<span class="rtalon">${esc(t('talon'))}: ${state.talon.map((c) => cardImg(c)).join('')}</span>`
-      : '';
-    const pts = r.contract.mode === 'hra'
-      ? `${esc(t('declarerSide'))} ${esc(r.cardPoints.declarer + r.marriagePoints.declarer)}
-         · ${esc(t('defendersSide'))} ${esc(r.cardPoints.defenders + r.marriagePoints.defenders)} ${esc(t('units'))} · `
-      : '';
-
-    return `<div class="replay">
-      <div class="replay-head">${pts}${talon}</div>
-      <div class="rtricks">${tricksHtml.join('')}</div>
-    </div>`;
+  private get htmlDeps(): HtmlDeps {
+    return { humanSeat: this.opts.humanSeat, nameOf: (s) => this.nameOf(s), pattern: this.opts.pattern };
   }
 
   // ── bubliny (table talk základ) ────────────────────────────────────────────
@@ -795,18 +744,9 @@ function wasAnnouncedBy(state: GameState, seat: Seat, card: Card): boolean {
   return false;
 }
 
-/** Escapování textu do innerHTML — obnovený stav z localStorage je nedůvěryhodný. */
-export function esc(x: unknown): string {
-  return String(x).replace(/[&<>"']/g, (ch) =>
-    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch] as string,
-  );
-}
-
 const REVEAL_STEP_MS = 90;
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
-
-const fmtLedger = (n: number): string => (n > 0 ? `+${n}` : String(n));
 
 function declareLabel(a: Extract<PlayerAction, { type: 'declare' }>, standingTrump: number | null = null): string {
   if (a.mode !== 'hra') return t(a.mode);
