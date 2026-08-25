@@ -48,11 +48,12 @@ await page.screenshot({ path: join(outDir, 'smoke-1-deal.png'), clip: await tabl
  * přehrát animaci rozdávání — výjimka pro nový zápas nesmí obejít ochranu
  * proti překreslení TÝMŽ stavem.
  */
-await page.waitForTimeout(1400); // ať animace rozdávání skončí
-const animatingBefore = await page.locator('#table.animating').count();
+// Počkej, až animace rozdávání SKUTEČNĚ skončí (porovnávat s „baseline" nejde:
+// když animace ještě běží, je 1 před i po a kontrola by tiše nic nehlídala).
+await page.waitForSelector('#table.animating', { state: 'detached', timeout: 5000 });
 await page.click('.langpill button[data-lang="de"]');
 await page.waitForTimeout(200);
-if ((await page.locator('#table.animating').count()) > animatingBefore) {
+if ((await page.locator('#table.animating').count()) > 0) {
   console.error('CHYBA: přepnutí jazyka po rozdání znovu spustilo animaci rozdávání');
   await browser.close();
   process.exit(1);
@@ -66,6 +67,7 @@ let reachedSettlement = false;
 let confirmedWarnings = 0;
 let marriageChoices = 0;
 let popupSurvivedLang = false;
+let fromPeopleCancelled = false;
 for (let i = 0; i < 200; i += 1) {
   await page.waitForTimeout(350);
 
@@ -153,6 +155,43 @@ console.log(
 );
 
 /*
+ * i27: „nový zápas" musí zrušit i DELŠÍ přechody, ne jen rozdávání — odhalení
+ * karty „z lidu" drží stůl 1,8 s.
+ *
+ * Rozlišující pozorování je RUKA: po rozdání nového zápasu je na tahu člověk
+ * (volba trumfu), takže se stůl sám od sebe nemění. Když opuštěná animace
+ * doběhne a dokreslí stav mrtvého zápasu, ruka se přepíše jeho kartami.
+ */
+const handFingerprint = async (): Promise<string> =>
+  (await page.locator('#hand .card-btn img').evaluateAll(
+    (imgs) => imgs.map((i) => (i as HTMLImageElement).getAttribute('src') ?? '').join('|'),
+  ));
+
+await page.click('#btn-new');
+await page.waitForSelector('#table.animating', { state: 'detached', timeout: 5000 });
+const fromPeople = page.getByRole('button', { name: /lidu|people|Volk/i });
+if ((await fromPeople.count()) > 0) {
+  await fromPeople.first().click();
+  await page.waitForTimeout(150); // odhalení „z lidu" právě běží (1,8 s)
+  await page.click('#btn-new');
+  await page.waitForSelector('#table.animating', { state: 'detached', timeout: 6000 });
+  const afterNewMatch = await handFingerprint();
+  await page.waitForTimeout(2500); // delší než opuštěné odhalení + jeho dokreslení
+  const later = await handFingerprint();
+  const animating = await page.locator('#table.animating').count();
+  if (afterNewMatch === '' || later !== afterNewMatch || animating > 0) {
+    console.error(
+      'CHYBA: opuštěná animace „z lidu" dokreslila mrtvý zápas přes nový\n' +
+        `  ruka po rozdání: ${afterNewMatch.slice(0, 120)}\n` +
+        `  ruka o 2,5 s později: ${later.slice(0, 120)} (animuje: ${animating})`,
+    );
+    await browser.close();
+    process.exit(1);
+  }
+  fromPeopleCancelled = true;
+}
+
+/*
  * i16: dva rychlé kliky na „Nový zápas" nesmí zařadit nový zápas do fronty za
  * animacemi opuštěných — bez zrušení by se čekalo ~2,5 s místo ~1,3 s.
  */
@@ -172,6 +211,11 @@ if (dealtAfterRestarts === 0 || stillAnimating > 0) {
 
 if (!popupSurvivedLang) {
   console.error('CHYBA: v běhu nenastal žádný popup — kontrola přepnutí jazyka neproběhla');
+  process.exit(1);
+}
+
+if (!fromPeopleCancelled) {
+  console.error('CHYBA: nenašlo se tlačítko „z lidu" — kontrola zrušení odhalení neproběhla');
   process.exit(1);
 }
 

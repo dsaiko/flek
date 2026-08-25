@@ -4,12 +4,13 @@
   "description": "Flek! — online mariáš · tribute to FLEK!/RE! by Pivoňka Software",
   "scripts": {
     "dev": "astro dev",
-    "build": "astro check && astro build",
+    "build": "astro check && astro build && tsx scripts/csp.ts",
     "preview": "astro preview",
     "check": "astro check",
     "verify": "tsx scripts/verify.ts",
     "cards": "tsx scripts/gen-cards.ts && tsx scripts/gen-cards.ts en && tsx scripts/gen-cards.ts de",
-    "assets": "tsx scripts/prep-history-cards.ts && tsx scripts/assets.ts"
+    "assets": "tsx scripts/prep-history-cards.ts && tsx scripts/assets.ts",
+    "smoke": "tsx scripts/smoke.ts"
   },
   "repository": {
     "type": "git",

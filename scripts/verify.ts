@@ -747,7 +747,7 @@ const KULE = 2 as const;
     const base = defaultConfig('licitovany');
     const mkView = (hand: number[]): Parameters<typeof legalActions>[0] => ({
       seat: 0, config: base, dealer: 2, hand, handCounts: [10, 10, 10],
-      revealedTrump: null, talonKnown: [], talon: null, contract: null,
+      revealedTrump: null, unseenCount: 0, talonKnown: [], talon: null, contract: null,
       phase: { name: 'bidding', bids: [], toAct: 0, best: null },
       publicHistory: [], handResults: [], ledger: [0, 0, 0], handNo: 1,
     });
@@ -839,7 +839,7 @@ const KULE = 2 as const;
     assert.ok(trumpScore(hand, 1) > trumpScore(hand, CE), 'zelená musí skórovat výš než červená');
     const v = {
       seat: 0, config: cfg, dealer: 2, hand, handCounts: [10, 10, 10],
-      revealedTrump: null,
+      revealedTrump: null, unseenCount: 0,
       talonKnown: [], talon: [mk2(2, 0), mk2(2, 2)], // sedma a devítka kulová — nic bodovaného
       contract: null,
       phase: { name: 'declare' as const, standing: { declarer: 0 as const, mode: null, trump: null, bid: null } },
@@ -1092,7 +1092,7 @@ const KULE = 2 as const;
     const mkView = (sedmaSeat: 0 | 1 | 2 | null) => ({
       seat: 1 as const, config: cfg, dealer: 2 as const,
       hand: [mk3(CE3, K3), mk3(CE3, SV3)], handCounts: [2, 2, 2],
-      revealedTrump: trumpCard, talonKnown: [], talon: null,
+      revealedTrump: trumpCard, unseenCount: 0, talonKnown: [], talon: null,
       contract: { mode: 'hra' as const, trump: 2 as const, declarer: 0 as const, sedma: sedmaSeat, kilo: null, dveSedmy: false },
       phase: { name: 'tricks' as const, trickNo: 0, leader: 0 as const, toAct: 1 as const,
         trick: [], played: [], won: [[], [], []] as [number[], number[], number[]], marriages: [] },
@@ -1238,7 +1238,7 @@ const KULE = 2 as const;
     const vDef = {
       seat: 2 as const, config: defaultConfig('voleny'), dealer: 2 as const,
       // desítka v ruce JE — jinak by tvrzení „nemaže body" nic netestovalo
-      hand: [mk5(CE5, T5), mk5(CE5, S95)], handCounts: [2, 2, 2], revealedTrump: null,
+      hand: [mk5(CE5, T5), mk5(CE5, S95)], handCounts: [2, 2, 2], revealedTrump: null, unseenCount: 0,
       talonKnown: [], talon: null,
       contract: { mode: 'hra' as const, trump: 2 as const, declarer: 0 as const, sedma: null, kilo: null, dveSedmy: false },
       phase: {
@@ -1281,7 +1281,7 @@ const KULE = 2 as const;
     const cfg = defaultConfig('licitovany');
     const mkBid = (dealer: 0 | 1 | 2, me: 0 | 1 | 2, bids: { seat: 0 | 1 | 2; bid: unknown }[]) => ({
       seat: me, config: cfg, dealer, hand: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9], handCounts: [10, 10, 10],
-      revealedTrump: null, talonKnown: [], talon: null, contract: null,
+      revealedTrump: null, unseenCount: 0, talonKnown: [], talon: null, contract: null,
       phase: {
         name: 'bidding' as const, toAct: me,
         bids, best: { kind: 'sedma', cervena: false }, passed: [],
@@ -1438,7 +1438,7 @@ const KULE = 2 as const;
 
     const v = {
       seat: 1 as const, config: defaultConfig('voleny'), dealer: 2 as const,
-      hand: myHand, handCounts: [3, 3, 3], revealedTrump: trumpCard, talonKnown: [], talon: null,
+      hand: myHand, handCounts: [3, 3, 3], revealedTrump: trumpCard, unseenCount: 0, talonKnown: [], talon: null,
       contract: { mode: 'hra' as const, trump: 2 as const, declarer: 0 as const, sedma: 0 as const, kilo: null, dveSedmy: false },
       phase: {
         name: 'tricks' as const, trickNo: 7, leader: 0 as const, toAct: 1 as const,
@@ -1638,7 +1638,7 @@ const KULE = 2 as const;
     };
     const v6 = {
       seat: 0 as const, config: defaultConfig('voleny'), dealer: 2 as const, hand: [],
-      handCounts: [0, 0, 0], revealedTrump: null, talonKnown: [], talon: null, contract: result.contract,
+      handCounts: [0, 0, 0], revealedTrump: null, unseenCount: 0, talonKnown: [], talon: null, contract: result.contract,
       phase: { name: 'scored' as const, result },
       publicHistory: [], handResults: [result], ledger: [2, -1, -1], handNo: 1,
     };
@@ -1712,7 +1712,7 @@ const KULE = 2 as const;
      */
     const mkChoiceView = (suit: 0 | 1 | 2 | 3, trump: 0 | 1 | 2 | 3) => ({
       seat: 0 as const, config: defaultConfig('voleny'), dealer: 2 as const,
-      hand: [mk7(suit, K7), mk7(suit, SV7)], handCounts: [2, 2, 2], revealedTrump: null,
+      hand: [mk7(suit, K7), mk7(suit, SV7)], handCounts: [2, 2, 2], revealedTrump: null, unseenCount: 0,
       talonKnown: [], talon: null,
       contract: { mode: 'hra' as const, trump, declarer: 0 as const, sedma: null, kilo: null, dveSedmy: false },
       phase: {
@@ -2116,7 +2116,7 @@ const KULE = 2 as const;
     ];
     const v = {
       seat: 1 as const, config: defaultConfig('voleny'), dealer: 2 as const, hand: [1, 2],
-      handCounts: [2, 2, 2], revealedTrump: null, talonKnown: [], talon: null,
+      handCounts: [2, 2, 2], revealedTrump: null, unseenCount: 0, talonKnown: [], talon: null,
       contract: { mode: 'hra' as const, trump: 2 as const, declarer: 0 as const, sedma: null, kilo: null, dveSedmy: false },
       phase: {
         name: 'tricks' as const, trickNo: 0, leader: 0 as const, toAct: 1 as const,
@@ -2209,7 +2209,9 @@ const KULE = 2 as const;
       if (lang !== 'cs') classes.add(`lang-${lang}`);
     };
 
-    const kinds = ['sedma', 'sto', 'sto-sedma', 'betl', 'durch'];
+    // VŠECH sedm hodnot Bid.kind — 'dve-sedmy*' jsou právě ty, které existují
+    // jen v licitovaném, a bidLabel pro nezmapovaný kind propadne na slug
+    const kinds = ['sedma', 'sto', 'sto-sedma', 'betl', 'durch', 'dve-sedmy', 'dve-sedmy-sto'];
     for (const lang of ['cs', 'en', 'de'] as const) {
       setLang(lang);
       for (const kind of kinds) {
@@ -2438,21 +2440,231 @@ const KULE = 2 as const;
     console.log('PASS regrese i1/i2/i9 — sav: licitace, číslo štychu, mód i trumf závazku');
   }
 
-  // ── i5: bublina deklarace hlásí i trumf (ve voleném ho akce nenese) ────
+  // ── i5/i19: bublina deklarace hlásí SPRÁVNÝ trumf (i přes fallback) ────
   {
     const { bubbleText } = await import('../src/lib/ui/table');
+    const { suitIcon } = await import('../src/lib/ui/cardAssets');
     let st: St9 = initialState(defaultConfig('voleny'), 2);
     st = apply(st, { type: 'deal', seed: 11 });
-    st = apply(st, acts9(st).find((a) => a.type === 'choose-trump' && a.card !== 'from-people') as Act9);
+    const trumpPick = acts9(st).find((a) => a.type === 'choose-trump' && a.card !== 'from-people');
+    st = apply(st, trumpPick as Act9);
+    const trumpSuit = st.phase.name === 'discard-talon' ? st.phase.standing.trump : null;
+    assert.ok(trumpSuit !== null, 'volba trumfu musí trumf nastavit');
     st = apply(st, acts9(st).find((a) => a.type === 'discard' && a.cards.every((c) => pts9(c) === 0)) as Act9);
     const declare = acts9(st).find((a) => a.type === 'declare' && a.mode === 'hra' && !a.sedma && !a.kilo);
     assert.ok(declare, 'scénář i5 čeká deklaraci prosté hry');
     assert.equal((declare as { trump?: number }).trump, undefined, 've voleném akce trumf nenese');
+
+    // (a) po deklaraci je trumf v kontraktu — a v bublině musí být TA barva
     const after = apply(st, declare as Act9);
+    const icon = suitIcon(trumpSuit as 0 | 1 | 2 | 3);
     const bubble = bubbleText(declare as never, after as never);
-    assert.ok(bubble, 'deklarace musí mít bublinu');
-    assert.match(bubble as string, /<svg/, 'bublina musí ukázat i ikonu trumfové barvy');
-    console.log('PASS regrese i5 — bublina deklarace ukazuje trumf i ve voleném');
+    assert.ok(bubble?.includes(icon), 'bublina musí ukázat ikonu TRUMFOVÉ barvy');
+    for (const other of [0, 1, 2, 3] as const) {
+      if (other === trumpSuit) continue;
+      assert.equal(bubble?.includes(suitIcon(other)), false, `bublina nesmí ukázat barvu ${other}`);
+    }
+
+    // (b) fallback `standingTrumpOf`: stav BEZ kontraktu, trumf jen ve standing
+    //     (jinak by se nová pomocná funkce nikdy nezavolala)
+    const noContract = { ...after, contract: null, phase: st.phase };
+    const fallback = bubbleText(declare as never, noContract as never);
+    assert.ok(fallback?.includes(icon), 'fallback musí vzít trumf ze stojícího závazku');
+    console.log('PASS regrese i5/i19 — bublina deklarace ukazuje správný trumf i přes fallback');
+  }
+}
+
+
+// ── regrese: osmé kolo fixpoint review-code (2026-08-25, po abc84b7) ────────
+
+{
+  const { initialState, apply } = await import('../src/lib/rules/engine');
+  const { legalActions } = await import('../src/lib/rules/legal');
+  const { view } = await import('../src/lib/rules/view');
+  const { defaultConfig } = await import('../src/lib/rules/sazby');
+  const { pointsOf: ptsA } = await import('../src/lib/cards');
+  type StA = ReturnType<typeof initialState>;
+  type ActA = ReturnType<typeof legalActions>[number];
+  const actsA = (st: StA): ActA[] => {
+    for (const seat of [0, 1, 2] as const) {
+      const a = legalActions(view(st, seat));
+      if (a.length > 0) return a;
+    }
+    return [];
+  };
+
+  // ── i6: „z lidu" bez neprohlédnutých karet ─────────────────────────────
+  {
+    let st: StA = initialState(defaultConfig('voleny'), 2);
+    st = apply(st, { type: 'deal', seed: 4 });
+    const v = view(st, 0);
+    assert.equal(v.unseenCount, 5, 'po rozdání leží 5 karet „z lidu"');
+    assert.ok(
+      legalActions(v).some((a) => a.type === 'choose-trump' && a.card === 'from-people'),
+      'dokud je z čeho brát, „z lidu" se nabízí',
+    );
+
+    // poškozený stav: prázdný neprohlédnutý balíček
+    const empty = { ...st, unseen: [] as number[] };
+    assert.equal(
+      legalActions(view(empty, 0)).some((a) => a.type === 'choose-trump' && a.card === 'from-people'),
+      false, '„z lidu" se nesmí nabízet, když není z čeho brát',
+    );
+    // a i kdyby akci někdo poslal ručně, reducer ji musí odmítnout
+    assert.throws(
+      () => apply(empty, { type: 'choose-trump', seat: 0, card: 'from-people' }),
+      /lidu|nelegální/, 'reducer nesmí vzít trumf z prázdného balíčku (suitOf(undefined) = červené)',
+    );
+    console.log('PASS regrese i6 — „z lidu" bez karet se nenabídne ani neprovede');
+  }
+
+  // ── i33: kdo je na tahu (včetně volby trumfu) ───────────────────────────
+  {
+    const { seatOnTurn } = await import('../src/lib/ui/table');
+    // dealer rotuje, takže forhont se mění — a právě to se dřív ztrácelo
+    for (const dealer of [0, 1, 2] as const) {
+      let st: StA = initialState(defaultConfig('voleny'), dealer);
+      st = apply(st, { type: 'deal', seed: 4 });
+      assert.equal(st.phase.name, 'choose-trump');
+      const expected = ((dealer + 1) % 3) as 0 | 1 | 2;
+      assert.equal(seatOnTurn(view(st, 0)), expected, `dealer ${dealer} ⇒ na tahu forhont ${expected}`);
+    }
+    // ostatní fáze: sedadlo z fáze; idle/scored nikdo
+    let st: StA = initialState(defaultConfig('voleny'), 2);
+    assert.equal(seatOnTurn(view(st, 0)), null, 'v idle není nikdo na tahu');
+    st = apply(st, { type: 'deal', seed: 4 });
+    st = apply(st, actsA(st).find((a) => a.type === 'choose-trump' && a.card !== 'from-people') as ActA);
+    assert.equal(seatOnTurn(view(st, 0)), 0, 'talon odhazuje aktér');
+    st = apply(st, actsA(st).find((a) => a.type === 'discard' && a.cards.every((c) => ptsA(c) === 0)) as ActA);
+    assert.equal(seatOnTurn(view(st, 0)), 0, 'deklaruje aktér');
+    console.log('PASS regrese i33 — „na tahu" zná i fázi volby trumfu');
+  }
+
+  // ── i2: seed musí být celé číslo v rozsahu 32 bitů ─────────────────────
+  {
+    const { parseSeedParam, createSeedSequence } = await import('../src/lib/match/seedSequence');
+    for (const bad of ['1.5', '-1', '1e300', String(2 ** 53), String(2 ** 32), 'NaN', 'Infinity']) {
+      assert.equal(parseSeedParam(`?seed=${bad}`), null, `seed „${bad}" nesmí projít`);
+    }
+    for (const ok of ['0', '10', String(2 ** 32 - 1)]) {
+      assert.equal(parseSeedParam(`?seed=${ok}`), Number(ok), `seed „${ok}" je platný`);
+    }
+    // posloupnost se u velkých čísel nesmí zastavit na místě
+    const seq = createSeedSequence(2 ** 32 - 3);
+    const three = [seq.next(), seq.next(), seq.next()];
+    assert.equal(new Set(three).size, 3, 'tři hry = tři různé seedy');
+    console.log('PASS regrese i2 — seed jen celé číslo v rozsahu, posloupnost se nezasekne');
+  }
+
+  // ── i4/i5/i24: sav — nemožné převzetí, zlomkový trumf, platné módy ─────
+  {
+    const store = new Map<string, string>();
+    (globalThis as { localStorage?: unknown }).localStorage = {
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: (k: string, val: string) => void store.set(k, val),
+      removeItem: (k: string) => void store.delete(k),
+    };
+    const { saveMatch, loadMatch } = await import('../src/lib/match/persist');
+
+    // dotáhni do převzetí
+    let st: StA = initialState(defaultConfig('voleny'), 2);
+    st = apply(st, { type: 'deal', seed: 11 });
+    let guard = 0;
+    while (st.phase.name !== 'takeover') {
+      if ((guard += 1) > 50) throw new Error('scénář i4 se zasekl');
+      const a = actsA(st);
+      st = apply(st,
+        a.find((x) => x.type === 'choose-trump' && x.card !== 'from-people') ??
+        a.find((x) => x.type === 'discard' && x.cards.every((c) => ptsA(c) === 0)) ??
+        a.find((x) => x.type === 'declare' && x.mode === 'hra' && !x.sedma && !x.kilo) ?? a[0]);
+    }
+    const patch = (mutate: (s: Record<string, unknown>) => void): void => {
+      saveMatch(st);
+      const parsed = JSON.parse(store.get('flek.match.v1') as string) as { v: number; state: Record<string, unknown> };
+      mutate(parsed.state);
+      store.set('flek.match.v1', JSON.stringify(parsed));
+    };
+
+    // (i4) mód v převzetí je vždy konkrétní; s null by resolveTakeover
+    // vyrobil kontrakt s null módem a hra by se zúčtovala jako durch
+    patch((x) => { ((x.phase as Record<string, unknown>).standing as Record<string, unknown>).mode = null; });
+    assert.equal(loadMatch(), null, 'převzetí bez módu závazku musí být odmítnuto');
+    // (i4) a bez kontraktu resolveTakeover vyhodí InvariantError
+    patch((x) => { x.contract = null; });
+    assert.equal(loadMatch(), null, 'převzetí bez kontraktu musí být odmítnuto');
+
+    // (i24) POZITIVNÍ případ: betl i durch v převzetí musí projít, jinak by
+    // se rozehraný zápas při obnovení tiše zahodil
+    for (const mode of ['hra', 'betl', 'durch'] as const) {
+      patch((x) => {
+        ((x.phase as Record<string, unknown>).standing as Record<string, unknown>).mode = mode;
+        (x.contract as Record<string, unknown>).mode = mode;
+        if (mode !== 'hra') (x.contract as Record<string, unknown>).trump = null;
+      });
+      assert.ok(loadMatch(), `probíhající převzetí na ${mode} se musí obnovit`);
+    }
+
+    // (i5) zlomkový trumf: projde rozsahem, ale žádná barva se mu nerovná
+    patch((x) => {
+      ((x.phase as Record<string, unknown>).standing as Record<string, unknown>).mode = 'hra';
+      (x.contract as Record<string, unknown>).mode = 'hra';
+      (x.contract as Record<string, unknown>).trump = 0.5;
+    });
+    assert.equal(loadMatch(), null, 'zlomkový trumf musí být odmítnut');
+    patch((x) => { x.revealedTrump = 2.5; });
+    assert.equal(loadMatch(), null, 'zlomková ukázaná karta musí být odmítnuta');
+
+    delete (globalThis as { localStorage?: unknown }).localStorage;
+    console.log('PASS regrese i4/i5/i24 — sav: mód převzetí, zlomkový trumf, platné módy');
+  }
+
+  // ── i11: post-build krok vymění 'unsafe-inline' za hashe inline skriptů ─
+  {
+    const { withScriptHashes, inlineScriptHashes } = await import('./csp');
+    const page = [
+      '<!doctype html><html><head>',
+      '<meta http-equiv="Content-Security-Policy" content="default-src \'self\'; ',
+      'script-src \'self\' \'unsafe-inline\' https://gc.zgo.at; style-src \'self\' \'unsafe-inline\'">',
+      '<script>window.__lang="cs"</script>',
+      '<script src="https://gc.zgo.at/count.v4.js" integrity="sha384-x"></script>',
+      '</head><body><script>console.log(1)</script></body></html>',
+    ].join('');
+
+    const hashes = inlineScriptHashes(page);
+    assert.equal(hashes.length, 2, 'dva inline skripty (externí se nehashuje)');
+    for (const h of hashes) assert.match(h, /^'sha256-[A-Za-z0-9+/=]{40,}'$/);
+
+    const out = withScriptHashes(page);
+    const policy = /content="([^"]+)"/.exec(out)?.[1] as string;
+    const scriptSrc = policy.split(';').find((d) => d.trim().startsWith('script-src')) as string;
+    assert.equal(scriptSrc.includes("'unsafe-inline'"), false, "script-src už nesmí mít 'unsafe-inline'");
+    for (const h of hashes) assert.ok(scriptSrc.includes(h), 'hash inline skriptu musí být v script-src');
+    // styly zůstávají (inline styly Astra) a ostatní direktivy se nemění
+    assert.ok(policy.includes("style-src 'self' 'unsafe-inline'"), 'style-src se nemá měnit');
+    assert.ok(policy.includes("default-src 'self'"), 'ostatní direktivy zůstávají');
+    assert.ok(policy.includes('https://gc.zgo.at'), 'povolený host analytiky zůstává');
+    // idempotence: druhý běh nesmí hashe zdvojit
+    assert.equal(withScriptHashes(out), out, 'opakovaný běh nic nemění');
+    // stránka bez inline skriptů: jen odebrání 'unsafe-inline'
+    const noInline = page.replace(/<script(?![^>]*src=)[^>]*>[\s\S]*?<\/script>/g, '');
+    assert.equal(/script-src[^;]*unsafe-inline/.test(withScriptHashes(noInline)), false);
+    console.log('PASS regrese i11 — CSP hashe inline skriptů místo \'unsafe-inline\'');
+  }
+
+  // ── i12/i13: politika bez zástupných hostů a bez blob: ─────────────────
+  {
+    const layout = readFileSync(join(ROOT, 'src/layouts/Layout.astro'), 'utf8');
+    const policy = /http-equiv="Content-Security-Policy"[\s\S]{0,80}content="([^"]+)"/.exec(layout)?.[1] as string;
+    assert.ok(policy, 'CSP meta musí existovat');
+    // žádný zástupný host: goatcounter je self-service, *.goatcounter.com
+    // by povolil i domény cizích lidí
+    assert.equal(policy.includes('*'), false, `CSP nesmí obsahovat žádný zástupný znak: ${policy}`);
+    assert.ok(policy.includes('https://saiko-flek.goatcounter.com'), 'povolen je jen náš subdomain');
+    // blob: ve worker-src je zbytečná cesta ke spuštění cizího kódu
+    const worker = policy.split(';').find((d) => d.trim().startsWith('worker-src')) as string;
+    assert.equal(worker.includes('blob:'), false, 'worker-src nesmí povolovat blob:');
+    assert.ok(worker.includes("'self'"), "worker-src musí povolovat 'self'");
+    console.log('PASS regrese i12/i13 — CSP bez zástupných hostů a bez blob:');
   }
 }
 

@@ -44,7 +44,9 @@ export function legalActions(v: PlayerView): PlayerAction[] {
     case 'choose-trump': {
       if (me !== forhont(v.dealer)) break;
       for (const c of v.hand) out.push({ type: 'choose-trump', seat: me, card: c });
-      out.push({ type: 'choose-trump', seat: me, card: 'from-people' });
+      // „z lidu" jen když je z čeho brát (poškozený sav by jinak dal trumf
+      // z `undefined`, tedy tiše červené)
+      if (v.unseenCount > 0) out.push({ type: 'choose-trump', seat: me, card: 'from-people' });
       break;
     }
 

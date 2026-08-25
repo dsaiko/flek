@@ -53,7 +53,19 @@ cards: node_modules
 assets: node_modules
 	npm run assets
 
-all: verify build
+# Browser testy: to, co bez DOM otestovat nejde (popup přes přepnutí jazyka,
+# zrušení opuštěných animací, porušení CSP). Spouští preview na pozadí a po
+# doběhnutí ho zabije.
+smoke: build
+	@npm run preview -- --host 127.0.0.1 --port $(PREVIEW_PORT) > /tmp/flek-preview.log 2>&1 & \
+	  PREVIEW_PID=$$!; \
+	  trap "kill $$PREVIEW_PID 2>/dev/null" EXIT; \
+	  for i in 1 2 3 4 5 6 7 8 9 10; do \
+	    curl -sf http://127.0.0.1:$(PREVIEW_PORT)/ > /dev/null && break || sleep 1; \
+	  done; \
+	  npm run smoke -- http://127.0.0.1:$(PREVIEW_PORT)/?seed=10
+
+all: verify build smoke
 
 clean:
 	rm -rf dist public/cards

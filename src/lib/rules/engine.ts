@@ -248,6 +248,9 @@ function reduce(state: GameState, action: PlayerAction): GameState {
     case 'choose-trump': {
       // volený: trumf z prvních 7, nebo „z lidu" — první karta neprohlédnutého
       // balíčku (deterministické ze seedu); poté forhont zvedne zbylých 5
+      if (action.card === 'from-people' && state.unseen.length === 0) {
+        throw new InvariantError('„z lidu" bez neprohlédnutých karet');
+      }
       const trumpCard = action.card === 'from-people' ? state.unseen[0] : action.card;
       const trump = suitOf(trumpCard);
       const hands = state.hands.map((h) => h.slice()) as [Card[], Card[], Card[]];

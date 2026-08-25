@@ -57,6 +57,8 @@ export class TableUI {
    * na „Nový zápas" i za několika). Zvýšení generace opuštěné animace zkrátí.
    */
   private gen = 0;
+  /** Probouzeče běžících spánků — `reset()` je zavolá, aby animace neblokovaly. */
+  private readonly sleepers = new Set<() => void>();
   private resultView: 'summary' | 'replay' = 'summary';
 
   constructor(root: HTMLElement, opts: TableOptions, cb: TableCallbacks) {
@@ -66,18 +68,26 @@ export class TableUI {
   }
 
   /**
-   * Překreslení podle stavu. Přechody hodné animace (rozdání, dohraný štych)
-   * se serializují do fronty — stavy se nikdy nepřeskočí, jen pozdrží.
+   * Nový zápas: zapomeň minulý stav a **probuď opuštěné animace**, aby řetěz
+   * hned uvolnily.
+   *
+   * Řetěz se schválně NEnahrazuje: dvě větve nad týmž DOM by si přepisovaly
+   * třídu `animating` (a tím i zámek vstupu) a dokreslovaly stav mrtvého
+   * zápasu. Místo toho běží pořád jeden řetěz a opuštěná práce se pozná podle
+   * generace — a nic nekreslí.
    */
-  /** Nový zápas: zapomeň minulý stav a nech opuštěné animace doběhnout naprázdno. */
   reset(): void {
     this.gen += 1;
     this.prevState = null;
     this.openPopup = null;
     this.selected.clear();
-    this.chain = Promise.resolve();
+    for (const wake of [...this.sleepers]) wake();
   }
 
+  /**
+   * Překreslení podle stavu. Přechody hodné animace (rozdání, dohraný štych)
+   * se serializují do fronty — stavy se nikdy nepřeskočí, jen pozdrží.
+   */
   render(state: GameState): void {
     const prev = this.prevState;
     this.prevState = state;
@@ -88,13 +98,14 @@ export class TableUI {
     this.chain = this.chain
       .then(async () => {
         try {
-          // mezitím začal jiný zápas → jen dokresli, žádné animace
-          if (gen !== this.gen) { this.renderNow(state); return; }
+          // mezitím začal jiný zápas → tenhle stav už NEEXISTUJE, nekresli ho
+          if (gen !== this.gen) return;
           const handled = await this.playTransitions(prev, state, gen);
+          if (gen !== this.gen) return; // zápas se vyměnil během animace
           if (!handled) this.renderNow(state);
         } catch (e) {
           console.error(e);
-          this.renderNow(state); // ještě jeden pokus bez animací
+          if (gen === this.gen) this.renderNow(state); // ještě jeden pokus bez animací
         }
       })
       // chain nesmí ZŮSTAT odmítnutý — jinak by se žádné další překreslení
@@ -130,7 +141,7 @@ export class TableUI {
       if (!this.reducedMotion()) {
         this.root.classList.add('animating');
         const n = state.hands[this.opts.humanSeat].length;
-        await sleep(n * REVEAL_STEP_MS + 350);
+        await this.sleep(n * REVEAL_STEP_MS + 350);
         this.root.classList.remove('animating');
       }
       return gen === this.gen; // opuštěný zápas nechá překreslit ten nový
@@ -149,8 +160,9 @@ export class TableUI {
       trickEl.appendChild(img);
       const statusEl = $(this.root, '#status');
       statusEl.textContent = `${t('fromPeople')}: ${cardName(flipped)}`;
-      await sleep(this.reducedMotion() ? 900 : 1800);
-      return false; // pokračuj běžným překreslením
+      await this.sleep(this.reducedMotion() ? 900 : 1800);
+      // po vyměněném zápasu ať se o překreslení postará ten nový
+      return gen !== this.gen;
     }
 
     // dohraný štych → pauza, zvýraznění vítězné karty, odlet do paklu vítěze
@@ -165,7 +177,7 @@ export class TableUI {
         this.renderHand(vNew, []); // bez klikání, animace kliky stejně blokuje
         this.renderOpponents(vNew);
         if (gen !== this.gen) return false; // zápas se mezitím vyměnil
-        await this.animateTrickEnd(full, winner, state, prev.contract.trump);
+        await this.animateTrickEnd(full, winner, state, prev.contract.trump, gen);
       }
     }
     return false;
@@ -196,6 +208,19 @@ export class TableUI {
 
   // ── animace ────────────────────────────────────────────────────────────────
 
+  /** Spánek, který `reset()` umí probudit dřív (opuštěná animace nesmí držet řetěz). */
+  private sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => {
+      const wake = (): void => {
+        clearTimeout(timer);
+        this.sleepers.delete(wake);
+        resolve();
+      };
+      const timer = setTimeout(wake, ms);
+      this.sleepers.add(wake);
+    });
+  }
+
   private reducedMotion(): boolean {
     return window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
   }
@@ -219,6 +244,7 @@ export class TableUI {
     winner: Seat,
     state: GameState | null = null,
     trump: number | null = null,
+    gen = this.gen,
   ): Promise<void> {
     const trickEl = $(this.root, '#trick');
     this.root.classList.add('animating');
@@ -240,12 +266,13 @@ export class TableUI {
     statusEl.classList.remove('me-turn');
 
     if (this.reducedMotion()) {
-      await sleep(900);
+      await this.sleep(900);
       return;
     }
-    await sleep(1250);
+    await this.sleep(1250);
+    if (gen !== this.gen) return; // zápas se vyměnil — do mrtvého stolu nekresli
     for (const img of imgs) img.classList.add(`fly-${this.posOf(winner)}`);
-    await sleep(430);
+    await this.sleep(430);
   }
 
   // ── protihráči ─────────────────────────────────────────────────────────────
@@ -657,16 +684,7 @@ export class TableUI {
   }
 
   private currentActorName(v: PlayerView): string | null {
-    const p = v.phase;
-    const seat =
-      p.name === 'bidding' || p.name === 'takeover' ? p.toAct
-      : p.name === 'fleks' ? p.fleks.toAct
-      : p.name === 'tricks' ? p.toAct
-      // volbu trumfu dělá vždy forhont — „…" bez jména se ukazovalo ve dvou
-      // ze tří her (rozdávající rotuje)
-      : p.name === 'choose-trump' ? forhont(v.dealer)
-      : p.name === 'discard-talon' || p.name === 'declare' ? p.standing.declarer
-      : null;
+    const seat = seatOnTurn(v);
     if (seat === null || seat === this.opts.humanSeat) return null;
     return this.nameOf(seat);
   }
@@ -779,8 +797,6 @@ function wasAnnouncedBy(state: GameState, seat: Seat, card: Card): boolean {
 
 const REVEAL_STEP_MS = 90;
 
-const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
-
 function declareLabel(a: Extract<PlayerAction, { type: 'declare' }>, standingTrump: number | null = null): string {
   if (a.mode !== 'hra') return t(a.mode);
   const parts = [t('hra')];
@@ -838,7 +854,21 @@ function flekSummary(state: GameState): string {
   return parts.join(', ');
 }
 
-export /** Trumf ze stojícího závazku (fáze declare/takeover) — pro popisky. */
+/**
+ * Kdo je na tahu (pro stavový řádek „Na tahu: …"). Exportováno, aby to šlo
+ * testovat bez DOM: volbu trumfu dělá vždy forhont, a protože rozdávající
+ * rotuje, chybějící případ znamenal „…" bez jména ve dvou ze tří her.
+ */
+export function seatOnTurn(v: PlayerView): Seat | null {
+  const p = v.phase;
+  if (p.name === 'bidding' || p.name === 'takeover' || p.name === 'tricks') return p.toAct;
+  if (p.name === 'fleks') return p.fleks.toAct;
+  if (p.name === 'choose-trump') return forhont(v.dealer);
+  if (p.name === 'discard-talon' || p.name === 'declare') return p.standing.declarer;
+  return null; // idle / scored — nikdo není „na tahu"
+}
+
+/** Trumf ze stojícího závazku (fáze declare/takeover) — pro popisky. */
 function standingTrumpOf(state: GameState): number | null {
   const p = state.phase;
   if (p.name === 'declare' || p.name === 'discard-talon' || p.name === 'takeover') {

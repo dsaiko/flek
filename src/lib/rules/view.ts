@@ -28,6 +28,7 @@ export function view(state: GameState, seat: Seat): PlayerView {
     hand: state.hands[seat].slice(),
     handCounts: [state.hands[0].length, state.hands[1].length, state.hands[2].length],
     revealedTrump: state.revealedTrump,
+    unseenCount: state.unseen.length,
     talonKnown: state.talonKnowledge[seat].slice(),
     talon: state.talonOwner === seat ? state.talon.slice() : null,
     contract: state.contract,

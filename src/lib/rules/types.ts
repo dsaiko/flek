@@ -246,6 +246,8 @@ export interface PlayerView {
   handCounts: [number, number, number];
   /** Veřejně ukázaná trumfová karta (viz GameState.revealedTrump). */
   revealedTrump: Card | null;
+  /** Kolik karet leží v neprohlédnutém balíčku („z lidu") — veřejná informace. */
+  unseenCount: number;
   /** Co JÁ vím o talonu/odhozu (vlastní odhoz, převzatý talon dle configu). */
   talonKnown: Card[];
   /** Aktuální talon, pokud jsem ho odložil já (jinak null). */

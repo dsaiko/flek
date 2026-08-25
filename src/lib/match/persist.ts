@@ -24,7 +24,9 @@ const PHASE_NAMES = [
   'takeover', 'fleks', 'tricks', 'scored',
 ];
 
-const CONTRACT_PHASES = ['fleks', 'tricks'];
+// fáze, které bez kontraktu buď zamrznou (legalActions nevrátí nic), nebo
+// při vyřešení převzetí vyhodí InvariantError
+const CONTRACT_PHASES = ['fleks', 'tricks', 'takeover'];
 
 const isSeat = (x: unknown): boolean => x === 0 || x === 1 || x === 2;
 const isNum = (x: unknown): boolean => typeof x === 'number' && Number.isFinite(x);
@@ -83,7 +85,13 @@ function isValidPhase(p: Record<string, unknown>): boolean {
     case 'declare':
       return standingOk(p.standing);
     case 'takeover':
-      return standingOk(p.standing) && isSeat(p.toAct) && Array.isArray(p.passed);
+      /*
+       * V převzetí je mód VŽDY konkrétní (nastavuje ho deklarace). S `null` by
+       * `resolveTakeover` přetypoval null na 'betl'|'durch' a hra by se
+       * dohrávala v přirozeném pořadí a zúčtovala jako durch.
+       */
+      return standingOk(p.standing) && (p.standing as { mode?: unknown }).mode !== null &&
+        isSeat(p.toAct) && Array.isArray(p.passed) && (p.passed as unknown[]).every(isSeat);
     case 'fleks': {
       if (!isRecord(p.fleks)) return false;
       const f = p.fleks as Record<string, unknown>;
@@ -167,7 +175,9 @@ function isContract(x: unknown): boolean {
   const c = x as Record<string, unknown>;
   return (
     (c.mode === 'hra' || c.mode === 'betl' || c.mode === 'durch') &&
-    (c.trump === null || (isNum(c.trump) && (c.trump as number) >= 0 && (c.trump as number) <= 3)) &&
+    // celé číslo: `trump: 0.5` by prošlo rozsahem, ale žádná barva se mu nerovná
+    // (legalPlays by přestal vynucovat trumfy) a bitové operace by z něj udělaly jinou
+    (c.trump === null || inRange(c.trump, 0, 3)) &&
     isSeat(c.declarer) &&
     (c.sedma === null || isSeat(c.sedma)) &&
     (c.kilo === null || isSeat(c.kilo)) &&
@@ -233,7 +243,7 @@ function looksLikeGameState(x: unknown): x is GameState {
     Array.isArray(s.history) && s.history.every(isHistoryAction) &&
     Array.isArray(s.handResults) && s.handResults.every(isHandResult) &&
     isTriple(s.ledger, (n) => typeof n === 'number' && Number.isFinite(n)) &&
-    (s.revealedTrump === null || (isNum(s.revealedTrump) && (s.revealedTrump as number) >= 0 && (s.revealedTrump as number) <= 31)) &&
+    (s.revealedTrump === null || isCard(s.revealedTrump)) &&
     // fáze závislé na kontraktu bez něj zamrznou (legalActions nevrátí nic)
     (CONTRACT_PHASES.includes(String((s.phase as { name?: unknown } | null)?.name))
       ? isContract(s.contract)

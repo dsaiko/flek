@@ -919,3 +919,63 @@ sazebník je navíc připíchnutý testem.
 `make verify` má nyní **55 PASS bloků**; smoke kontroluje tři věci, které verify bez DOM neumí
 (popup přes přepnutí jazyka, žádná animace při překreslení týmž stavem, nový zápas nečeká na
 opuštěné animace) — a všechny tři jsou ověřené negativní kontrolou.
+
+## 19. Fixpoint review kódu — osmé kolo (2026-08-25, po abc84b7)
+
+35 nálezů, 18 zamítl judge. Zbylých **17 jsem prošel a všechny potvrdil**. Tři „high"
+(i1, i15, i16) byly jeden root cause: **`TableUI.reset()`, který jsem přidal v předchozím
+kole, byl špatně navržený**.
+
+### Řetěz překreslení (i1, i15, i16 — high)
+
+`reset()` nahradil `this.chain` novým `Promise.resolve()`, ale běžící úlohu nezrušil. Důsledky,
+které review popsalo správně:
+
+- **dvě větve nad týmž DOM**: opuštěná úloha běžela paralelně s novým zápasem a obě psaly do
+  týchž uzlů i do třídy `animating` — opuštěná ji odebrala v době, kdy ji nový zápas ještě
+  potřeboval, takže **šlo klikat do stolu, který se vizuálně ještě rozdával**
+- **dokreslení mrtvého zápasu**: moje vlastní větev `if (gen !== this.gen) { this.renderNow(state); … }`
+  kreslila stav **opuštěného** zápasu; tlačítka karet pak visela nad starým `PlayerView`
+  a klik na ně dispatchoval do nového controlleru → `IllegalActionError`, který `main.ts` jen
+  zaloguje, takže **stůl tiše nereagoval**
+
+Oprava mění návrh: řetěz zůstává **jeden** (žádné prokládání) a `reset()` místo jeho výměny
+**probudí spící animace** (`sleepers`), aby řetěz hned uvolnily. Stav opuštěné generace se
+nikdy nekreslí — ani v `catch`, ani po dokončení animace.
+
+| Nález | Sev | Podstata | Oprava |
+|---|---|---|---|
+| i6 | high | `choose-trump` čte `state.unseen[0]` bez kontroly. `suitOf(undefined)` je 0, takže poškozený sav tiše nastaví **trumf červené**; legalita „z lidu" přitom nevyžadovala neprázdný balíček | `PlayerView.unseenCount` (veřejná informace), legalita „z lidu" jen když je z čeho brát, a reducer navíc vyhodí `InvariantError` |
+| i11 | medium | `script-src 'unsafe-inline'` dělá ze `script-src` **prázdné gesto** — a přitom je to jediná pojistka pro případ, že by někde chybělo `esc()` nad obnoveným savem | post-build krok `scripts/csp.ts` vymění `'unsafe-inline'` za **sha256 hashe** skutečných inline bloků; ověřeno v prohlížeči: injektovaný `<script>` se **neprovede** („Executing inline script violates … 'script-src'") |
+| i12 | low | `*.goatcounter.com` — goatcounter je self-service, zástupný host povoluje i domény cizích lidí (hotový exfiltrační kanál) | jen `https://saiko-flek.goatcounter.com` |
+| i13 | low | `worker-src 'self' blob:` je zbytečná cesta ke spuštění cizího kódu (build vytváří worker z reálné URL) | `worker-src 'self'` |
+| i4 | medium | v převzetí je mód závazku vždy konkrétní, ale validace brala i `null`; `resolveTakeover` ho přetypuje na `'betl'\|'durch'` a hra se pak hraje v přirozeném pořadí a **zúčtuje jako durch** | mód v převzetí musí být neprázdný, `takeover` navíc vyžaduje kontrakt |
+| i5 | medium | `trump: 0.5` prošlo rozsahem, ale žádná barva se mu nerovná — `legalPlays` přestane vynucovat trumfy a bitové operace z něj udělají jinou barvu | `inRange` (celé číslo) pro trumf i `revealedTrump` |
+| i2 | low | `parseSeedParam` bral zlomky i obří čísla; nad 2^53 je `counter++` bez efektu, takže **všechny hry v zápase dostanou týž seed** a slíbená posloupnost tiše přestane platit | jen celá čísla 0..2^32−1 |
+| i19 | medium | test „bublina ukazuje trumf" nikdy nespustil nový fallback `standingTrumpOf` (deklarace už kontrakt nastavila) a tvrzení `/<svg/` prošlo i pro **špatnou** barvu | testuje se stav bez kontraktu (fallback) a kontroluje se ikona **trumfové** barvy i absence ostatních |
+| i21 | medium | nové ochrany `TableUI` hlídal jen smoke, který **nespouštěl žádný make target** | `make smoke` (build → preview → smoke → kill) a `make all: verify build smoke` |
+| i22 | low | kontrola i3 se srovnávala s „baseline": když animace ještě běžela, bylo 1 před i po a kontrola tiše nic nehlídala | čeká se na `#table.animating` `state: 'detached'`, pak musí zůstat 0 |
+| i23 | low | test popisků pokrýval 5 ze 7 hodnot `Bid.kind` — chyběly právě ty, které existují jen v licitovaném | iteruje se všech sedm |
+| i24 | low | whitelist módů měl jen negativní test; zúžení (třeba vypadlý `durch`) by tiše zahazovalo rozehrané zápasy při obnovení | pozitivní test pro `hra`/`betl`/`durch` |
+| i27 | medium | test zrušení pokrýval jen rozdávání, ne delší přechody (odhalení „z lidu" drží stůl 1,8 s) | smoke zruší běžící odhalení a pak porovná **otisk ruky** — po rozdání je na tahu člověk, takže se stůl sám nemění a jakákoli změna znamená dokreslení mrtvého zápasu |
+| i33 | medium | oprava „na tahu" pro volbu trumfu (i4 ze 7. kola) neměla test — metoda byla private | `seatOnTurn(v)` exportovaná a testovaná pro všechny fáze i pro všechny tři rozdávající |
+
+### K negativním kontrolám
+
+U i27 stálo za to test **skutečně zkusit rozbít**. První verze (kontrola stavového řádku
+a počtu karet) prošla i s vráceným rozbitým `reset()` — tedy nehlídala nic. Rozlišující
+pozorování je až **otisk ruky** (`src` karet): opuštěná animace přepíše ruku kartami mrtvého
+zápasu. Až s ním negativní kontrola padá, a to s čitelnou diagnostikou:
+
+```
+CHYBA: opuštěná animace „z lidu" dokreslila mrtvý zápas přes nový
+  ruka po rozdání:      8L, OB, UB, 9B, 7B, …
+  ruka o 2,5 s později: KH, UH, 9L, 8L, TB, …
+```
+
+Poznámka k poctivosti: na tenhle scénář stačí kterákoli **jedna** z těch tří ochran, takže
+negativní kontrola padá až po vrácení všech tří. Testuje tedy výsledné chování, ne každou
+zábranu zvlášť.
+
+`make verify` má **61 PASS bloků**, `make smoke` kontroluje čtyři věci, které bez DOM otestovat
+nejde, a `make all` teď spouští obojí.

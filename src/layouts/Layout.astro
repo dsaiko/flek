@@ -18,12 +18,17 @@ const GOATCOUNTER = 'https://saiko-flek.goatcounter.com/count';
   <!--
     CSP: statická stránka bez backendu, takže politika žije v <meta> (musí být
     hned za charset, platí až od svého výskytu). Skripty jen z vlastního
-    původu + gc.zgo.at (analytika), 'unsafe-inline' kvůli is:inline blokům
-    Astra; beacon GoatCounteru chodí jako <img> na *.goatcounter.com.
+    původu + gc.zgo.at (analytika); beacon GoatCounteru chodí jako <img> na
+    NÁŠ konkrétní subdomain (goatcounter je self-service, zástupné
+    *.goatcounter.com by povolilo i cizí).
+
+    'unsafe-inline' tady platí jen pro `astro dev`: `npm run build` ho
+    post-build krokem (scripts/csp.ts) vymění za sha256 hashe skutečných
+    inline bloků, takže v produkci `script-src` opravdu něco brání.
   -->
   <meta
     http-equiv="Content-Security-Policy"
-    content="default-src 'self'; script-src 'self' 'unsafe-inline' https://gc.zgo.at; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://*.goatcounter.com; connect-src 'self' https://*.goatcounter.com; worker-src 'self' blob:; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'"
+    content="default-src 'self'; script-src 'self' 'unsafe-inline' https://gc.zgo.at; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://saiko-flek.goatcounter.com; connect-src 'self' https://saiko-flek.goatcounter.com; worker-src 'self'; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'"
   />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="description" content={descriptionCs} />
