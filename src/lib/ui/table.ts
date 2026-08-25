@@ -82,6 +82,12 @@ export class TableUI {
     this.openPopup = null;
     this.selected.clear();
     for (const wake of [...this.sleepers]) wake();
+    // bubliny mají vlastní 2,6s časovač — bez zhasnutí by hláška mrtvého
+    // zápasu visela nad rozdáváním toho nového
+    for (const timer of this.bubbleTimers.values()) clearTimeout(timer);
+    this.bubbleTimers.clear();
+    for (const el of this.root.querySelectorAll('.bubble')) el.classList.remove('show');
+    this.lastHistoryLen = 0;
   }
 
   /**

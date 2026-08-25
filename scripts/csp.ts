@@ -15,6 +15,30 @@ import { readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+/**
+ * Politika může mít apostrofy HTML-escapované (`&#39;self&#39;`). Pozor: to
+ * escapování obsahuje `;`, takže se politika NESMÍ dělit na direktivy dřív,
+ * než se odescapuje — jinak se `script-src` vůbec nenajde.
+ */
+const decodeQuotes = (policy: string): string => policy.replace(/&#(?:39|x27);/g, "'");
+
+/** Má direktiva `script-src` ještě `'unsafe-inline'`? (kontrola hotového artefaktu) */
+export function scriptSrcAllowsInline(html: string): boolean {
+  for (const m of html.matchAll(/content=("|')([\s\S]*?)\1/g)) {
+    const policy = decodeQuotes(m[2]);
+    if (!policy.includes('script-src')) continue;
+    const directive = decodeQuotes(policy).split(';').find((d) => d.trim().startsWith('script-src'));
+    if (directive?.includes("'unsafe-inline'")) return true;
+  }
+  return false;
+}
+
+/** Obsahuje stránka vůbec politiku se `script-src`? (jinak regex minul) */
+export function hasScriptPolicy(html: string): boolean {
+  return [...html.matchAll(/content=("|')([\s\S]*?)\1/g)]
+    .some((m) => decodeQuotes(m[2]).includes('script-src'));
+}
+
 const sha256 = (body: string): string =>
   `'sha256-${createHash('sha256').update(body, 'utf8').digest('base64')}'`;
 
@@ -35,9 +59,13 @@ export function inlineScriptHashes(html: string): string[] {
  */
 export function withScriptHashes(html: string): string {
   const hashes = inlineScriptHashes(html);
+  // atribut může být v obou druzích uvozovek; apostrofy v `'self'` může
+  // generátor zapsat i jako &#39;
   return html.replace(
-    /(content=")([^"]*?)(")/g,
-    (whole, open: string, policy: string, close: string) => {
+    /content=("|')([\s\S]*?)\1/g,
+    (whole, quote: string, raw: string) => {
+      // odescapuj → oprav → zapiš s obyčejnými apostrofy (v atributu v "" jsou platné)
+      const policy = decodeQuotes(raw);
       if (!policy.includes('script-src')) return whole;
       const patched = policy
         .split(';')
@@ -51,12 +79,17 @@ export function withScriptHashes(html: string): string {
           return ` ${[...sources, ...hashes].join(' ')}`;
         })
         .join(';');
-      return `${open}${patched}${close}`;
+      return `content=${quote}${patched}${quote}`;
     },
   );
 }
 
 // ── CLI: přepiš všechny HTML soubory v dist/ ────────────────────────────────
+
+const fail = (msg: string): never => {
+  console.error(`CHYBA CSP: ${msg}`);
+  process.exit(1);
+};
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const dist = join(dirname(fileURLToPath(import.meta.url)), '..', 'dist');
@@ -65,15 +98,36 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
       const p = join(dir, name);
       return statSync(p).isDirectory() ? walk(p) : p.endsWith('.html') ? [p] : [];
     });
-  let patched = 0;
-  for (const file of walk(dist)) {
+  const files = walk(dist);
+  if (files.length === 0) fail('v dist/ nejsou žádné HTML soubory — build neproběhl?');
+
+  let withPolicy = 0;
+  for (const file of files) {
     const html = readFileSync(file, 'utf8');
-    const next = withScriptHashes(html);
-    if (next !== html) {
-      writeFileSync(file, next);
-      patched += 1;
-      console.log(`CSP hashe → ${file} (${inlineScriptHashes(html).length} inline skriptů)`);
+    if (!hasScriptPolicy(html)) {
+      // stránka bez CSP je taky chyba: politika je v Layoutu, takže ji má mít každá
+      fail(`${file}: nenašel jsem CSP se script-src (přesunula se? mění se escapování?)`);
     }
+    withPolicy += 1;
+    const next = withScriptHashes(html);
+    if (next !== html) writeFileSync(file, next);
+
+    /*
+     * KLÍČOVÉ: neúspěch nesmí být tichý. Kdyby regex minul (jiné uvozovky,
+     * minifikace, přesunutá meta), dřív se vypsalo „OK … v 0 souborech" a
+     * `make all` zůstal zelený, přičemž do produkce šla politika, proti které
+     * je celý krok filed (viz §20).
+     */
+    const out = readFileSync(file, 'utf8');
+    if (scriptSrcAllowsInline(out)) {
+      fail(`${file}: script-src má pořád 'unsafe-inline' — zpevnění CSP neproběhlo`);
+    }
+    const expected = inlineScriptHashes(out).length;
+    const got = (out.match(/'sha256-/g) ?? []).length;
+    if (got < expected) {
+      fail(`${file}: inline skriptů ${expected}, hashů v politice ${got} — něco se nezahashovalo`);
+    }
+    console.log(`CSP hashe → ${file} (${expected} inline skriptů)`);
   }
-  console.log(`OK: CSP bez 'unsafe-inline' v ${patched} souboru/ech`);
+  console.log(`OK: script-src bez 'unsafe-inline' v ${withPolicy} souboru/ech`);
 }

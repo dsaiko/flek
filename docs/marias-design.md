@@ -979,3 +979,54 @@ zábranu zvlášť.
 
 `make verify` má **61 PASS bloků**, `make smoke` kontroluje čtyři věci, které bez DOM otestovat
 nejde, a `make all` teď spouští obojí.
+
+## 20. Fixpoint review kódu — deváté kolo (2026-08-25, po 8803888)
+
+22 nálezů (z 35 v předchozím kole), 15 zamítl judge. Zbylých **7 jsem prošel a všechny
+potvrdil**. Tři „high" (i5, i13, i19) jsou jeden root cause a míří přesně na to, co jsem
+v předchozím kole přidal: **post-build zpevnění CSP mohlo tiše neproběhnout.**
+
+### Zpevnění CSP bez zpětné vazby (i5, i13, i19 — high)
+
+`scripts/csp.ts` bral „nic jsem nepřepsal" jako úspěch — vypsal
+`OK: CSP bez 'unsafe-inline' v 0 souboru/ech` a skončil nulou. A nic to dál nekontrolovalo:
+
+- `verify` testoval jen čistou funkci nad ručně napsaným řetězcem
+- `verify` nad `Layout.astro` `'unsafe-inline'` **záměrně povoluje** (kvůli `astro dev`),
+  takže zdrojová kontrola to zachytit nemohla
+- `smoke` sbíral jen **porušení** politiky, tedy odhalil politiku příliš striktní
+  (špatný hash → „Refused to execute inline script"), ale nikdy příliš volnou
+
+Ta asymetrie je jádro problému: kdyby regex minul (jiné uvozovky, escapované apostrofy,
+minifikace, přesunutá meta) nebo `tsx scripts/csp.ts` vypadl z buildu, šla by do produkce
+politika, **proti které je ten krok filed** — a `make all` by byl zelený.
+
+Oprava má tři vrstvy:
+
+1. `csp.ts` **selže nahlas**: chybějící HTML v `dist/`, stránka bez `script-src`, zbylé
+   `'unsafe-inline'` po zpracování nebo méně hashů než inline skriptů = `exit 1`
+2. `smoke` čte politiku **z doručené stránky** (`meta[http-equiv]`) a vyžaduje absenci
+   `'unsafe-inline'` i přítomnost `sha256-`
+3. `smoke` navíc **zkusí injektáž**: vloží inline `<script>` a ten se nesmí provést
+
+Negativní kontrola (vyhodit `csp.ts` z `npm run build`) padá čitelně:
+
+```
+CHYBA: doručený script-src není zpevněný (post-build krok neproběhl?):
+  script-src 'self' 'unsafe-inline' https://gc.zgo.at
+```
+
+Mimochodem: při psaní těch kontrol jsem si v `csp.ts` našel **dvě vlastní chyby** —
+regex `content=("|')…\1` bez zpětné reference končil uvnitř politiky (protože ta sama
+obsahuje apostrofy v `'self'`), a HTML-escapované apostrofy `&#39;` obsahují `;`, takže
+dělení politiky na direktivy je musí nejdřív odescapovat. Obojí by ten krok proměnilo
+přesně v to tiché no-op, o kterém review mluví.
+
+| Nález | Sev | Podstata | Oprava |
+|---|---|---|---|
+| i1 | low | `isContract` kontroloval pole nezávisle, takže prošly **nemožné kontrakty**: betl/durch **s trumfem** (`beats()` pak nominovanou barvu bere jako trumf a štychy padají špatnému hráči), `hra` **bez** trumfu (`legalPlays` přestane vynucovat trumf i přebití) a sedma/kilo v bezbarvé hře | křížová konzistence módu, trumfu, sedmy a kila — plus pozitivní test, že čistý betl projít musí |
+| i4 | medium | v savu prošel **plný** rozehraný štych (3 karty); další tah by vyrobil štych o čtyřech kartách a hra by se zúčtovala s chybným počtem karet | `trick.length <= 2`; test staví fixturu ze skutečně rozehrané sehrávky |
+| i6 | low | německá sada karet se servíruje německým hráčům, ale `verify` ji vynechával v kontrole kompletnosti i v kontrole externích referencí v SVG | `cards/modern-de` je v obou kontrolách |
+| i12 | low | `reset()` probudil animace, ale nechal běžet 2,6s časovače bublin — hláška mrtvého zápasu tak visela nad rozdáváním nového | `reset()` zhasne bubliny a zapomene `lastHistoryLen` |
+
+`make verify` má **64 PASS bloků**, `make smoke` kontroluje šest věcí v prohlížeči.

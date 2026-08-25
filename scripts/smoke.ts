@@ -38,6 +38,51 @@ page.on('pageerror', (e) => console.log('PAGE ERROR:', e.message));
 await page.goto(url);
 await page.waitForTimeout(500);
 
+/*
+ * i13/i19: CSP doručené stránky. Smoke dosud sbíral jen PORUŠENÍ politiky,
+ * takže odhalil politiku příliš striktní, ale nikdy příliš volnou — kdyby
+ * post-build krok tiše neproběhl, šlo by do produkce `script-src` s
+ * 'unsafe-inline' a `make all` by byl zelený.
+ *
+ * Kontrolujeme obojí: (a) co v doručené stránce stojí, (b) že to prohlížeč
+ * opravdu vynucuje — injektovaný inline skript se NESMÍ provést.
+ */
+const shippedPolicy = await page.evaluate(() => {
+  const meta = document.querySelector('meta[http-equiv="Content-Security-Policy" i]');
+  return meta?.getAttribute('content') ?? null;
+});
+if (!shippedPolicy) {
+  console.error('CHYBA: doručená stránka nemá CSP meta');
+  await browser.close();
+  process.exit(1);
+}
+const shippedScriptSrc = shippedPolicy.split(';').find((d) => d.trim().startsWith('script-src')) ?? '';
+if (shippedScriptSrc.includes("'unsafe-inline'") || !/'sha256-/.test(shippedScriptSrc)) {
+  console.error(
+    `CHYBA: doručený script-src není zpevněný (post-build krok neproběhl?): ${shippedScriptSrc}`,
+  );
+  await browser.close();
+  process.exit(1);
+}
+
+const injected = await page.evaluate(() => {
+  try {
+    const s = document.createElement('script');
+    s.textContent = 'window.__pwned = true';
+    document.head.appendChild(s);
+  } catch {
+    /* politika může hodit i výjimku */
+  }
+  return (window as unknown as { __pwned?: boolean }).__pwned === true;
+});
+if (injected) {
+  console.error('CHYBA: CSP nezablokovala injektovaný inline skript — script-src je bezzubá');
+  await browser.close();
+  process.exit(1);
+}
+// blokovaná injektáž se zaloguje jako CSP porušení — to je tady ŽÁDOUCÍ
+cspViolations.length = 0;
+
 // Rozdat
 await page.click('#actions .action-btn.primary');
 await page.waitForTimeout(400);

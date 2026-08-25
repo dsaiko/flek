@@ -25,6 +25,9 @@ function checkDeck(dir: string, ext: string): void {
 // karetní sady — kompletnost a shodné pojmenování napříč sadami
 checkDeck('cards/modern', 'svg');
 checkDeck('cards/modern-en', 'svg');
+// německá sada se servíruje německým hráčům (cardAssets.ts), takže musí projít
+// týmiž kontrolami jako ostatní
+checkDeck('cards/modern-de', 'svg');
 checkDeck('cards/history', 'png');
 assert.ok(existsSync(join(ROOT, 'cards/modern/back.svg')), 'chybí rub moderní sady');
 
@@ -38,7 +41,7 @@ assert.match(uhCs, />S</, 'CZ spodek má mít index S');
 console.log('PASS indexy CZ (S V K A) / EN (J Q K A)');
 
 // SVG neobsahují externí reference (self-contained; xmlns namespace je v pořádku)
-for (const set of ['cards/modern', 'cards/modern-en']) {
+for (const set of ['cards/modern', 'cards/modern-en', 'cards/modern-de']) {
   for (const f of readdirSync(join(ROOT, set)).filter((f) => f.endsWith('.svg'))) {
     const svg = readFileSync(join(ROOT, set, f), 'utf8');
     assert.doesNotMatch(svg, /(href|src)\s*=\s*"https?:/, `${set}/${f}: externí odkaz`);
@@ -2665,6 +2668,157 @@ const KULE = 2 as const;
     assert.equal(worker.includes('blob:'), false, 'worker-src nesmí povolovat blob:');
     assert.ok(worker.includes("'self'"), "worker-src musí povolovat 'self'");
     console.log('PASS regrese i12/i13 — CSP bez zástupných hostů a bez blob:');
+  }
+}
+
+
+// ── regrese: deváté kolo fixpoint review-code (2026-08-25, po 8803888) ──────
+
+{
+  const { initialState, apply } = await import('../src/lib/rules/engine');
+  const { legalActions } = await import('../src/lib/rules/legal');
+  const { view } = await import('../src/lib/rules/view');
+  const { defaultConfig } = await import('../src/lib/rules/sazby');
+  const { pointsOf: ptsB } = await import('../src/lib/cards');
+  type StB = ReturnType<typeof initialState>;
+  type ActB = ReturnType<typeof legalActions>[number];
+  const actsB = (st: StB): ActB[] => {
+    for (const seat of [0, 1, 2] as const) {
+      const a = legalActions(view(st, seat));
+      if (a.length > 0) return a;
+    }
+    return [];
+  };
+
+  // ── i5/i13/i19: post-build krok NESMÍ tiše neudělat nic ────────────────
+  {
+    const { scriptSrcAllowsInline, hasScriptPolicy, withScriptHashes } = await import('./csp');
+
+    // detekce „politika je pořád bezzubá" — i s escapovanými apostrofy
+    const loose = '<meta content="script-src \'self\' \'unsafe-inline\'">';
+    assert.equal(scriptSrcAllowsInline(loose), true, "'unsafe-inline' se musí poznat");
+    const escaped = '<meta content="script-src &#39;self&#39; &#39;unsafe-inline&#39;">';
+    assert.equal(scriptSrcAllowsInline(escaped), true, 'i escapovaný apostrof se musí poznat');
+    assert.equal(
+      scriptSrcAllowsInline('<meta content="script-src \'self\' \'sha256-abc\'">'), false,
+      'zpevněná politika nesmí být hlášena jako bezzubá',
+    );
+    // 'unsafe-inline' v JINÉ direktivě (style-src) není chyba
+    assert.equal(
+      scriptSrcAllowsInline('<meta content="script-src \'self\'; style-src \'unsafe-inline\'">'), false,
+      "'unsafe-inline' ve style-src je v pořádku",
+    );
+    assert.equal(hasScriptPolicy('<meta content="default-src \'self\'">'), false, 'bez script-src');
+    assert.equal(hasScriptPolicy(loose), true);
+
+    /*
+     * Politika sama obsahuje apostrofy ('self'), takže regex na uvozovky musí
+     * být svázaný zpětnou referencí — jinak match skončí uvnitř politiky
+     * a celý krok tiše neudělá nic (přesně to i5 popisuje).
+     */
+    const page = '<meta http-equiv="Content-Security-Policy" content="script-src \'self\' \'unsafe-inline\'">'
+      + '<script>window.x=1</script>';
+    const out = withScriptHashes(page);
+    assert.equal(scriptSrcAllowsInline(out), false, 'po zpracování už politika nesmí být bezzubá');
+    assert.match(out, /'sha256-[A-Za-z0-9+/=]+'/, 'hash inline skriptu musí být v politice');
+    assert.ok(out.startsWith('<meta http-equiv="Content-Security-Policy"'), 'atribut se nesmí rozbít');
+
+    // stránka v jednoduchých uvozovkách se taky musí zpracovat
+    const single = "<meta content='script-src \"self\" \\'unsafe-inline\\''><script>window.y=1</script>";
+    assert.equal(scriptSrcAllowsInline(withScriptHashes(single)), false, 'jednoduché uvozovky taky');
+
+    // ochrana proti tomu, že krok vypadne z buildu
+    const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')) as {
+      scripts: Record<string, string>;
+    };
+    assert.match(pkg.scripts.build, /csp\.ts/, 'build MUSÍ spouštět zpevnění CSP');
+    const mk = readFileSync(join(ROOT, 'Makefile'), 'utf8');
+    assert.match(mk, /^all: .*smoke/m, 'make all musí spouštět i smoke (kontroluje doručenou politiku)');
+    console.log('PASS regrese i5/i13/i19 — zpevnění CSP nemůže tiše neproběhnout');
+  }
+
+  // ── i1/i4: sav — nemožné kontrakty a plný rozehraný štych ──────────────
+  {
+    const store = new Map<string, string>();
+    (globalThis as { localStorage?: unknown }).localStorage = {
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: (k: string, val: string) => void store.set(k, val),
+      removeItem: (k: string) => void store.delete(k),
+    };
+    const { saveMatch, loadMatch } = await import('../src/lib/match/persist');
+
+    let st: StB = initialState({ ...defaultConfig('voleny'), autoSettlePlainHra: false }, 2);
+    st = apply(st, { type: 'deal', seed: 3 });
+    let guard = 0;
+    while (st.phase.name !== 'tricks') {
+      if ((guard += 1) > 200) throw new Error('scénář i1 se zasekl');
+      const a = actsB(st);
+      st = apply(st,
+        a.find((x) => x.type === 'choose-trump' && x.card !== 'from-people') ??
+        a.find((x) => x.type === 'discard' && x.cards.every((c) => ptsB(c) === 0)) ??
+        a.find((x) => x.type === 'declare' && x.mode === 'hra' && !x.sedma && !x.kilo) ??
+        a.find((x) => x.type === 'takeover' && x.claim === 'good') ??
+        a.find((x) => x.type === 'good') ?? a[0]);
+    }
+    const patch = (mutate: (s: Record<string, unknown>) => void): void => {
+      saveMatch(st);
+      const parsed = JSON.parse(store.get('flek.match.v1') as string) as { v: number; state: Record<string, unknown> };
+      mutate(parsed.state);
+      store.set('flek.match.v1', JSON.stringify(parsed));
+    };
+    saveMatch(st);
+    assert.ok(loadMatch(), 'poctivá sehrávka se musí obnovit');
+
+    // (i1) betl s trumfem: beats() by nominovanou barvu brala jako trumf
+    patch((x) => {
+      const c = x.contract as Record<string, unknown>;
+      c.mode = 'betl'; c.sedma = null; c.kilo = null; // trump zůstává!
+    });
+    assert.equal(loadMatch(), null, 'betl s trumfem musí být odmítnut');
+
+    // (i1) barevná hra BEZ trumfu: legalPlays přestane vynucovat trumf
+    patch((x) => { (x.contract as Record<string, unknown>).trump = null; });
+    assert.equal(loadMatch(), null, 'hra bez trumfu musí být odmítnuta');
+
+    // (i1) sedma/kilo v bezbarvé hře
+    patch((x) => {
+      const c = x.contract as Record<string, unknown>;
+      c.mode = 'betl'; c.trump = null; c.sedma = 1; c.kilo = null;
+    });
+    assert.equal(loadMatch(), null, 'sedma v betlu musí být odmítnuta');
+    patch((x) => {
+      const c = x.contract as Record<string, unknown>;
+      c.mode = 'durch'; c.trump = null; c.sedma = null; c.kilo = 2;
+    });
+    assert.equal(loadMatch(), null, 'kilo v durchu musí být odmítnuto');
+    // pozitivně: čistý betl projít MUSÍ
+    patch((x) => {
+      const c = x.contract as Record<string, unknown>;
+      c.mode = 'betl'; c.trump = null; c.sedma = null; c.kilo = null;
+    });
+    assert.ok(loadMatch(), 'poctivý betl se musí obnovit');
+
+    // (i4) skutečně rozehraný štych (2 karty) projít MUSÍ …
+    let mid: StB = st;
+    for (let i = 0; i < 2; i += 1) {
+      mid = apply(mid, actsB(mid).find((a) => a.type === 'play') as ActB);
+    }
+    assert.equal(mid.phase.name === 'tricks' ? mid.phase.trick.length : -1, 2, 'scénář i4 čeká dvě karty');
+    saveMatch(mid);
+    assert.ok(loadMatch(), 'dvě karty v rozehraném štychu jsou v pořádku');
+
+    // … tři už ne: reducer plný štych okamžitě vyhodnocuje, takže v savu
+    // znamená, že další tah vyrobí štych o čtyřech kartách
+    const three = JSON.parse(JSON.stringify(mid)) as Record<string, unknown>;
+    const phase = three.phase as Record<string, unknown>;
+    const hand0 = (three.hands as number[][])[(mid.phase.name === 'tricks' ? mid.phase.toAct : 0)];
+    (phase.trick as unknown[]).push({ seat: mid.phase.name === 'tricks' ? mid.phase.toAct : 0, card: hand0[0] });
+    (three.hands as number[][])[(mid.phase.name === 'tricks' ? mid.phase.toAct : 0)] = hand0.slice(1);
+    store.set('flek.match.v1', JSON.stringify({ v: 1, state: three }));
+    assert.equal(loadMatch(), null, 'plný štych v savu musí být odmítnut (jinak by měl 4 karty)');
+
+    delete (globalThis as { localStorage?: unknown }).localStorage;
+    console.log('PASS regrese i1/i4 — sav: nemožné kontrakty a plný rozehraný štych');
   }
 }
 

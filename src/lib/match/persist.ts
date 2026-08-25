@@ -104,7 +104,8 @@ function isValidPhase(p: Record<string, unknown>): boolean {
       // hra končí na trickNo === 9; jiná hodnota (nebo neceločíselná) znamená
       // stav, ze kterého se nikdy nedostane k zúčtování
       return inRange(p.trickNo, 0, 9) && isSeat(p.leader) && isSeat(p.toAct) &&
-        isPlayArray(p.trick) &&
+        // tři karty = štych, který reducer okamžitě vyhodnocuje; v savu být nemůže
+        isPlayArray(p.trick) && (p.trick as unknown[]).length <= 2 &&
         // POZOR: `played` jsou DOHRANÉ ŠTYCHY { plays, winner }, ne karty
         Array.isArray(p.played) && p.played.every(isTrickResult) &&
         Array.isArray(p.marriages) && p.marriages.every(
@@ -173,6 +174,16 @@ const isBidEntry = (x: unknown): boolean => {
 function isContract(x: unknown): boolean {
   if (x === null || typeof x !== 'object') return false;
   const c = x as Record<string, unknown>;
+  /*
+   * Křížová konzistence, ne jen jednotlivá pole:
+   *  - betl/durch s trumfem → `beats()` by nominovanou barvu brala jako trumf
+   *    a štychy by padaly špatnému hráči
+   *  - 'hra' bez trumfu → `legalPlays` přestane vynucovat trumf i přebití
+   *  - sedma/kilo v bezbarvé hře → legalita by „hlášenou sedmu" držela v betlu
+   */
+  const trumpless = c.mode === 'betl' || c.mode === 'durch';
+  if (trumpless && (c.trump !== null || c.sedma !== null || c.kilo !== null)) return false;
+  if (c.mode === 'hra' && c.trump === null) return false;
   return (
     (c.mode === 'hra' || c.mode === 'betl' || c.mode === 'durch') &&
     // celé číslo: `trump: 0.5` by prošlo rozsahem, ale žádná barva se mu nerovná
