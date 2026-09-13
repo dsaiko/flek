@@ -511,11 +511,17 @@ Zapracováno (v tomto pořadí):
    `#1c2127` s poloměrem 28, sukno se zlatým lemem a radiálním přechodem
    `#2c6a9e → #1d4f7c → #173f64`. Sukno **ořezává**: deska má pevnou výšku, takže ruka
    visí přes spodní hranu (v mockupu `bottom:-40px`) místo aby vytlačila lištu.
-2. **Lišta nastavení uvnitř rámu** — tmavé „chipy" místo systémových selectů (vlastní
+2. **Lišta nastavení uvnitř rámu** — původně chipy pro všechna nastavení, po hraní
+   zredukováno: v liště zůstaly **vpravo jen „Nová hra", ozubené kolo a fullscreen**,
+   všechno ostatní se přesunulo do **panelu nastavení** (stejný `felt-panel` jako
+   vyúčtování). Varianta z lišty zmizela úplně — vybírá se na úvodní obrazovce.
+   V nastavení navíc **jméno hráče** (výchozí „Ty") a **vynulování konta** (konto je
+   součást stavu hry, takže ho vynuluje nová hra).
+3. ~~Lišta~~ — tmavé „chipy" místo systémových selectů (vlastní
    šipka jako data URI), vpravo „Nový zápas" se zlatým obrysem a ikona fullscreenu.
-3. **Avataři** — kolečko s iniciálou, jméno a podtitulek (role + konto); u člověka zlaté.
-4. **Stav hry jako pilulka** se zlatým „eyebrow" (název varianty) nad ní.
-5. **Úvodní obrazovka** — eyebrow, titulek, podtitulek, **výběr varianty dvěma kartami**
+4. **Avataři** — kolečko s iniciálou, jméno a podtitulek (role + konto); u člověka zlaté.
+5. **Stav hry jako pilulka** se zlatým „eyebrow" (název varianty) nad ní.
+6. **Úvodní obrazovka** — eyebrow, titulek, podtitulek, **výběr varianty dvěma kartami**
    (s figurou ze zvolené sady) a řádek „Minule". Výběr varianty rovnou přepíná zápas, ale
    zůstává na úvodní obrazovce (`newMatchIdle`).
 
@@ -532,7 +538,10 @@ Pasti, na které se při tom naráží (všechny stály jeden screenshot navíc)
   viselo v půlce sukna → `#table.idle` ji ruší;
 - panel úvodní obrazovky překrýval to tlačítko → končí nad akční řadou a klikací jsou
   **jen** karty variant, ne celý panel;
-- prázdné kontejnery paklu a hlášek braly kliky → `pointer-events: none`.
+- prázdné kontejnery paklu a hlášek braly kliky → `pointer-events: none`;
+- panel nastavení má stejnou třídu `.felt-panel` jako vyúčtování a v DOM je i skrytý —
+  smoke ho proto bral za konec hry a hru vůbec neodehrál (`count()` nevidí viditelnost).
+  Selektory v smoke jsou nově omezené na `#center-float`.
 
 ### 5.6 Obsah stránky (dokumenty)
 

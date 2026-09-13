@@ -33,6 +33,8 @@ export interface TableCallbacks {
 export interface TableOptions {
   humanSeat: Seat;
   pattern: () => Pattern;
+  /** Jméno člověka u stolu (nastavení); výchozí „Ty". */
+  playerName?: () => string;
   /** Sada hlášek (§5.8); výchozí „slušná", `off` = mlčenlivý stůl. */
   talk?: () => TalkSet;
   /** Zvuky (§5.7); výchozí tichý dublér, ať testy nepotřebují Web Audio. */
@@ -393,10 +395,11 @@ export class TableUI {
       setReveal(backs, imgs, animate);
     }
     const me = this.opts.humanSeat;
+    const myName = this.nameOf(me);
     const meName = this.root.querySelector<HTMLElement>('#name-me');
-    if (meName) meName.textContent = t('you');
+    if (meName) meName.textContent = myName;
     const meAvatar = this.root.querySelector<HTMLElement>('.avatar.me');
-    if (meAvatar) meAvatar.textContent = t('you').slice(0, 1);
+    if (meAvatar) meAvatar.textContent = myName.slice(0, 1).toUpperCase();
     const meLedger = this.root.querySelector<HTMLElement>('#ledger-me');
     if (meLedger) {
       const role = me === v.dealer ? t('dealerShort') : me === forhont(v.dealer) ? t('forhont') : '';
@@ -491,8 +494,8 @@ export class TableUI {
 
     const box = $(this.root, '#intro-variants');
     const VARIANTS = [
-      { id: 'voleny' as const, mark: 'V', tag: t('variantTagVoleny'), name: t('voleny'), desc: t('variantDescVoleny'), figure: mkCard(0, KRAL) },
-      { id: 'licitovany' as const, mark: 'L', tag: t('variantTagLicitovany'), name: t('licitovany'), desc: t('variantDescLicitovany'), figure: mkCard(1, SVRSEK) },
+      { id: 'voleny' as const, tag: t('variantTagVoleny'), name: t('voleny'), desc: t('variantDescVoleny'), figure: mkCard(0, KRAL) },
+      { id: 'licitovany' as const, tag: t('variantTagLicitovany'), name: t('licitovany'), desc: t('variantDescLicitovany'), figure: mkCard(1, SVRSEK) },
     ];
     const cards = syncChildren(box, VARIANTS.length, () => {
       const btn = document.createElement('button');
@@ -503,7 +506,8 @@ export class TableUI {
     VARIANTS.forEach((variant, i) => {
       const btn = cards[i];
       btn.classList.toggle('on', v.config.variant === variant.id);
-      const html = `<span class="variant-top"><span class="variant-mark">${esc(variant.mark)}</span><span class="variant-tag">${esc(variant.tag)}</span></span>`
+      // bez písmene V/L — v cizím jazyce nedává smysl
+      const html = `<span class="variant-top"><span class="variant-tag">${esc(variant.tag)}</span></span>`
         + `<span class="variant-figure"><img src="${esc(cardSrc(variant.figure, this.opts.pattern()))}" alt=""></span>`
         + `<span class="variant-name">${esc(variant.name)}</span>`
         + `<span class="variant-desc">${esc(variant.desc)}</span>`;
@@ -744,7 +748,10 @@ export class TableUI {
   }
 
   private nameOf(seat: Seat): string {
-    if (seat === this.opts.humanSeat) return t('you');
+    if (seat === this.opts.humanSeat) {
+      const own = this.opts.playerName?.().trim();
+      return own !== undefined && own !== '' ? own : t('you');
+    }
     return aiNames()[seat === this.seatAt('left') ? 0 : 1];
   }
 

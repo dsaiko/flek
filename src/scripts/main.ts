@@ -18,6 +18,8 @@ import { TableUI } from '../lib/ui/table';
 // ── nastavení ────────────────────────────────────────────────────────────────
 
 interface Settings {
+  /** Jméno hráče u stolu; prázdné = použije se „Ty" podle jazyka. */
+  name: string;
   variant: Variant;
   difficulty: Difficulty;
   pattern: Pattern;
@@ -28,7 +30,7 @@ interface Settings {
 const SETTINGS_KEY = 'flek.settings.v1';
 
 const DEFAULT_SETTINGS: Settings = {
-  variant: 'voleny', difficulty: 'normal', pattern: 'history', talk: 'slusna', sounds: true,
+  name: '', variant: 'voleny', difficulty: 'normal', pattern: 'history', talk: 'slusna', sounds: true,
 };
 
 /** Nastavení z localStorage může být poškozené nebo cizí — ověř každou hodnotu. */
@@ -38,6 +40,7 @@ function loadSettings(): Settings {
     if (!raw) return { ...DEFAULT_SETTINGS };
     const p = JSON.parse(raw) as Partial<Settings>;
     return {
+      name: typeof p.name === 'string' ? p.name.slice(0, 16) : DEFAULT_SETTINGS.name,
       variant: p.variant === 'voleny' || p.variant === 'licitovany' ? p.variant : DEFAULT_SETTINGS.variant,
       difficulty: p.difficulty === 'easy' || p.difficulty === 'normal' || p.difficulty === 'hard'
         ? p.difficulty : DEFAULT_SETTINGS.difficulty,
@@ -65,7 +68,7 @@ const $ = <T extends HTMLElement>(id: string): T => {
 
 const settings = loadSettings();
 const driver = createWorkerDriver();
-const variantSel = $('set-variant') as HTMLSelectElement;
+
 const sounds = createSounds(settings.sounds);
 
 /*
@@ -111,6 +114,7 @@ function makeController(resume?: GameState): MatchController {
 const table = new TableUI($('table'), {
   humanSeat: 0,
   pattern: () => settings.pattern,
+  playerName: () => settings.name,
   talk: () => settings.talk,
   sounds,
 }, {
@@ -122,7 +126,6 @@ const table = new TableUI($('table'), {
   onVariant: (variant) => {
     if (settings.variant === variant) return;
     settings.variant = variant;
-    variantSel.value = variant;
     saveSettings(settings);
     newMatchIdle(); // zůstaň na úvodní obrazovce, jen s jinou variantou
   },
@@ -168,36 +171,54 @@ if (saved && saved.config.variant === settings.variant && saved.phase.name !== '
 const difficultySel = $('set-difficulty') as HTMLSelectElement;
 const patternSel = $('set-pattern') as HTMLSelectElement;
 const talkSel = $('set-talk') as HTMLSelectElement;
-const soundsSel = $('set-sounds') as HTMLSelectElement;
-variantSel.value = settings.variant;
+const soundsBtn = $('set-sounds') as HTMLButtonElement;
+const nameInput = $('set-name') as HTMLInputElement;
+const settingsFloat = $<HTMLElement>('settings-float');
+
 difficultySel.value = settings.difficulty;
 patternSel.value = settings.pattern;
 talkSel.value = settings.talk;
-soundsSel.value = settings.sounds ? 'on' : 'off';
+nameInput.value = settings.name;
+nameInput.placeholder = t('you');
+soundsBtn.setAttribute('aria-checked', String(settings.sounds));
 
-variantSel.addEventListener('change', () => {
-  settings.variant = variantSel.value as Variant;
+const openSettings = (open: boolean): void => {
+  settingsFloat.hidden = !open;
+  if (open) nameInput.placeholder = t('you');
+};
+$('btn-settings').addEventListener('click', () => openSettings(settingsFloat.hidden === true));
+$('settings-close').addEventListener('click', () => openSettings(false));
+settingsFloat.addEventListener('click', (ev) => {
+  if (ev.target === settingsFloat) openSettings(false); // klik mimo panel zavírá
+});
+$('settings-reset').addEventListener('click', () => {
+  openSettings(false);
+  newMatchIdle(); // konto je součást stavu hry — nový zápas ho vynuluje
+});
+
+nameInput.addEventListener('input', () => {
+  settings.name = nameInput.value.slice(0, 16);
   saveSettings(settings);
-  newMatch();
+  table.render(controller.state);
 });
 difficultySel.addEventListener('change', () => {
   settings.difficulty = difficultySel.value as Difficulty;
   saveSettings(settings);
-  newMatch(); // obtížnost od příštího zápasu — jednoduché a předvídatelné
+  newMatchIdle(); // obtížnost od příštího zápasu — jednoduché a předvídatelné
 });
 patternSel.addEventListener('change', () => {
   settings.pattern = patternSel.value as Pattern;
   saveSettings(settings);
   table.render(controller.state);
 });
-
 talkSel.addEventListener('change', () => {
   settings.talk = talkSel.value as TalkSet;
   saveSettings(settings);
-  table.render(controller.state); // hlášky se projeví hned, zápas běží dál
+  table.render(controller.state);
 });
-soundsSel.addEventListener('change', () => {
-  settings.sounds = soundsSel.value === 'on';
+soundsBtn.addEventListener('click', () => {
+  settings.sounds = soundsBtn.getAttribute('aria-checked') !== 'true';
+  soundsBtn.setAttribute('aria-checked', String(settings.sounds));
   saveSettings(settings);
   sounds.setEnabled(settings.sounds);
   if (settings.sounds) {
@@ -206,7 +227,7 @@ soundsSel.addEventListener('change', () => {
   }
 });
 
-$('btn-new').addEventListener('click', () => newMatch());
+$('btn-new').addEventListener('click', () => newMatchIdle());
 
 // fullscreen (iOS Safari neumí requestFullscreen na divu → CSS fallback)
 const gameSection = $('game-section');
@@ -228,10 +249,9 @@ function updateControlLabels(): void {
       if (label) opt.textContent = label;
     }
   };
-  set(variantSel, { voleny: t('voleny'), licitovany: t('licitovany') });
   set(patternSel, { modern: t('modern'), history: t('history') });
   set(talkSel, { slusna: t('talkPolite'), hospodska: t('talkPub'), vulgarni: t('talkVulgar'), off: t('talkOff') });
-  set(soundsSel, { on: t('soundOn'), off: t('soundOff') });
+  nameInput.placeholder = t('you');
   void currentLang();
 }
 updateControlLabels();
