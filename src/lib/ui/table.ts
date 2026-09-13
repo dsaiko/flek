@@ -378,10 +378,8 @@ export class TableUI {
         img.alt = '';
         return img;
       });
-      imgs.forEach((img, i) => {
-        setSrc(img, backSrc());
-        setReveal(img, animate, i);
-      });
+      for (const img of imgs) setSrc(img, backSrc());
+      setReveal(backs, imgs, animate);
     }
     const meLedger = this.root.querySelector<HTMLElement>('#ledger-me');
     if (meLedger) meLedger.textContent = fmtMoney(v.ledger[this.opts.humanSeat]);
@@ -717,10 +715,10 @@ export class TableUI {
       // hover/selected zdvih řeší CSS na <img>, aby se nepřepisovaly)
       const off = i - (n - 1) / 2;
       btn.style.transform = `rotate(${(off * 3).toFixed(1)}deg) translateY(${(off * off * 1.4).toFixed(1)}px)`;
-      setReveal(btn, animate, i);
       setSrc(img, c === null ? backSrc() : cardSrc(c, this.opts.pattern()));
       img.alt = c === null ? '' : cardName(c);
     });
+    setReveal(handEl, buttons, animate);
   }
 
   private onCardClick(c: Card, v: PlayerView): void {
@@ -1044,10 +1042,25 @@ function syncChildren<T extends HTMLElement>(
   return Array.from(parent.children) as T[];
 }
 
-/** Animace rozdávání se nasazuje jen při rozdání, jinak se musí uklidit. */
-function setReveal(el: HTMLElement, on: boolean, index: number): void {
-  el.classList.toggle('reveal', on);
-  el.style.animationDelay = on ? `${index * REVEAL_STEP_MS}ms` : '';
+/**
+ * Nasadí animaci rozdávání na prvky — a umí ji **restartovat**.
+ *
+ * Od chvíle, kdy se elementy recyklují, si nesou třídu `reveal` z minulého
+ * rozdání; pouhé `classList.toggle('reveal', true)` je pak bez efektu a nový
+ * zápas by se jen „objevil" místo rozdání. Třída se proto nejdřív sundá všem,
+ * jedním vynuceným reflowem se animace zahodí a teprve pak se nasadí znovu.
+ */
+function setReveal(container: HTMLElement, els: readonly HTMLElement[], animate: boolean): void {
+  for (const el of els) {
+    el.classList.remove('reveal');
+    el.style.animationDelay = '';
+  }
+  if (!animate) return;
+  void container.offsetWidth; // jeden reflow pro celý kontejner
+  els.forEach((el, i) => {
+    el.style.animationDelay = `${i * REVEAL_STEP_MS}ms`;
+    el.classList.add('reveal');
+  });
 }
 /** Kolik posledních hlášek si pamatujeme, ať se neopakují. */
 const RECENT_TALK = 6;

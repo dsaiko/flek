@@ -84,6 +84,7 @@ const STRINGS = {
   },
   talkPolite: { cs: 'slušné', en: 'polite', de: 'höflich' },
   talkPub: { cs: 'hospodské', en: 'pub', de: 'Kneipe' },
+  talkVulgar: { cs: 'vulgární', en: 'vulgar', de: 'derb' },
   talkOff: { cs: 'vypnuto', en: 'off', de: 'aus' },
   soundOn: { cs: 'zapnuto', en: 'on', de: 'an' },
   soundOff: { cs: 'vypnuto', en: 'off', de: 'aus' },

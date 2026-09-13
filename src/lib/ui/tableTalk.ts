@@ -1,9 +1,9 @@
 /**
  * tableTalk.ts — mariášové hlášky u stolu (docs/marias-design.md §5.8)
  *
- * Bez DOM, aby šly testovat. Dvě sady: **slušná** (výchozí) a **hospodská**
- * (jadrnější, pro pamětníky) — hospodská dědí od slušné všude, kde nemá vlastní
- * variantu. Materiál vychází z hlášek odposlouchaných z originálu FLEK!
+ * Bez DOM, aby šly testovat. Tři sady: **slušná** (výchozí), **hospodská**
+ * (jadrnější, pro pamětníky) a **vulgární** (hospoda po půlnoci) — každá dědí
+ * od té mírnější všude, kde nemá vlastní variantu. Materiál vychází z hlášek odposlouchaných z originálu FLEK!
  * (docs/original-notes.md) a z běžného mariášového folkloru.
  *
  * Zásada, proč se hláška nikdy nenacpe místo popisku akce: bublina je jediná
@@ -14,7 +14,7 @@
 
 import type { Lang } from './i18n';
 
-export type TalkSet = 'off' | 'slusna' | 'hospodska';
+export type TalkSet = 'off' | 'slusna' | 'hospodska' | 'vulgarni';
 
 export type TalkSituation =
   /** „Dobrá" v komentování / převzetí — popisek nenese informaci. */
@@ -161,6 +161,92 @@ const PUB: Partial<Record<TalkSituation, Lines>> = {
 };
 
 /**
+ * Vulgární sada — hospoda po půlnoci. Zapíná se výslovně v nastavení (výchozí
+ * je slušná), takže ji nikdo nedostane omylem. Držíme se běžných českých
+ * sprostých slov mezi kamarády u karet: **žádné nadávky na skupiny lidí** a
+ * nic sexuálně ponižujícího — to už není hospoda, to je svinstvo.
+ * Chybějící situace dědí od hospodské, ta od slušné.
+ */
+const VULGAR: Partial<Record<TalkSituation, Lines>> = {
+  accept: {
+    cs: ['Dobrá, do prdele', 'Tak hraj, sakra', 'U mě dobrá, ty chytráku', 'Hraj, kurva',
+      'Do prdele, ať je po tvým', 'Beru, ty vejtaho', 'Jasně, jen se neposer',
+      'Klidně, stejně to zkurvíš'],
+    en: ['Fine, dammit', "Just play, for fuck's sake", 'Fine, you smartass', 'Play already, damn it',
+      'Hell, have it your way', "I'll take it, big shot", "Sure, don't shit yourself",
+      "Go on, you'll screw it up anyway"],
+    de: ['Gut, verdammt', 'Spiel endlich, verdammt', 'Gut, du Klugscheißer', 'Spiel schon, Herrgott',
+      'Scheiße, mach wie du willst', 'Nehme ich, du Angeber', 'Klar, mach dir nicht ins Hemd',
+      'Meinetwegen, du versaust es eh'],
+  },
+  pass: {
+    cs: ['Ani hovno', 'Mám v ruce hovno', 'Držím hubu', 'Kašlu na to',
+      'Do prdele s tím, nehraju', 'S tímhle můžu tak do háje', 'Ani náhodou, kurva',
+      'Já do toho nejdu, sakra'],
+    en: ['Not a damn thing', 'I hold shit', 'Keeping my damn mouth shut', "I don't give a damn",
+      'To hell with it', 'This hand is garbage', 'No damn way', "I'm not touching that"],
+    de: ['Einen Scheiß', 'Ich halte Mist', 'Ich halte die verdammte Klappe', 'Ist mir scheißegal',
+      'Zum Teufel damit', 'Das Blatt ist Müll', 'Auf gar keinen Fall, verdammt',
+      'Da fasse ich nichts an'],
+  },
+  fromPeople: {
+    cs: ['Z lidu, kurva', 'Ať rozhodne ten zasranej balíček', 'Naslepo, co má bejt',
+      'Do prdele, beru co dá', 'Naslepo a nasrat', 'Ať už to mám z krku',
+      'Co přijde, to přijde, sakra', 'Klidně naslepo, stejně je to v hajzlu'],
+    en: ['From the deck, dammit', 'Let the damn pack decide', "Blind, so what", 'Hell, whatever comes',
+      'Blind and screw it', "Let's get it over with", 'What comes, comes, damn it',
+      "Blind then, it's all rubbish anyway"],
+    de: ['Blind, verdammt', 'Der verdammte Stapel entscheidet', 'Blind, na und', 'Scheiß drauf, was kommt',
+      'Blind und basta', 'Bringen wir es hinter uns', 'Was kommt, das kommt, verdammt',
+      'Dann blind, ist eh alles Mist'],
+  },
+  thinking: {
+    cs: ['Momentíček, kurva', 'Nekoukej mi do karet, vole', 'Drž hubu, počítám',
+      'Neser mě, přemýšlím', 'Dej mi pokoj, sakra', 'Počkej, do prdele', 'Nehoň mě',
+      'Ještě chvilku, ksakru'],
+    en: ['One damn moment', 'Stop peeking, you fool', 'Shut up, I am counting',
+      "Don't bug me, I'm thinking", 'Give me a break, damn it', 'Wait, dammit', "Don't rush me",
+      'Just a damn second'],
+    de: ['Einen Moment, verdammt', 'Guck nicht rein, du Depp', 'Klappe, ich rechne',
+      'Nerv mich nicht, ich denke', 'Lass mich in Ruhe, verdammt', 'Warte, verdammt',
+      'Hetz mich nicht', 'Noch eine verdammte Sekunde'],
+  },
+  trickWon: {
+    cs: ['Ten je můj, vole', 'Sedma smrdí, co', 'A je to doma, kurva', 'Máš hovno',
+      'Tak se to dělá, blbečku', 'Ten si strčte za klobouk', 'Poděkuj a plať',
+      'Na mě jsi krátkej, kamaráde'],
+    en: ['Mine, you fool', 'The seven reeks, huh', "That's in the damn bag", 'You get nothing',
+      "That's how it's done, genius", 'Stick that in your pipe', 'Thank me and pay',
+      "You're no match for me, pal"],
+    de: ['Meiner, du Depp', 'Die Sieben stinkt, was', 'Und das sitzt, verdammt', 'Du kriegst nichts',
+      'So macht man das, Genie', 'Steck dir den an den Hut', 'Bedank dich und zahl',
+      'Gegen mich bist du nichts, Freundchen'],
+  },
+  handWon: {
+    cs: ['Plať, ty držgrešle', 'Vyklop prachy', 'Co je doma, to se počítá, kurva',
+      'Škola základ života, vole', 'To bylo za ty prachy', 'Tak znovu, ty lamo',
+      'Naval drobný a nekňuč', 'Máš to za ty svoje chytrosti'],
+    en: ['Pay up, you cheapskate', 'Cough up the damn money', 'A win is a damn win',
+      'Consider it a lesson, fool', 'Worth every damn crown', 'Again, you amateur',
+      'Hand it over and stop whining', "That's for being a smartass"],
+    de: ['Zahl, du Geizhals', 'Rück die verdammte Kohle raus', 'Gewonnen ist verdammt nochmal gewonnen',
+      'Lehrgeld, du Depp', 'Das war jeden Cent wert', 'Noch mal, du Anfänger',
+      'Her damit und hör auf zu jammern', 'Das hast du vom Klugscheißen'],
+  },
+  handLost: {
+    cs: ['Do prdele s takovou kartou', 'Karta jak hovno', 'Kdo to, kurva, rozdával?',
+      'Zasraná smůla', 'To je v prdeli', 'Takovou sračku jsem dlouho neměl',
+      'Příště mícháte vy, sakra', 'Vykašli se na mariáš, dej se na politiku'],
+    en: ['To hell with these cards', 'Cards like crap', 'Who the hell dealt this?',
+      'Damn rotten luck', "It's all screwed", "Haven't held such garbage in years",
+      'You shuffle next time, damn it', 'Give up cards, try politics'],
+    de: ['Scheiß auf diese Karten', 'Karten wie Mist', 'Wer hat das verdammt nochmal gegeben?',
+      'Verdammtes Pech', 'Alles im Eimer', 'So einen Mist hatte ich lange nicht',
+      'Nächstes Mal mischt ihr, verdammt', 'Lass die Karten, geh in die Politik'],
+  },
+};
+
+/**
  * Deterministický výběr: tentýž stav musí dát tutéž hlášku, jinak by se text
  * měnil při každém překreslení (přepnutí jazyka, vzoru karet) a bublina by
  * „blikala" jiným textem u téže akce.
@@ -194,7 +280,11 @@ export interface TalkOptions {
 /** Hláška pro situaci, nebo `null` když jsou hlášky vypnuté. */
 export function tableTalk(situation: TalkSituation, opts: TalkOptions): string | null {
   if (opts.set === 'off') return null;
-  const table = opts.set === 'hospodska' ? (PUB[situation] ?? POLITE[situation]) : POLITE[situation];
+  // sady dědí: vulgární → hospodská → slušná
+  const table =
+    opts.set === 'vulgarni' ? (VULGAR[situation] ?? PUB[situation] ?? POLITE[situation])
+    : opts.set === 'hospodska' ? (PUB[situation] ?? POLITE[situation])
+    : POLITE[situation];
   const lines = table[opts.lang] ?? table.cs;
   if (lines.length === 0) return null;
   const start = hash([situation, opts.set, ...opts.seed]) % lines.length;
@@ -220,4 +310,4 @@ export function talkFires(chanceOneIn: number, seed: readonly (string | number)[
 export const TALK_SITUATIONS: readonly TalkSituation[] = Object.keys(POLITE) as TalkSituation[];
 
 /** Jen pro testy: syrová data obou sad. */
-export const TALK_TABLES = { POLITE, PUB } as const;
+export const TALK_TABLES = { POLITE, PUB, VULGAR } as const;

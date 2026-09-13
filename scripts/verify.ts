@@ -2829,7 +2829,7 @@ const KULE = 2 as const;
   const { tableTalk, talkFires, TALK_SITUATIONS, TALK_TABLES } =
     await import('../src/lib/ui/tableTalk');
   const LANGS = ['cs', 'en', 'de'] as const;
-  const SETS = ['slusna', 'hospodska'] as const;
+  const SETS = ['slusna', 'hospodska', 'vulgarni'] as const;
 
   // ── úplnost: každá situace, každý jazyk, obě sady ──────────────────────
   {
@@ -2860,7 +2860,9 @@ const KULE = 2 as const;
       const line = tableTalk('fromPeople', { set: 'hospodska', lang: 'cs', seed: [i] }) as string;
       assert.ok(politeFromPeople.includes(line), `zděděná hláška „${line}" musí být ze slušné sady`);
     }
-    console.log(`PASS hlášky — úplnost ${TALK_SITUATIONS.length} situací × 3 jazyky × 2 sady`);
+    console.log(
+      `PASS hlášky — úplnost ${TALK_SITUATIONS.length} situací × 3 jazyky × ${SETS.length} sady`,
+    );
   }
 
   // ── vypnuto = ticho ───────────────────────────────────────────────────
@@ -2897,6 +2899,12 @@ const KULE = 2 as const;
       pub.add(tableTalk('handLost', { set: 'hospodska', lang: 'cs', seed: [i] }) as string);
     }
     assert.equal([...pub].some((l) => polite.has(l)), false, 'hospodská sada musí mít vlastní hlášky');
+    const vulgar = new Set<string>();
+    for (let i = 0; i < 40; i += 1) {
+      vulgar.add(tableTalk('handLost', { set: 'vulgarni', lang: 'cs', seed: [i] }) as string);
+    }
+    assert.equal([...vulgar].some((l) => polite.has(l)), false, 'vulgární sada nesmí sahat do slušné');
+    assert.ok([...vulgar].some((l) => !pub.has(l)), 'vulgární sada musí mít vlastní hlášky');
     console.log('PASS hlášky — determinismus, pestrost a odlišnost sad');
   }
 

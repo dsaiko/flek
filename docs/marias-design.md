@@ -530,7 +530,8 @@ Pod hracím stolem, bilingválně CZ/EN:
 ### 5.8 Mariášové hlášky (table talk) — ✅ HOTOVO (`src/lib/ui/tableTalk.ts`)
 
 AI hráči „mluví" — bubliny u hráče v příslušné situaci. Dvě sady, přepínatelné v nastavení
-(výchozí **slušná**; „hospodská" = jadrnější, pro pamětníky; `off` = mlčenlivý stůl).
+(výchozí **slušná**; „hospodská" = jadrnější, pro pamětníky; „vulgární" = hospoda po půlnoci;
+`off` = mlčenlivý stůl).
 
 **Zásada, proč hláška nikdy nepřepíše popisek akce:** bublina je jediná zpětná vazba o tom,
 CO soupeř udělal. Folklor proto mluví jen tam, kde popisek nenese informaci („dobrá", „pas",
@@ -551,14 +552,21 @@ Bublina drží **2,6 s** a novou smí přebít až po **1,1 s** — hlášky cho
 (komentování, fleky), takže se text u téhož sedadla měnil dřív, než se dal přečíst. Ve frontě
 čeká vždy jen ta poslední, aby bubliny nezaostávaly za hrou.
 
-Hlášek je **aspoň 8 na situaci, jazyk a sadu** (celkem 330 textů) a `TableUI` si pamatuje
+Hlášek je **aspoň 8 na situaci, jazyk a sadu** (celkem 498 textů) a `TableUI` si pamatuje
 posledních šest řečených, které předává jako `avoid`. Bez toho dva soupeři klidně řekli totéž
 hned po sobě — „Souhlas | Souhlas" vedle sebe vypadá jako porucha, ne jako hospoda. Smoke to
 hlídá: dvě stejné folklórní hlášky viditelné zároveň = chyba.
 
-Hospodská sada **dědí** od slušné všude, kde nemá vlastní variantu. Tón: jadrná hospoda, ne
-sprostota — „Držím hubu a krok", „Sedma smrdí, viďte", „Vykašli se na mariáš, dej se na
-politiku" (poslední je přímo z originálu). Materiál níže + `docs/original-notes.md`.
+Sady **dědí** jedna od druhé — vulgární → hospodská → slušná — takže každá doplňuje jen to,
+co chce říct po svém:
+
+| Sada | Tón |
+|---|---|
+| **slušná** (výchozí) | „U mě dobrá", „Já jsem zticha", „Karta jak noha" |
+| **hospodská** | jadrná hospoda bez sprostoty: „Držím hubu a krok", „Sedma smrdí, viďte", „Vykašli se na mariáš, dej se na politiku" (poslední je přímo z originálu) |
+| **vulgární** | hospoda po půlnoci. Zapíná se výslovně, takže ji nikdo nedostane omylem. Držíme běžná česká sprostá slova mezi kamarády u karet — **žádné nadávky na skupiny lidí** a nic sexuálně ponižujícího; to už není hospoda, to je svinstvo. |
+
+Materiál níže + `docs/original-notes.md`.
 
 - Základ (povinné herní): „Barva!", „Špatná!", „Dobrá.", „Flek!", „Re!", „Tutti!", „Boty!",
   „Kalhoty!", „Sedma!", „Kilo!", „Betl!", „Durch!"
