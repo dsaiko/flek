@@ -159,13 +159,33 @@ let marriageChoices = 0;
 let popupSurvivedLang = false;
 /** Texty bublin viděné během hry — hlášky (§5.8) musí být opravdu vidět. */
 const bubblesSeen = new Set<string>();
+/** Hlášky „přemýšlím" ve všech jazycích a sadách — nesmí přežít soupeřův tah. */
+const THINKING = new Set<string>(
+  [TALK_TABLES.POLITE.thinking, TALK_TABLES.PUB.thinking].flatMap((t) =>
+    t === undefined ? [] : (['cs', 'en', 'de'] as const).flatMap((lang) => [...(t[lang] ?? [])]),
+  ),
+);
 let fromPeopleCancelled = false;
-for (let i = 0; i < 200; i += 1) {
-  await page.waitForTimeout(350);
+for (let i = 0; i < 400; i += 1) {
+  await page.waitForTimeout(160);
 
-  for (const text of await page.locator('.bubble.show').allTextContents()) {
-    const trimmed = text.trim();
-    if (trimmed) bubblesSeen.add(trimmed);
+  const visibleBubbles = (await page.locator('.bubble.show').allTextContents())
+    .map((t) => t.trim())
+    .filter((t) => t.length > 0);
+  for (const text of visibleBubbles) bubblesSeen.add(text);
+
+  /*
+   * „Momentíček…" nesmí viset během animace dohraného štychu: ta začne, až
+   * všichni tři zahráli, takže v tu chvíli nikdo nepřemýšlí. Přesně tohle je
+   * ten případ, kdy hláška „přemýšlím" visí nad hráčem, který už zahrál.
+   */
+  if ((await page.locator('#table.animating').count()) > 0) {
+    const stale = visibleBubbles.filter((b) => THINKING.has(b));
+    if (stale.length > 0) {
+      console.error(`CHYBA: „${stale[0]}" visí, i když už je štych dohraný`);
+      await browser.close();
+      process.exit(1);
+    }
   }
 
   const status = await page.textContent('#status');

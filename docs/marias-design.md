@@ -505,6 +505,14 @@ Pod hracím stolem, bilingválně CZ/EN:
   Kontext vytvořený přímo při gestu startuje rovnou ve stavu `running`, takže `resume()` se
   často vůbec nezavolá — test proto ověřuje, že se **před** gestem nic nerozezvučí
   (podvržený `AudioContext` ve stavu `suspended`), a smoke počítá skutečně spuštěné zdroje.
+- Posluchače gest **nejsou** `{ once: true }` a `play()` se uspaný kontext pokouší probudit:
+  prohlížeč kontext uspí i bez nás (tab na pozadí, zamčený displej, jiná aplikace si vezme
+  zvuk) a s jediným pokusem o odemčení by zvuk po návratu zůstal mrtvý do konce session.
+- **Vypnutý zvuk neotevře `AudioContext` vůbec** — na mobilu by tím probouzel zvukovou relaci
+  zařízení uživateli, který si zvuk výslovně vypnul. A dokud neproběhlo gesto, kontext se ani
+  nezakládá (jinak Chrome vypíše varování, např. při obnovení zápasu na obrazovce vyúčtování).
+- Zvuk sebraného štychu a hláška vítěze platí **i v režimu omezeného pohybu** — uživatel si
+  vyžádal míň pohybu, ne míň hry.
 
 ### 5.8 Mariášové hlášky (table talk) — ✅ HOTOVO (`src/lib/ui/tableTalk.ts`)
 
@@ -518,9 +526,9 @@ CO soupeř udělal. Folklor proto mluví jen tam, kde popisek nenese informaci (
 | Situace | Kdy |
 |---|---|
 | `accept` / `pass` / `fromPeople` | místo popisku, který stejně nic neříká |
-| `thinking` | AI počítá déle než 700 ms (u rychlých tahů se neukáže vůbec — jako v originále) |
+| `thinking` | AI počítá déle než 700 ms (u rychlých tahů se neukáže vůbec — jako v originále); **sundává se v okamžiku, kdy se stav pohne** — ne až při dalším překreslení, mezi nímž leží 1,7 s animace štychu |
 | `trickWon` | vítěz štychu, ale jen asi **každý třetí** (u třiceti štychů by to jinak byl šum) |
-| `handWon` / `handLost` | uštěpačný komentář **ve vyúčtování**, po vzoru FLEK! |
+| `handWon` / `handLost` | uštěpačný komentář **ve vyúčtování**, po vzoru FLEK!; při nulovém rozdílu (`Bez změny`) mlčí komentář i zvuk |
 
 Výběr hlášky je **deterministický** (FNV-1a hash přes situaci, sadu a seed okamžiku): tentýž
 stav musí dát tentýž text, jinak by se hláška měnila při každém překreslení (přepnutí jazyka,

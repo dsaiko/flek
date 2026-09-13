@@ -67,6 +67,8 @@ export class TableUI {
   private readonly sleepers = new Set<() => void>();
   /** „Momentíček…" — ukáže se, jen když AI opravdu přemýšlí déle než chvilku. */
   private thinkTimer: ReturnType<typeof setTimeout> | null = null;
+  /** U koho bublina „přemýšlím" právě visí (aby šla sundat, až tah přijde). */
+  private thinkShown: Seat | null = null;
   /** Zvuk konce hry patří ke hře, ne k překreslení (jazyk/vzor překresluje týž stav). */
   private scoredSoundFor: number | null = null;
   private resultView: 'summary' | 'replay' = 'summary';
@@ -98,6 +100,7 @@ export class TableUI {
     this.bubbleTimers.clear();
     if (this.thinkTimer !== null) clearTimeout(this.thinkTimer);
     this.thinkTimer = null;
+    this.thinkShown = null;
     this.scoredSoundFor = null;
     for (const el of this.root.querySelectorAll('.bubble')) el.classList.remove('show');
     this.lastHistoryLen = 0;
@@ -113,6 +116,12 @@ export class TableUI {
     // skutečný posun hry popup zneplatňuje (obnovuje se jen při překreslení
     // TÝMŽ stavem, tedy při přepnutí jazyka nebo vzoru karet)
     if (prev !== null && prev !== state) this.openPopup = null;
+    /*
+     * Jakmile se stav pohne, „Momentíček…" přestává platit — a sundat ho je
+     * potřeba TEĎ, ne až v renderNow: mezi tím leží animace dohraného štychu
+     * (1,7 s), takže by hláška „přemýšlím" visela nad hráčem, který už zahrál.
+     */
+    if (prev !== state) this.hideThinkingBubble();
     const gen = this.gen;
     this.chain = this.chain
       .then(async () => {
@@ -168,7 +177,9 @@ export class TableUI {
           if (gen !== this.gen) break;
           this.sounds.play('deal');
         }
-        await this.sleep(350);
+        // dorovnání na konci animace — po `reset()` už ho nikdo nebudí, takže
+        // by opuštěný zápas držel řetěz (a nový by čekal) celých 350 ms
+        if (gen === this.gen) await this.sleep(350);
         this.root.classList.remove('animating');
       }
       return gen === this.gen; // opuštěný zápas nechá překreslit ten nový
@@ -236,7 +247,9 @@ export class TableUI {
     // zvuk konce hry patří ke KONKRÉTNÍ hře, ne ke každému překreslení
     if (phase.name === 'scored' && this.scoredSoundFor !== v.handNo) {
       this.scoredSoundFor = v.handNo;
-      this.sounds.play(phase.result.delta[me] >= 0 ? 'win' : 'lose');
+      // nula není výhra ani prohra (panel na ni hlásí „Bez změny") — mlčíme
+      const delta = phase.result.delta[me];
+      if (delta !== 0) this.sounds.play(delta > 0 ? 'win' : 'lose');
     }
     // popup přežije překreslení týmž stavem (jazyk, vzor karet)
     this.openPopup?.();
@@ -301,11 +314,11 @@ export class TableUI {
     statusEl.textContent = `${t('trickWord')}: ${this.nameOf(winner)}`;
     statusEl.classList.remove('me-turn');
 
-    if (this.reducedMotion()) {
-      await this.sleep(900);
-      return;
-    }
-    // hláška vítěze štychu: jen občas, jinak by to u třiceti štychů byl šum
+    /*
+     * Hláška vítěze štychu a zvuk sebrání NEJSOU animace, takže patří i do
+     * režimu omezeného pohybu — uživatel si vyžádal míň pohybu, ne míň hry.
+     * Hláška jen občas, jinak by to u třiceti štychů byl šum.
+     */
     const set = this.talkSet;
     if (set !== 'off' && winner !== this.opts.humanSeat && state !== null) {
       const seed = [winner, state.handNo, state.history.length];
@@ -313,6 +326,12 @@ export class TableUI {
         const line = tableTalk('trickWon', { set, lang: currentLang(), seed });
         if (line !== null) this.showBubble(winner, esc(line));
       }
+    }
+
+    if (this.reducedMotion()) {
+      this.sounds.play('trick');
+      await this.sleep(900);
+      return;
     }
     await this.sleep(1250);
     if (gen !== this.gen) return; // zápas se vyměnil — do mrtvého stolu nekresli
@@ -512,6 +531,7 @@ export class TableUI {
 
   /** Bublina u sedadla. `html` už musí být escapované. */
   private showBubble(seat: Seat, html: string): void {
+    if (this.thinkShown === seat) this.thinkShown = null; // nahrazeno skutečnou hláškou
     const el = this.bubbleEl(seat);
     el.innerHTML = html;
     el.classList.add('show');
@@ -530,15 +550,37 @@ export class TableUI {
       clearTimeout(this.thinkTimer);
       this.thinkTimer = null;
     }
+    // (sundáno už v render(), tohle je pojistka pro překreslení týmž stavem)
+    this.hideThinkingBubble();
+
     const set = this.talkSet;
     if (set === 'off' || v.phase.name === 'idle' || v.phase.name === 'scored') return;
     const seat = seatOnTurn(v);
     if (seat === null || seat === this.opts.humanSeat) return;
-    const line = tableTalk('thinking', {
-      set, lang: currentLang(), seed: [seat, state.handNo, state.history.length],
-    });
+    const at = state.history.length;
+    const line = tableTalk('thinking', { set, lang: currentLang(), seed: [seat, state.handNo, at] });
     if (line === null) return;
-    this.thinkTimer = setTimeout(() => this.showBubble(seat, esc(line)), 700);
+    this.thinkTimer = setTimeout(() => {
+      this.thinkTimer = null;
+      // stav se mezitím pohnul (nebo hlášky zhasly) → hláška už je zastaralá
+      if (this.prevState === null || this.prevState.history.length !== at) return;
+      if (this.talkSet === 'off') return;
+      // POŘADÍ: showBubble() příznak čistí (skutečná hláška „přemýšlím" přebíjí),
+      // takže se musí nastavit až po něm — jinak by bublinu neměl kdo sundat
+      this.showBubble(seat, esc(line));
+      this.thinkShown = seat;
+    }, 700);
+  }
+
+  /** Sundá „Momentíček…", pokud zrovna visí. */
+  private hideThinkingBubble(): void {
+    if (this.thinkShown === null) return;
+    const seat = this.thinkShown;
+    this.thinkShown = null;
+    const prev = this.bubbleTimers.get(seat);
+    if (prev) clearTimeout(prev);
+    this.bubbleTimers.delete(seat);
+    this.bubbleEl(seat).classList.remove('show');
   }
 
   private posOf(seat: Seat): string {
@@ -873,7 +915,9 @@ export class TableUI {
     const state = this.prevState;
     if (set === 'off' || state === null || state.phase.name !== 'scored') return null;
     const delta = state.phase.result.delta[this.opts.humanSeat];
-    return tableTalk(delta >= 0 ? 'handWon' : 'handLost', {
+    // nula je „Bez změny" — komentář „Co je doma, to se počítá" by si s tím odporoval
+    if (delta === 0) return null;
+    return tableTalk(delta > 0 ? 'handWon' : 'handLost', {
       set, lang: currentLang(), seed: [state.handNo, delta],
     });
   }

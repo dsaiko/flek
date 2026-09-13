@@ -47,6 +47,8 @@ export function createSounds(enabled = true): Sounds {
   let ctx: AudioContext | null = null;
   let master: GainNode | null = null;
   let on = enabled;
+  /** Proběhlo gesto uživatele? Bez něj kontext ani nezakládáme (viz níže). */
+  let unlocked = false;
 
   const ensure = (): AudioContext | null => {
     if (ctx === null) {
@@ -122,13 +124,32 @@ export function createSounds(enabled = true): Sounds {
   return {
     setEnabled: (value) => { on = value; },
     unlock: () => {
+      // Vypnutý zvuk nesmí otevřít AudioContext: na mobilu tím probouzí zvukovou
+      // relaci zařízení uživateli, který si zvuk výslovně vypnul.
+      if (!on) return;
+      unlocked = true;
       const c = ensure();
-      if (c !== null && c.state === 'suspended') void c.resume().catch(() => {});
+      if (c !== null && c.state !== 'running') void c.resume().catch(() => {});
     },
     play: (name) => {
-      if (!on) return;
+      /*
+       * Dokud neproběhlo gesto, kontext vůbec nezakládáme — samotné `new
+       * AudioContext()` bez aktivace uživatele vypíše v Chrome varování
+       * a §5.7 slibuje, že v konzoli nebude nic. (Nastane např. při obnovení
+       * zápasu na obrazovce vyúčtování, kde chce hrát zvuk konce hry.)
+       */
+      if (!on || !unlocked) return;
       const c = ensure();
-      if (c === null || master === null || c.state !== 'running') return; // před gestem ticho
+      if (c === null || master === null) return;
+      if (c.state !== 'running') {
+        /*
+         * Prohlížeč kontext uspí i bez nás (tab na pozadí, zamčený displej,
+         * jiná aplikace si vezme zvuk). Bez tohohle pokusu o probuzení by zvuk
+         * po návratu na kartu zůstal mrtvý až do konce session.
+         */
+        void c.resume().catch(() => {});
+        return;
+      }
       try {
         switch (name) {
           case 'shuffle':
