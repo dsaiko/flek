@@ -17,7 +17,7 @@ import { aiNames, currentLang, flekName, fmtMoney, marriageWarn, t } from './i18
 import { discardWarnings } from './discardWarnings';
 import { playChoice } from './playChoice';
 import { silentSounds, type Sounds } from './sounds';
-import { tableTalk, talkFires, type TalkSet } from './tableTalk';
+import { tableTalk, talkFires, type TalkSet, type TalkSituation } from './tableTalk';
 import { esc, replayHtml, settlementHtml, type HtmlDeps } from './resultHtml';
 
 export { esc };
@@ -69,6 +69,10 @@ export class TableUI {
   private thinkTimer: ReturnType<typeof setTimeout> | null = null;
   /** U koho bublina „přemýšlím" právě visí (aby šla sundat, až tah přijde). */
   private thinkShown: Seat | null = null;
+  /** Posledních pár hlášek — aby dva soupeři neřekli totéž hned po sobě. */
+  private readonly recentTalk: string[] = [];
+  /** Komentář k vyúčtování se vybírá JEDNOU za hru (jinak by při překreslení skákal). */
+  private scoredLine: { handNo: number; line: string | null } | null = null;
   /** Zvuk konce hry patří ke hře, ne k překreslení (jazyk/vzor překresluje týž stav). */
   private scoredSoundFor: number | null = null;
   private resultView: 'summary' | 'replay' = 'summary';
@@ -101,6 +105,8 @@ export class TableUI {
     if (this.thinkTimer !== null) clearTimeout(this.thinkTimer);
     this.thinkTimer = null;
     this.thinkShown = null;
+    this.recentTalk.length = 0;
+    this.scoredLine = null;
     this.scoredSoundFor = null;
     for (const el of this.root.querySelectorAll('.bubble')) el.classList.remove('show');
     this.lastHistoryLen = 0;
@@ -166,7 +172,6 @@ export class TableUI {
     // rozdání po vzoru FLEK!: karty se v ruce objevují postupně
     if (a?.type === 'deal') {
       this.renderNow(state, true);
-      this.sounds.play('shuffle');
       if (!this.reducedMotion()) {
         this.root.classList.add('animating');
         const n = state.hands[this.opts.humanSeat].length;
@@ -319,11 +324,10 @@ export class TableUI {
      * režimu omezeného pohybu — uživatel si vyžádal míň pohybu, ne míň hry.
      * Hláška jen občas, jinak by to u třiceti štychů byl šum.
      */
-    const set = this.talkSet;
-    if (set !== 'off' && winner !== this.opts.humanSeat && state !== null) {
+    if (this.talkSet !== 'off' && winner !== this.opts.humanSeat && state !== null) {
       const seed = [winner, state.handNo, state.history.length];
       if (talkFires(3, seed)) {
-        const line = tableTalk('trickWon', { set, lang: currentLang(), seed });
+        const line = this.pickTalk('trickWon', seed);
         if (line !== null) this.showBubble(winner, esc(line));
       }
     }
@@ -510,16 +514,29 @@ export class TableUI {
     return this.opts.sounds ?? silentSounds;
   }
 
+  /**
+   * Vybere hlášku a zapamatuje si ji, aby se hned neopakovala. Volat jen tam,
+   * kde se hláška opravdu ukáže — ne při každém překreslení.
+   */
+  private pickTalk(situation: TalkSituation, seed: readonly (string | number)[]): string | null {
+    const set = this.talkSet;
+    if (set === 'off') return null;
+    const line = tableTalk(situation, { set, lang: currentLang(), seed, avoid: this.recentTalk });
+    if (line === null) return null;
+    this.recentTalk.push(line);
+    if (this.recentTalk.length > RECENT_TALK) this.recentTalk.shift();
+    return line;
+  }
+
   /** Hláška místo popisku — jen tam, kde popisek nenese informaci (§5.8). */
   private flavourFor(a: PlayerAction, state: GameState): string | null {
-    const set = this.talkSet;
-    if (set === 'off' || a.type === 'deal') return null;
-    const opts = { set, lang: currentLang(), seed: [a.seat, state.handNo, state.history.length] };
+    if (this.talkSet === 'off' || a.type === 'deal') return null;
+    const seed = [a.seat, state.handNo, state.history.length];
     if (a.type === 'good' || (a.type === 'takeover' && a.claim === 'good')) {
-      return tableTalk('accept', opts);
+      return this.pickTalk('accept', seed);
     }
-    if (a.type === 'bid' && a.bid === 'pass') return tableTalk('pass', opts);
-    if (a.type === 'choose-trump' && a.card === 'from-people') return tableTalk('fromPeople', opts);
+    if (a.type === 'bid' && a.bid === 'pass') return this.pickTalk('pass', seed);
+    if (a.type === 'choose-trump' && a.card === 'from-people') return this.pickTalk('fromPeople', seed);
     return null;
   }
 
@@ -558,13 +575,14 @@ export class TableUI {
     const seat = seatOnTurn(v);
     if (seat === null || seat === this.opts.humanSeat) return;
     const at = state.history.length;
-    const line = tableTalk('thinking', { set, lang: currentLang(), seed: [seat, state.handNo, at] });
-    if (line === null) return;
     this.thinkTimer = setTimeout(() => {
       this.thinkTimer = null;
       // stav se mezitím pohnul (nebo hlášky zhasly) → hláška už je zastaralá
       if (this.prevState === null || this.prevState.history.length !== at) return;
       if (this.talkSet === 'off') return;
+      // vybíráme až TEĎ, ať se do „nedávno padlo" nezapisují hlášky, co se neukázaly
+      const line = this.pickTalk('thinking', [seat, state.handNo, at]);
+      if (line === null) return;
       // POŘADÍ: showBubble() příznak čistí (skutečná hláška „přemýšlím" přebíjí),
       // takže se musí nastavit až po něm — jinak by bublinu neměl kdo sundat
       this.showBubble(seat, esc(line));
@@ -911,15 +929,16 @@ export class TableUI {
 
   /** Uštěpačný komentář k vyúčtování (po vzoru FLEK!). */
   private settlementLine(): string | null {
-    const set = this.talkSet;
     const state = this.prevState;
-    if (set === 'off' || state === null || state.phase.name !== 'scored') return null;
+    if (this.talkSet === 'off' || state === null || state.phase.name !== 'scored') return null;
     const delta = state.phase.result.delta[this.opts.humanSeat];
     // nula je „Bez změny" — komentář „Co je doma, to se počítá" by si s tím odporoval
     if (delta === 0) return null;
-    return tableTalk(delta > 0 ? 'handWon' : 'handLost', {
-      set, lang: currentLang(), seed: [state.handNo, delta],
-    });
+    // panel se překresluje (jazyk, přepnutí na průběh hry) — hláška musí zůstat táž
+    if (this.scoredLine?.handNo === state.handNo) return this.scoredLine.line;
+    const line = this.pickTalk(delta > 0 ? 'handWon' : 'handLost', [state.handNo, delta]);
+    this.scoredLine = { handNo: state.handNo, line };
+    return line;
   }
 
   // ── bubliny (table talk základ) ────────────────────────────────────────────
@@ -952,6 +971,8 @@ function wasAnnouncedBy(state: GameState, seat: Seat, card: Card): boolean {
 }
 
 const REVEAL_STEP_MS = 90;
+/** Kolik posledních hlášek si pamatujeme, ať se neopakují. */
+const RECENT_TALK = 6;
 
 function declareLabel(a: Extract<PlayerAction, { type: 'declare' }>, standingTrump: number | null = null): string {
   if (a.mode !== 'hra') return t(a.mode);

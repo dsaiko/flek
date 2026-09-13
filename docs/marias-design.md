@@ -493,8 +493,10 @@ Pod hracím stolem, bilingválně CZ/EN:
 ### 5.7 Zvuky — ✅ HOTOVO (`src/lib/ui/sounds.ts`)
 
 - Jemné zvukové efekty (vypnutelné v nastavení, pocta volbě „Zvuky" z originálu):
-  **míchání** (při rozdání), **rozdávání** (ťuknutí ke každé odkryté kartě), položení karty,
-  sebrání štychu, flek (ťuknutí kloubů o stůl), výhra/prohra
+  **rozdávání** (šustnutí ke každé odkryté kartě), položení karty, sebrání štychu,
+  flek (ťuknutí kloubů o stůl), výhra/prohra.
+  Zvuk míchání balíčku byl na začátku rozdávání **odebrán** — v praxi zněl jako rána,
+  ne jako karty; zůstává jen šustění (rozhodnuto s uživatelem při poslechu).
 - **Rozhodnuto při implementaci: zvuky se syntetizují**, nestahují se samply. Karty jsou
   filtrovaný šum a krátká ťuknutí, což se dá udělat pár uzly Web Audio — odpadá cizí licence
   k dohledání, soubory v `public/`, i čekání na načtení (první zvuk nikdy nepřijde pozdě).
@@ -533,6 +535,11 @@ CO soupeř udělal. Folklor proto mluví jen tam, kde popisek nenese informaci (
 Výběr hlášky je **deterministický** (FNV-1a hash přes situaci, sadu a seed okamžiku): tentýž
 stav musí dát tentýž text, jinak by se hláška měnila při každém překreslení (přepnutí jazyka,
 vzoru karet) a bublina by u téže akce „blikala" jiným textem.
+
+Hlášek je **aspoň 8 na situaci, jazyk a sadu** (celkem 330 textů) a `TableUI` si pamatuje
+posledních šest řečených, které předává jako `avoid`. Bez toho dva soupeři klidně řekli totéž
+hned po sobě — „Souhlas | Souhlas" vedle sebe vypadá jako porucha, ne jako hospoda. Smoke to
+hlídá: dvě stejné folklórní hlášky viditelné zároveň = chyba.
 
 Hospodská sada **dědí** od slušné všude, kde nemá vlastní variantu. Tón: jadrná hospoda, ne
 sprostota — „Držím hubu a krok", „Sedma smrdí, viďte", „Vykašli se na mariáš, dej se na

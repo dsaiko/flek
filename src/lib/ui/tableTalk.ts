@@ -40,39 +40,60 @@ type Lines = Record<Lang, readonly string[]>;
  */
 const POLITE: Record<TalkSituation, Lines> = {
   accept: {
-    cs: ['U mě dobrá', 'Dobrá.', 'Ať je po tvém', 'Beru to', 'Souhlas'],
-    en: ['Fine by me', 'Agreed.', 'All right', "I'll take it", 'No objection'],
-    de: ['Bei mir gut', 'Einverstanden.', 'Meinetwegen', 'Passt schon', 'Kein Einwand'],
+    cs: ['U mě dobrá', 'Dobrá.', 'Ať je po tvém', 'Beru to', 'Souhlas', 'Nic proti',
+      'Platí', 'Jen si posluž', 'Tak do toho', 'Ať se daří'],
+    en: ['Fine by me', 'Agreed.', 'All right', "I'll take it", 'No objection', 'Nothing against',
+      'It stands', 'Be my guest', 'Go ahead then', 'Good luck'],
+    de: ['Bei mir gut', 'Einverstanden.', 'Meinetwegen', 'Passt schon', 'Kein Einwand', 'Nichts dagegen',
+      'Gilt', 'Nur zu', 'Dann los', 'Viel Glück'],
   },
   pass: {
-    cs: ['Já jsem zticha', 'Já se točit nebudu', 'Nechám to na vás', 'Mlčím', 'Bez mého'],
-    en: ['I keep quiet', "I'm out", 'Leave it to you', 'Passing', 'Not from me'],
-    de: ['Ich schweige', 'Ich bin raus', 'Überlasse ich euch', 'Weiter', 'Nicht von mir'],
+    cs: ['Já jsem zticha', 'Já se točit nebudu', 'Nechám to na vás', 'Mlčím', 'Bez mého',
+      'Tentokrát ne', 'Vynechám', 'Tohle není pro mě', 'Dál beze mě', 'Ani slovo'],
+    en: ['I keep quiet', "I'm out", 'Leave it to you', 'Passing', 'Not from me',
+      'Not this time', "I'll sit this one out", 'Not my hand', 'Go on without me', 'Not a word'],
+    de: ['Ich schweige', 'Ich bin raus', 'Überlasse ich euch', 'Weiter', 'Nicht von mir',
+      'Diesmal nicht', 'Ich setze aus', 'Nichts für mich', 'Macht ohne mich', 'Kein Wort'],
   },
   fromPeople: {
-    cs: ['Z lidu, pánové!', 'Ať rozhodne balíček', 'Naslepo a nebát se', 'Co dá, to dá'],
-    en: ['From the deck, gentlemen!', 'Let the pack decide', 'Blind and brave', 'Whatever it gives'],
-    de: ['Blind, meine Herren!', 'Der Stapel entscheidet', 'Blind und mutig', 'Was kommt, das kommt'],
+    cs: ['Z lidu, pánové!', 'Ať rozhodne balíček', 'Naslepo a nebát se', 'Co dá, to dá',
+      'Beru, co přijde', 'Zkusíme štěstí', 'Naslepo!', 'Ať mluví karty'],
+    en: ['From the deck, gentlemen!', 'Let the pack decide', 'Blind and brave', 'Whatever it gives',
+      "I'll take what comes", "Let's try our luck", 'Blind it is!', 'Let the cards speak'],
+    de: ['Blind, meine Herren!', 'Der Stapel entscheidet', 'Blind und mutig', 'Was kommt, das kommt',
+      'Ich nehme, was kommt', 'Versuchen wir es', 'Also blind!', 'Die Karten sollen reden'],
   },
   thinking: {
-    cs: ['Momentíček…', 'Nechte mě přemýšlet', 'Hmm…', 'Počkat, počkat', 'Rozmýšlím se'],
-    en: ['One moment…', 'Let me think', 'Hmm…', 'Hold on', 'Thinking it over'],
-    de: ['Moment mal…', 'Lasst mich denken', 'Hmm…', 'Warte kurz', 'Ich überlege'],
+    cs: ['Momentíček…', 'Nechte mě přemýšlet', 'Hmm…', 'Počkat, počkat', 'Rozmýšlím se',
+      'Ještě chvilku', 'Tak co s tím', 'Už to bude', 'Nechte mě spočítat'],
+    en: ['One moment…', 'Let me think', 'Hmm…', 'Hold on', 'Thinking it over',
+      'Just a moment', 'Now what', 'Almost there', 'Let me count'],
+    de: ['Moment mal…', 'Lasst mich denken', 'Hmm…', 'Warte kurz', 'Ich überlege',
+      'Einen Augenblick', 'Was nun', 'Gleich habe ich es', 'Lasst mich rechnen'],
   },
   trickWon: {
-    cs: ['Ten je můj', 'Děkuji pěkně', 'Kdo maže, ten jede', 'To se povedlo', 'Beru'],
-    en: ['That one is mine', 'Thank you kindly', 'Grease it and go', 'Nicely done', 'Mine'],
-    de: ['Der gehört mir', 'Danke schön', 'Wer schmiert, der fährt', 'Gut gelaufen', 'Nehme ich'],
+    cs: ['Ten je můj', 'Děkuji pěkně', 'Kdo maže, ten jede', 'To se povedlo', 'Beru',
+      'Pěkný štych', 'A je to tady', 'Sem s ním', 'Ten si nechám'],
+    en: ['That one is mine', 'Thank you kindly', 'Grease it and go', 'Nicely done', 'Mine',
+      'A fine trick', 'There we go', 'Over here', "I'll keep that one"],
+    de: ['Der gehört mir', 'Danke schön', 'Wer schmiert, der fährt', 'Gut gelaufen', 'Nehme ich',
+      'Schöner Stich', 'Da haben wir es', 'Her damit', 'Den behalte ich'],
   },
   handWon: {
-    cs: ['Co je doma, to se počítá', 'Dobrá hra', 'Tak se to hraje', 'Sedlo to'],
-    en: ['A win is a win', 'Good game', "That's how it's played", 'It worked out'],
-    de: ['Gewonnen ist gewonnen', 'Gutes Spiel', 'So spielt man das', 'Hat gepasst'],
+    cs: ['Co je doma, to se počítá', 'Dobrá hra', 'Tak se to hraje', 'Sedlo to',
+      'Vyšlo to', 'Byla to jistota', 'Šlo to samo', 'Spočítáno a podtrženo'],
+    en: ['A win is a win', 'Good game', "That's how it's played", 'It worked out',
+      'It came off', 'Never in doubt', 'It played itself', 'Counted and signed'],
+    de: ['Gewonnen ist gewonnen', 'Gutes Spiel', 'So spielt man das', 'Hat gepasst',
+      'Es ist aufgegangen', 'War nie in Gefahr', 'Ging von allein', 'Gezählt und fertig'],
   },
   handLost: {
-    cs: ['Karta jak noha', 'To se stává', 'Příště to vrátím', 'Smůla, jdeme dál'],
-    en: ['Rotten cards', 'It happens', "I'll get it back", 'Bad luck, next one'],
-    de: ['Miserable Karten', 'Kommt vor', 'Das hole ich zurück', 'Pech, weiter geht es'],
+    cs: ['Karta jak noha', 'To se stává', 'Příště to vrátím', 'Smůla, jdeme dál',
+      'Nedalo se nic dělat', 'Chybělo málo', 'Tak zase příště', 'Dneska to nebyl můj den'],
+    en: ['Rotten cards', 'It happens', "I'll get it back", 'Bad luck, next one',
+      'Nothing to be done', 'So close', 'Next time then', 'Not my day today'],
+    de: ['Miserable Karten', 'Kommt vor', 'Das hole ich zurück', 'Pech, weiter geht es',
+      'Da war nichts zu machen', 'Knapp daneben', 'Dann eben nächstes Mal', 'Heute nicht mein Tag'],
   },
 };
 
@@ -82,34 +103,60 @@ const POLITE: Record<TalkSituation, Lines> = {
  */
 const PUB: Partial<Record<TalkSituation, Lines>> = {
   accept: {
-    cs: ['U mě dobrá, jen to nezvorej', 'Dobrá, ale koukej hrát', 'Sedím a nekecám', 'Pro mě za mě'],
-    en: ["Fine, just don't botch it", 'Agreed, now play', 'Sitting quiet', 'Suit yourself'],
-    de: ['Gut, aber verbock es nicht', 'Einverstanden, nun spiel', 'Ich sitze still', 'Von mir aus'],
+    cs: ['U mě dobrá, jen to nezvorej', 'Dobrá, ale koukej hrát', 'Sedím a nekecám', 'Pro mě za mě',
+      'Klidně, stejně to projedeš', 'Dobrá, a ruce na stůl', 'Hraj, ať to máme z krku',
+      'Ať tě ani nenapadne prohrát'],
+    en: ["Fine, just don't botch it", 'Agreed, now play', 'Sitting quiet', 'Suit yourself',
+      "Sure, you'll blow it anyway", 'Fine, hands on the table', "Play, let's get it over with",
+      "Don't you dare lose"],
+    de: ['Gut, aber verbock es nicht', 'Einverstanden, nun spiel', 'Ich sitze still', 'Von mir aus',
+      'Meinetwegen, du vergeigst es eh', 'Gut, Hände auf den Tisch', 'Spiel, bringen wir es hinter uns',
+      'Wehe, du verlierst'],
   },
   pass: {
-    cs: ['Držím hubu a krok', 'Do toho mi nic není', 'Já mám v ruce seno', 'Ani náhodou'],
-    en: ['Keeping my mouth shut', 'Not my business', 'I hold a pile of hay', 'Not a chance'],
-    de: ['Ich halte den Mund', 'Geht mich nichts an', 'Ich halte Heu', 'Auf keinen Fall'],
+    cs: ['Držím hubu a krok', 'Do toho mi nic není', 'Já mám v ruce seno', 'Ani náhodou',
+      'S tímhle nikam nejdu', 'To si zahraj sám', 'Já na to kašlu', 'Tohle bych nevyhrál ani omylem'],
+    en: ['Keeping my mouth shut', 'Not my business', 'I hold a pile of hay', 'Not a chance',
+      "I'm going nowhere with this", 'Play it yourself', "I'm having none of it",
+      "I couldn't win this by accident"],
+    de: ['Ich halte den Mund', 'Geht mich nichts an', 'Ich halte Heu', 'Auf keinen Fall',
+      'Damit komme ich nirgends hin', 'Spiel es doch selbst', 'Ohne mich',
+      'Das gewinne ich nicht mal aus Versehen'],
   },
   thinking: {
-    cs: ['Momentíček, nehoří', 'Nekoukej mi do karet', 'Neremcej, počítám', 'Času dost'],
-    en: ["One moment, nothing's burning", 'Stop peeking at my cards', "Quiet, I'm counting", 'Plenty of time'],
-    de: ['Moment, es brennt nicht', 'Guck nicht in meine Karten', 'Ruhe, ich rechne', 'Zeit genug'],
+    cs: ['Momentíček, nehoří', 'Nekoukej mi do karet', 'Neremcej, počítám', 'Času dost',
+      'Nedejchej mi na krk', 'Hned to bude, klid', 'Nech mě, nejsem stroj', 'Nespěchej na mě'],
+    en: ["One moment, nothing's burning", 'Stop peeking at my cards', "Quiet, I'm counting", 'Plenty of time',
+      "Don't breathe down my neck", 'Easy, almost there', "Let me be, I'm no machine", "Don't rush me"],
+    de: ['Moment, es brennt nicht', 'Guck nicht in meine Karten', 'Ruhe, ich rechne', 'Zeit genug',
+      'Atme mir nicht im Nacken', 'Gleich, ganz ruhig', 'Lass mich, ich bin keine Maschine',
+      'Dräng mich nicht'],
   },
   trickWon: {
-    cs: ['Ten je můj, chlapci', 'Sedma smrdí, viďte', 'Kdo maže, ten jede', 'A je to doma'],
-    en: ['Mine, boys', 'The seven reeks, eh', 'Grease it and go', "That's in the bag"],
-    de: ['Meiner, Jungs', 'Die Sieben stinkt, was', 'Wer schmiert, der fährt', 'Und das sitzt'],
+    cs: ['Ten je můj, chlapci', 'Sedma smrdí, viďte', 'Kdo maže, ten jede', 'A je to doma',
+      'Poděkujte pánovi', 'Tak se to dělá', 'Na to jste krátký', 'Ten si beru s sebou'],
+    en: ['Mine, boys', 'The seven reeks, eh', 'Grease it and go', "That's in the bag",
+      'Thank the gentleman', "That's how it's done", 'Too good for you', "I'm taking that one home"],
+    de: ['Meiner, Jungs', 'Die Sieben stinkt, was', 'Wer schmiert, der fährt', 'Und das sitzt',
+      'Dankt dem Herrn', 'So macht man das', 'Dafür seid ihr zu klein', 'Den nehme ich mit'],
   },
   handWon: {
-    cs: ['Co je doma, to se počítá', 'Plať a nekoukej', 'Škola základ života', 'To bylo za ty peníze'],
-    en: ['A win is a win', 'Pay up and no sulking', 'Consider it a lesson', 'Worth every crown'],
-    de: ['Gewonnen ist gewonnen', 'Zahlen und nicht meckern', 'Lehrgeld nennt man das', 'Das war es wert'],
+    cs: ['Co je doma, to se počítá', 'Plať a nekoukej', 'Škola základ života', 'To bylo za ty peníze',
+      'Vyklop drobné', 'Přiznej, žes čekal míň', 'Tak znovu a lépe', 'Dobrá, ale draho'],
+    en: ['A win is a win', 'Pay up and no sulking', 'Consider it a lesson', 'Worth every crown',
+      'Cough up the change', 'Admit you expected less', 'Again, and better', 'Good, but pricey'],
+    de: ['Gewonnen ist gewonnen', 'Zahlen und nicht meckern', 'Lehrgeld nennt man das', 'Das war es wert',
+      'Raus mit dem Kleingeld', 'Gib zu, du hast weniger erwartet', 'Noch mal, und besser',
+      'Gut, aber teuer'],
   },
   handLost: {
-    cs: ['Karta jak noha!', 'Vykašli se na mariáš, dej se na politiku', 'U Bucků zhasli', 'To byla bída'],
-    en: ['Rotten cards!', 'Give up cards, try politics', 'The lights went out on me', 'That was misery'],
-    de: ['Karten wie Stroh!', 'Lass das Kartenspiel, geh in die Politik', 'Bei mir gingen die Lichter aus', 'Das war elend'],
+    cs: ['Karta jak noha!', 'Vykašli se na mariáš, dej se na politiku', 'U Bucků zhasli', 'To byla bída',
+      'S takovou kartou ani svatý', 'Kdo to rozdával?', 'Tohle si budu pamatovat', 'Příště mícháte vy'],
+    en: ['Rotten cards!', 'Give up cards, try politics', 'The lights went out on me', 'That was misery',
+      'Not even a saint with these', 'Who dealt this?', "I'll remember this one", 'You shuffle next time'],
+    de: ['Karten wie Stroh!', 'Lass die Karten, geh in die Politik', 'Bei mir gingen die Lichter aus',
+      'Das war elend', 'Damit schafft es kein Heiliger', 'Wer hat das gegeben?',
+      'Das merke ich mir', 'Nächstes Mal mischt ihr'],
   },
 };
 
@@ -136,6 +183,12 @@ export interface TalkOptions {
   lang: Lang;
   /** Cokoliv, co identifikuje okamžik (sedadlo, číslo hry, délka historie). */
   seed: readonly (string | number)[];
+  /**
+   * Hlášky, které padly nedávno — vyhneme se jim. Bez toho by dva soupeři
+   * klidně řekli totéž hned po sobě („Dobrá, ale koukej hrát" dvakrát vedle
+   * sebe vypadá jako porucha, ne jako hospoda).
+   */
+  avoid?: readonly string[];
 }
 
 /** Hláška pro situaci, nebo `null` když jsou hlášky vypnuté. */
@@ -144,7 +197,15 @@ export function tableTalk(situation: TalkSituation, opts: TalkOptions): string |
   const table = opts.set === 'hospodska' ? (PUB[situation] ?? POLITE[situation]) : POLITE[situation];
   const lines = table[opts.lang] ?? table.cs;
   if (lines.length === 0) return null;
-  return lines[hash([situation, opts.set, ...opts.seed]) % lines.length];
+  const start = hash([situation, opts.set, ...opts.seed]) % lines.length;
+  const avoid = opts.avoid;
+  if (avoid === undefined || avoid.length === 0) return lines[start];
+  // od vylosované hlášky dopředu první, která nedávno nezazněla
+  for (let i = 0; i < lines.length; i += 1) {
+    const candidate = lines[(start + i) % lines.length];
+    if (!avoid.includes(candidate)) return candidate;
+  }
+  return lines[start]; // všechno nedávno padlo (krátká tabulka) — ať radši mluví
 }
 
 /**
