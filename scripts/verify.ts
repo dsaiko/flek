@@ -1331,18 +1331,18 @@ const KULE = 2 as const;
       ],
     });
     const flekAct = { type: 'flek' as const, seat: 0 as const, target: 'hra' as const };
-    assert.ok(
-      bubbleText(flekAct as never, mkFlekState(1) as never)?.startsWith(flekName(0)),
-      `první flek se hlásí jako „${flekName(0)}"`,
-    );
-    assert.ok(
-      bubbleText(flekAct as never, mkFlekState(2) as never)?.startsWith(flekName(1)),
-      `druhý flek se hlásí jako „${flekName(1)}"`,
-    );
-    assert.ok(
-      bubbleText(flekAct as never, mkFlekState(3) as never)?.startsWith(flekName(2)),
-      `třetí flek se hlásí jako „${flekName(2)}"`,
-    );
+    // ve větě „flek NA hru" se vykřičník nehodí, proto se u jména odřízne
+    const word = (level: number): string => flekName(level).replace(/!$/, '');
+    for (const [count, level] of [[1, 0], [2, 1], [3, 2]] as const) {
+      const text = bubbleText(flekAct as never, mkFlekState(count) as never) as string;
+      assert.ok(text.startsWith(word(level)), `${count}. flek se hlásí jako „${word(level)}": ${text}`);
+      assert.equal(text.includes('!'), false, `hlášení fleku ve větě nemá vykřičník: ${text}`);
+    }
+    // 4. pád: „na hru", ne „na Hra"
+    const cs = bubbleText(flekAct as never, mkFlekState(1) as never) as string;
+    assert.ok(cs.endsWith('na hru'), `flek se hlásí na 4. pád: ${cs}`);
+    assert.equal(targetLabel('sedma'), 'sedmu', 'sedma ve 4. pádě');
+    assert.equal(targetLabel('betl'), 'betla', 'betl ve 4. pádě');
     console.log('PASS regrese i43/i49 — popisky escapují a flek se hlásí správným jménem');
   }
 

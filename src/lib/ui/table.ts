@@ -13,7 +13,7 @@ import type { GameState, PlayerAction, PlayerView, Seat } from '../rules/types';
 import { forhont } from '../rules/types';
 import { view } from '../rules/view';
 import { backSrc, cardName, cardSrc, suitIcon, suitName, type Pattern } from './cardAssets';
-import { aiNames, currentLang, flekName, fmtMoney, marriageWarn, t } from './i18n';
+import { aiNames, currentLang, flekName, fmtMoney, marriageWarn, t, type Lang } from './i18n';
 import { discardWarnings } from './discardWarnings';
 import { playChoice } from './playChoice';
 import { silentSounds, type Sounds } from './sounds';
@@ -69,6 +69,13 @@ export class TableUI {
   private thinkTimer: ReturnType<typeof setTimeout> | null = null;
   /** U koho bublina „přemýšlím" právě visí (aby šla sundat, až tah přijde). */
   private thinkShown: Seat | null = null;
+  /** Kdy naposledy bublina u sedadla naskočila (minimální čtecí čas). */
+  private readonly bubbleShownAt = new Map<Seat, number>();
+  /** Hláška čekající, až uplyne minimální čas té předchozí. */
+  private readonly bubblePending = new Map<Seat, ReturnType<typeof setTimeout>>();
+  /** Pohled pro delegovaný klik na kartu (tlačítka se recyklují, ne převěšují). */
+  private handView: PlayerView | null = null;
+  private handClickBound = false;
   /** Posledních pár hlášek — aby dva soupeři neřekli totéž hned po sobě. */
   private readonly recentTalk: string[] = [];
   /** Komentář k vyúčtování se vybírá JEDNOU za hru (jinak by při překreslení skákal). */
@@ -102,6 +109,9 @@ export class TableUI {
     // zápasu visela nad rozdáváním toho nového
     for (const timer of this.bubbleTimers.values()) clearTimeout(timer);
     this.bubbleTimers.clear();
+    for (const timer of this.bubblePending.values()) clearTimeout(timer);
+    this.bubblePending.clear();
+    this.bubbleShownAt.clear();
     if (this.thinkTimer !== null) clearTimeout(this.thinkTimer);
     this.thinkTimer = null;
     this.thinkShown = null;
@@ -303,18 +313,17 @@ export class TableUI {
     const trickEl = $(this.root, '#trick');
     this.root.classList.add('animating');
 
-    // vykresli kompletní štych se zvýrazněným vítězem
-    trickEl.innerHTML = '';
-    const imgs: HTMLImageElement[] = [];
-    for (const p of full) {
-      const img = document.createElement('img');
-      img.src = cardSrc(p.card, this.opts.pattern());
+    // vykresli kompletní štych se zvýrazněným vítězem (karty recykluj — dvě
+    // z nich už na stole leží a nové elementy by probliknuly, viz setSrc)
+    for (const box of Array.from(trickEl.querySelectorAll('.meld-box'))) box.remove();
+    const imgs = syncChildren(trickEl, full.length, () => document.createElement('img'));
+    full.forEach((p, i) => {
+      const img = imgs[i];
+      setSrc(img, cardSrc(p.card, this.opts.pattern()));
       img.alt = cardName(p.card);
       img.className = `played pos-${this.posOf(p.seat)}${p.seat === winner ? ' win' : ''}`;
-      trickEl.appendChild(img);
-      imgs.push(img);
-      if (state) this.appendMeldBox(trickEl, p, state, trump);
-    }
+    });
+    if (state) for (const p of full) this.appendMeldBox(trickEl, p, state, trump);
     const statusEl = $(this.root, '#status');
     statusEl.textContent = `${t('trickWord')}: ${this.nameOf(winner)}`;
     statusEl.classList.remove('me-turn');
@@ -362,18 +371,17 @@ export class TableUI {
       const extraUnseen =
         v.phase.name === 'choose-trump' && seat === forhont(v.dealer) ? unseenCount : 0;
       const n = v.handCounts[seat] + extraUnseen;
-      backs.innerHTML = '';
-      for (let i = 0; i < n; i += 1) {
+      const animate = reveal && !this.reducedMotion();
+      const imgs = syncChildren(backs, n, () => {
         const img = document.createElement('img');
-        img.src = backSrc();
-        img.alt = '';
         img.className = 'back';
-        if (reveal && !this.reducedMotion()) {
-          img.classList.add('reveal');
-          img.style.animationDelay = `${i * REVEAL_STEP_MS}ms`;
-        }
-        backs.appendChild(img);
-      }
+        img.alt = '';
+        return img;
+      });
+      imgs.forEach((img, i) => {
+        setSrc(img, backSrc());
+        setReveal(img, animate, i);
+      });
     }
     const meLedger = this.root.querySelector<HTMLElement>('#ledger-me');
     if (meLedger) meLedger.textContent = fmtMoney(v.ledger[this.opts.humanSeat]);
@@ -429,16 +437,19 @@ export class TableUI {
     ];
     for (const [seat, sel] of targets) {
       const el = $(this.root, sel);
-      el.innerHTML = '';
       const n = tricksOf[seat];
-      for (let i = 0; i < n; i += 1) {
+      // počítadlo ven, ať sync vidí jen obrázky; vrátí se na konec
+      el.querySelector('.pile-count')?.remove();
+      const imgs = syncChildren(el, n, () => {
         const img = document.createElement('img');
-        img.src = backSrc();
         img.alt = '';
+        return img;
+      });
+      imgs.forEach((img, i) => {
+        setSrc(img, backSrc());
         // ledabylý hospodský pakl: deterministické natočení po štychu
         img.style.transform = `rotate(${((i * 47) % 24) - 12}deg) translate(${(i % 3) * 3}px, ${(i % 2) * 2}px)`;
-        el.appendChild(img);
-      }
+      });
       if (n > 0) {
         const count = document.createElement('span');
         count.className = 'pile-count';
@@ -452,17 +463,17 @@ export class TableUI {
 
   private renderCenter(v: PlayerView, state: GameState): void {
     const trickEl = $(this.root, '#trick');
-    trickEl.innerHTML = '';
-    if (v.phase.name === 'tricks') {
-      for (const p of v.phase.trick) {
-        const img = document.createElement('img');
-        img.src = cardSrc(p.card, this.opts.pattern());
-        img.alt = cardName(p.card);
-        img.className = `played pos-${this.posOf(p.seat)}`;
-        trickEl.appendChild(img);
-        this.appendMeldBox(trickEl, p, state, v.contract?.trump ?? null);
-      }
-    }
+    const plays = v.phase.name === 'tricks' ? v.phase.trick : [];
+    // boxy hlášek se přestaví vždy (je jich málo a mění se), karty se recyklují
+    for (const box of Array.from(trickEl.querySelectorAll('.meld-box'))) box.remove();
+    const cards = syncChildren(trickEl, plays.length, () => document.createElement('img'));
+    plays.forEach((p, i) => {
+      const img = cards[i];
+      setSrc(img, cardSrc(p.card, this.opts.pattern()));
+      img.alt = cardName(p.card);
+      img.className = `played pos-${this.posOf(p.seat)}`;
+    });
+    for (const p of plays) this.appendMeldBox(trickEl, p, state, v.contract?.trump ?? null);
     // zúčtování/průběh: plovoucí vrstva přes střed stolu — nemění výšku stolu
     const float = $(this.root, '#center-float');
     if (v.phase.name === 'scored') {
@@ -488,11 +499,22 @@ export class TableUI {
       float.innerHTML = '';
     }
 
-    const info = $(this.root, '#contract-info');
+    /*
+     * Co kdo hraje patří K HRÁČI: badge sedí u sedadla aktéra, takže tam jméno
+     * nemusí být vůbec — kdo hraje, je vidět z toho, u koho badge visí.
+     */
+    const boxes: [Seat, HTMLElement][] = [
+      [this.opts.humanSeat, $(this.root, '#contract-me')],
+      [this.seatAt('left'), $(this.root, '#seat-left .seat-contract')],
+      [this.seatAt('right'), $(this.root, '#seat-right .seat-contract')],
+    ];
     const c = v.contract;
-    if (!c || v.phase.name === 'idle' || v.phase.name === 'scored') {
-      info.textContent = '';
-    } else {
+    const hidden = !c || v.phase.name === 'idle' || v.phase.name === 'scored';
+    for (const [seat, el] of boxes) {
+      if (hidden || c === null || seat !== c.declarer) {
+        if (el.innerHTML !== '') el.innerHTML = '';
+        continue;
+      }
       const parts: string[] = [];
       parts.push(
         c.mode === 'hra' ? `${t('hra')} ${c.trump !== null ? suitIcon(c.trump) : ''}` : t(c.mode),
@@ -501,8 +523,8 @@ export class TableUI {
       if (c.kilo !== null) parts.push(c.kilo === c.declarer ? t('kilo') : t('kiloProti'));
       const fleks = flekSummary(state);
       if (fleks) parts.push(fleks);
-      const who = esc(c.declarer === this.opts.humanSeat ? t('you') : this.nameOf(c.declarer));
-      info.innerHTML = `${who}: ${parts.join(' · ')}`;
+      const html = parts.join(' · ');
+      if (el.innerHTML !== html) el.innerHTML = html;
     }
   }
 
@@ -546,15 +568,41 @@ export class TableUI {
       : $(this.root, `#seat-${seat === this.seatAt('left') ? 'left' : 'right'} .bubble`);
   }
 
-  /** Bublina u sedadla. `html` už musí být escapované. */
-  private showBubble(seat: Seat, html: string): void {
-    if (this.thinkShown === seat) this.thinkShown = null; // nahrazeno skutečnou hláškou
+  /**
+   * Bublina u sedadla (`html` už musí být escapované).
+   *
+   * Hlášky chodí v dávkách (komentování, fleky), takže nová často přišla dřív,
+   * než se stihla přečíst ta předchozí — text u téhož sedadla probliknul.
+   * Každá proto dostane minimální čas na obrazovce a novější počká ve frontě;
+   * čeká vždy jen ta poslední, aby bubliny nezaostávaly za hrou.
+   */
+  private showBubble(seat: Seat, html: string, kind: 'talk' | 'thinking' = 'talk'): void {
+    const pending = this.bubblePending.get(seat);
+    if (pending !== undefined) clearTimeout(pending);
+    const since = Date.now() - (this.bubbleShownAt.get(seat) ?? 0);
+    if (since < MIN_BUBBLE_MS) {
+      this.bubblePending.set(
+        seat,
+        setTimeout(() => {
+          this.bubblePending.delete(seat);
+          this.paintBubble(seat, html, kind);
+        }, MIN_BUBBLE_MS - since),
+      );
+      return;
+    }
+    this.bubblePending.delete(seat);
+    this.paintBubble(seat, html, kind);
+  }
+
+  private paintBubble(seat: Seat, html: string, kind: 'talk' | 'thinking'): void {
+    this.thinkShown = kind === 'thinking' ? seat : this.thinkShown === seat ? null : this.thinkShown;
     const el = this.bubbleEl(seat);
     el.innerHTML = html;
     el.classList.add('show');
+    this.bubbleShownAt.set(seat, Date.now());
     const prev = this.bubbleTimers.get(seat);
     if (prev) clearTimeout(prev);
-    this.bubbleTimers.set(seat, setTimeout(() => el.classList.remove('show'), 2600));
+    this.bubbleTimers.set(seat, setTimeout(() => el.classList.remove('show'), BUBBLE_MS));
   }
 
   /**
@@ -583,18 +631,20 @@ export class TableUI {
       // vybíráme až TEĎ, ať se do „nedávno padlo" nezapisují hlášky, co se neukázaly
       const line = this.pickTalk('thinking', [seat, state.handNo, at]);
       if (line === null) return;
-      // POŘADÍ: showBubble() příznak čistí (skutečná hláška „přemýšlím" přebíjí),
-      // takže se musí nastavit až po něm — jinak by bublinu neměl kdo sundat
-      this.showBubble(seat, esc(line));
-      this.thinkShown = seat;
+      this.showBubble(seat, esc(line), 'thinking');
     }, 700);
   }
 
-  /** Sundá „Momentíček…", pokud zrovna visí. */
+  /** Sundá „Momentíček…", pokud zrovna visí (nebo čeká ve frontě). */
   private hideThinkingBubble(): void {
     if (this.thinkShown === null) return;
     const seat = this.thinkShown;
     this.thinkShown = null;
+    const pending = this.bubblePending.get(seat);
+    if (pending !== undefined) {
+      clearTimeout(pending);
+      this.bubblePending.delete(seat);
+    }
     const prev = this.bubbleTimers.get(seat);
     if (prev) clearTimeout(prev);
     this.bubbleTimers.delete(seat);
@@ -616,7 +666,6 @@ export class TableUI {
 
   private renderHand(v: PlayerView, legal: PlayerAction[], reveal = false, unseenCount = 0): void {
     const handEl = $(this.root, '#hand');
-    handEl.innerHTML = '';
     const phase = v.phase;
 
     const playable = new Set<Card>();
@@ -634,45 +683,44 @@ export class TableUI {
     const myUnseen =
       v.phase.name === 'choose-trump' && v.seat === forhont(v.dealer) ? unseenCount : 0;
     const n = v.hand.length + myUnseen;
-    v.hand.forEach((c, i) => {
+    const animate = reveal && !this.reducedMotion();
+
+    // klik je delegovaný na kontejner, aby šlo tlačítka recyklovat bez
+    // odvěšování posluchačů (viz setSrc)
+    this.handView = v;
+    if (!this.handClickBound) {
+      this.handClickBound = true;
+      handEl.addEventListener('click', (ev) => {
+        const btn = (ev.target as HTMLElement).closest<HTMLButtonElement>('.card-btn');
+        const raw = btn?.dataset.card;
+        if (btn === null || btn === undefined || btn.disabled || raw === undefined) return;
+        if (this.handView !== null) this.onCardClick(Number(raw) as Card, this.handView);
+      });
+    }
+
+    const buttons = syncChildren(handEl, n, () => {
       const btn = document.createElement('button');
       btn.className = 'card-btn';
-      btn.disabled = !playable.has(c);
-      if (this.selected.has(c)) btn.classList.add('selected');
+      btn.appendChild(document.createElement('img'));
+      return btn;
+    });
+
+    buttons.forEach((btn, i) => {
+      const img = btn.firstElementChild as HTMLImageElement;
+      const fromHand = i < v.hand.length;
+      const c = fromHand ? v.hand[i] : null;
+      btn.disabled = c === null || !playable.has(c);
+      btn.classList.toggle('selected', c !== null && this.selected.has(c));
+      if (c === null) delete btn.dataset.card;
+      else btn.dataset.card = String(c);
       // jemný vějíř: natočení + pokles ke krajům (transform na buttonu,
       // hover/selected zdvih řeší CSS na <img>, aby se nepřepisovaly)
       const off = i - (n - 1) / 2;
       btn.style.transform = `rotate(${(off * 3).toFixed(1)}deg) translateY(${(off * off * 1.4).toFixed(1)}px)`;
-      if (reveal && !this.reducedMotion()) {
-        btn.classList.add('reveal');
-        btn.style.animationDelay = `${i * REVEAL_STEP_MS}ms`;
-      }
-      const img = document.createElement('img');
-      img.src = cardSrc(c, this.opts.pattern());
-      img.alt = cardName(c);
-      btn.appendChild(img);
-      btn.addEventListener('click', () => this.onCardClick(c, v));
-      handEl.appendChild(btn);
+      setReveal(btn, animate, i);
+      setSrc(img, c === null ? backSrc() : cardSrc(c, this.opts.pattern()));
+      img.alt = c === null ? '' : cardName(c);
     });
-
-    // neotočené karty druhého balíčku (volba trumfu) — ruby v ruce jako u FLEK!
-    for (let j = 0; j < myUnseen; j += 1) {
-      const i = v.hand.length + j;
-      const btn = document.createElement('button');
-      btn.className = 'card-btn';
-      btn.disabled = true;
-      const off = i - (n - 1) / 2;
-      btn.style.transform = `rotate(${(off * 3).toFixed(1)}deg) translateY(${(off * off * 1.4).toFixed(1)}px)`;
-      const img = document.createElement('img');
-      img.src = backSrc();
-      img.alt = '';
-      if (reveal && !this.reducedMotion()) {
-        btn.classList.add('reveal');
-        btn.style.animationDelay = `${i * REVEAL_STEP_MS}ms`;
-      }
-      btn.appendChild(img);
-      handEl.appendChild(btn);
-    }
   }
 
   private onCardClick(c: Card, v: PlayerView): void {
@@ -971,8 +1019,41 @@ function wasAnnouncedBy(state: GameState, seat: Seat, card: Card): boolean {
 }
 
 const REVEAL_STEP_MS = 90;
+
+/**
+ * Přiřadí `src` jen když se opravdu liší.
+ *
+ * Chrome nově vytvořený `<img>` vykreslí prázdný, dokud ho nedekóduje — a
+ * protože se ruka i pakly přestavovaly při KAŽDÉM překreslení, probliklo
+ * pokaždé celé plátno. Safari dekódovaný obrázek recykluje, proto tam nebylo
+ * nic vidět. Řešení není v CSS: prostě nesmíme vyhazovat elementy, které
+ * zůstávají stejné.
+ */
+const setSrc = (img: HTMLImageElement, src: string): void => {
+  if (img.getAttribute('src') !== src) img.src = src;
+};
+
+/** Zajistí, že kontejner má přesně `count` dětí daného typu, a vrátí je. */
+function syncChildren<T extends HTMLElement>(
+  parent: HTMLElement,
+  count: number,
+  create: () => T,
+): T[] {
+  while (parent.children.length > count) parent.lastElementChild?.remove();
+  while (parent.children.length < count) parent.appendChild(create());
+  return Array.from(parent.children) as T[];
+}
+
+/** Animace rozdávání se nasazuje jen při rozdání, jinak se musí uklidit. */
+function setReveal(el: HTMLElement, on: boolean, index: number): void {
+  el.classList.toggle('reveal', on);
+  el.style.animationDelay = on ? `${index * REVEAL_STEP_MS}ms` : '';
+}
 /** Kolik posledních hlášek si pamatujeme, ať se neopakují. */
 const RECENT_TALK = 6;
+/** Jak dlouho bublina visí, a nejkratší doba, než ji smí přebít další. */
+const BUBBLE_MS = 2600;
+const MIN_BUBBLE_MS = 1100;
 
 function declareLabel(a: Extract<PlayerAction, { type: 'declare' }>, standingTrump: number | null = null): string {
   if (a.mode !== 'hra') return t(a.mode);
@@ -1011,12 +1092,22 @@ export function bidLabel(b: { kind: string; cervena: boolean }): string {
  * takže neznámá hodnota se escapuje — texty jdou do innerHTML.
  */
 export function targetLabel(target: string): string {
-  const map: Record<string, string> = {
-    hra: t('hra'), sedma: t('sedma'), kilo: t('kilo'),
-    betl: t('betl'), durch: t('durch'), dveSedmy: 'dvě sedmy',
-  };
+  const map = TARGET_ACC[currentLang()];
   return map[target] ?? esc(target);
 }
+
+/**
+ * Cíl fleku ve 4. pádě — skládá se do „flek NA …", takže první pád zní špatně
+ * („Flek! na Hra"). Angličtina a němčina mají vlastní tvary se členem.
+ */
+const TARGET_ACC: Record<Lang, Record<string, string>> = {
+  cs: { hra: 'hru', sedma: 'sedmu', kilo: 'kilo', betl: 'betla', durch: 'durcha', dveSedmy: 'dvě sedmy' },
+  en: { hra: 'the game', sedma: 'the seven', kilo: 'the hundred', betl: 'betl', durch: 'durch', dveSedmy: 'two sevens' },
+  de: { hra: 'das Spiel', sedma: 'die Sieben', kilo: 'Hundert', betl: 'Bettel', durch: 'Durchmarsch', dveSedmy: 'zwei Siebener' },
+};
+
+/** Jméno fleku bez vykřičníku — do věty „Flek na hru" se „Flek!" nehodí. */
+const flekWord = (level: number): string => flekName(level).replace(/!$/, '');
 
 function flekSummary(state: GameState): string {
   const counts: Record<string, number> = {};
@@ -1026,7 +1117,7 @@ function flekSummary(state: GameState): string {
     if (a.type === 'flek') counts[a.target] = (counts[a.target] ?? 0) + 1;
   }
   const parts = Object.entries(counts).map(
-    ([tg, lvl]) => `${flekName(lvl - 1)} ${t('na')} ${targetLabel(tg)}`,
+    ([tg, lvl]) => `${flekWord(lvl - 1)} ${t('na')} ${targetLabel(tg)}`,
   );
   return parts.join(', ');
 }
@@ -1077,7 +1168,7 @@ export function bubbleText(a: PlayerAction, state: GameState): string | null {
         if (h.type === 'deal') break;
         if (h.type === 'flek' && h.target === a.target) count += 1;
       }
-      return `${flekName(Math.max(0, count - 1))} ${t('na')} ${targetLabel(a.target)}`;
+      return `${flekWord(Math.max(0, count - 1))} ${t('na')} ${targetLabel(a.target)}`;
     }
     case 'good':
       return t('good');

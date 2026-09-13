@@ -451,6 +451,14 @@ procesem. Jeden worker pro obě AI (myslí sekvenčně).
     a zkomprimuje do **WebP** (~50 kB/karta) do `public/cards/history/`. Historická sada nemá
     rub — vygenerovat dobově laděný, nebo sdílet rub moderní sady. Poměry stran se liší
     (historická ~0.63, moderní 62/106 ≈ 0.585) — řeší CSS per sada, engine se o vzhled nestará.
+- **Překreslení recykluje DOM**: `setSrc()` přiřadí `src` jen při skutečné změně a
+  `syncChildren()` dorovná počet elementů. Ruka i pakly se dřív přestavovaly při každém
+  renderu a Chrome nově vytvořený `<img>` vykresluje prázdný, dokud ho nedekóduje — celé
+  plátno probliklo. (Safari dekódovaný obrázek recykluje, proto tam nebylo nic vidět;
+  ověřeno počítadlem: za celou hru vznikne 7 nových `<img>` místo stovek.)
+- **Co kdo hraje patří k hráči**, ne doprostřed stolu: badge závazku (a fleků) sedí u sedadla
+  aktéra, takže se v něm nemusí uvádět jméno. Místo je vyhrazené i prázdné, aby se karty
+  soupeře nepohnuly, až badge naskočí.
 - Stůl: vlastní ruka dole vějířem, protihráči rubem vlevo/vpravo nahoře, střed = štych,
   kontextový panel akcí (volba trumfu, licitace, fleky, hláška), zúčtovací obrazovka s rozpadem
   po komponentách, konto hráčů (persistence viz §5.9)
@@ -510,6 +518,9 @@ Pod hracím stolem, bilingválně CZ/EN:
 - Posluchače gest **nejsou** `{ once: true }` a `play()` se uspaný kontext pokouší probudit:
   prohlížeč kontext uspí i bez nás (tab na pozadí, zamčený displej, jiná aplikace si vezme
   zvuk) a s jediným pokusem o odemčení by zvuk po návratu zůstal mrtvý do konce session.
+- Safari kontext neodemkne samotným `resume()` — dokud v něm **přímo v gestu** něco nezahraje,
+  zůstane potichu, i když hlásí stav `running`. `unlock()` proto přehraje jednorámcový ticháč.
+  Ověřeno v Playwright WebKitu: kontext přejde do `running` a zvuky se spustí.
 - **Vypnutý zvuk neotevře `AudioContext` vůbec** — na mobilu by tím probouzel zvukovou relaci
   zařízení uživateli, který si zvuk výslovně vypnul. A dokud neproběhlo gesto, kontext se ani
   nezakládá (jinak Chrome vypíše varování, např. při obnovení zápasu na obrazovce vyúčtování).
@@ -535,6 +546,10 @@ CO soupeř udělal. Folklor proto mluví jen tam, kde popisek nenese informaci (
 Výběr hlášky je **deterministický** (FNV-1a hash přes situaci, sadu a seed okamžiku): tentýž
 stav musí dát tentýž text, jinak by se hláška měnila při každém překreslení (přepnutí jazyka,
 vzoru karet) a bublina by u téže akce „blikala" jiným textem.
+
+Bublina drží **2,6 s** a novou smí přebít až po **1,1 s** — hlášky chodí v dávkách
+(komentování, fleky), takže se text u téhož sedadla měnil dřív, než se dal přečíst. Ve frontě
+čeká vždy jen ta poslední, aby bubliny nezaostávaly za hrou.
 
 Hlášek je **aspoň 8 na situaci, jazyk a sadu** (celkem 330 textů) a `TableUI` si pamatuje
 posledních šest řečených, které předává jako `avoid`. Bez toho dva soupeři klidně řekli totéž

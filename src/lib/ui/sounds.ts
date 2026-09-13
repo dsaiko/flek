@@ -48,6 +48,8 @@ export function createSounds(enabled = true): Sounds {
   let on = enabled;
   /** Proběhlo gesto uživatele? Bez něj kontext ani nezakládáme (viz níže). */
   let unlocked = false;
+  /** Safari potřebuje v gestu skutečně něco přehrát (viz `unlock`). */
+  let primed = false;
 
   const ensure = (): AudioContext | null => {
     if (ctx === null) {
@@ -128,7 +130,25 @@ export function createSounds(enabled = true): Sounds {
       if (!on) return;
       unlocked = true;
       const c = ensure();
-      if (c !== null && c.state !== 'running') void c.resume().catch(() => {});
+      if (c === null) return;
+      if (c.state !== 'running') void c.resume().catch(() => {});
+      /*
+       * Safari (a starší iOS) kontext neodemkne samotným `resume()` — dokud
+       * v něm PŘÍMO v gestu něco nezahraje, zůstane potichu, i když hlásí
+       * stav 'running'. Přehrajeme proto jednorámcový ticháč; jinde nemá
+       * žádný efekt.
+       */
+      if (!primed) {
+        primed = true;
+        try {
+          const src = c.createBufferSource();
+          src.buffer = c.createBuffer(1, 1, c.sampleRate);
+          src.connect(c.destination);
+          src.start(0);
+        } catch {
+          /* nevadí — zvuk se zkusí znovu při dalším gestu */
+        }
+      }
     },
     play: (name) => {
       /*

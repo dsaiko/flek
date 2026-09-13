@@ -28,6 +28,7 @@ import Layout from '../layouts/Layout.astro';
         <div class="opp-row">
           <div class="seatbox" id="seat-left">
             <div class="seat-name"></div>
+            <div class="seat-contract"></div>
             <div class="backs"></div>
             <div class="seat-ledger"></div>
             <div class="pile" id="pile-left"></div>
@@ -36,10 +37,10 @@ import Layout from '../layouts/Layout.astro';
           </div>
           <div class="center-top">
             <div id="status"></div>
-            <div id="contract-info"></div>
           </div>
           <div class="seatbox" id="seat-right">
             <div class="seat-name"></div>
+            <div class="seat-contract"></div>
             <div class="backs"></div>
             <div class="seat-ledger"></div>
             <div class="pile" id="pile-right"></div>
@@ -55,7 +56,7 @@ import Layout from '../layouts/Layout.astro';
         <div class="me-row">
           <div id="actions"></div>
           <div id="hand"></div>
-          <div class="me-meta"><span id="ledger-me"></span></div>
+          <div class="me-meta"><span class="seat-contract" id="contract-me"></span><span id="ledger-me"></span></div>
           <div class="pile" id="pile-me"></div>
           <div class="melds" id="melds-me"></div>
           <div class="bubble" id="bubble-me"></div>
@@ -226,12 +227,18 @@ import Layout from '../layouts/Layout.astro';
   .center-top { text-align: center; flex: 1; }
   #status { color: #eaf2f9; font-size: 15px; min-height: 22px; }
   #status.me-turn { font-weight: 700; color: #ffe9a8; }
-  #contract-info { min-height: 24px; margin-top: 6px; }
-  #contract-info:not(:empty) {
-    display: inline-block; background: #fffdf2; color: #2b2b33;
-    font-weight: 700; font-size: 14px; padding: 5px 14px; border-radius: 8px;
+  /* co kdo hraje patří K HRÁČI, ne doprostřed stolu — jméno tam pak není třeba.
+     Místo je vyhrazené vždy, aby se karty soupeře nepohnuly, až badge naskočí. */
+  .seatbox .seat-contract { min-height: 24px; }
+  .seat-contract:not(:empty) {
+    display: inline-flex; align-items: center; gap: 5px; flex-wrap: wrap; justify-content: center;
+    background: #fffdf2; color: #2b2b33;
+    font-weight: 700; font-size: 13px; padding: 3px 10px; border-radius: 8px;
     box-shadow: 0 2px 8px rgba(0,0,0,.35); border: 1px solid #d9d2ba;
+    margin-bottom: 4px; max-width: 100%;
   }
+  .seat-contract svg { flex: none; display: block; }
+  #contract-me:not(:empty) { margin: 0 8px 0 0; }
 
   /* štych: karty leží podle sedadel — levý soupeř vlevo, pravý vpravo, já dole */
   #trick {
