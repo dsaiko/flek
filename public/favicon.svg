@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+  <!--
+    Favicon Flek! — karta se srdcem v paletě hry (rám #1c2127, krémová karta,
+    červené srdce). Musí být čitelná v 16 px, proto jeden velký symbol
+    a žádné detaily.
+  -->
+  <rect width="32" height="32" rx="7" fill="#1c2127"/>
+  <g transform="rotate(-8 16 16)">
+    <rect x="7" y="4.5" width="18" height="23" rx="2.6" fill="#f3ead6" stroke="#e1b600" stroke-width="1.1"/>
+    <path d="M16 24.2c-2.6-2.1-6.4-4.7-6.4-8.4 0-2.2 1.7-3.9 3.8-3.9 1.2 0 2.2.6 2.6 1.5.4-.9 1.4-1.5 2.6-1.5 2.1 0 3.8 1.7 3.8 3.9 0 3.7-3.8 6.3-6.4 8.4z" fill="#b3231c"/>
+  </g>
+</svg>

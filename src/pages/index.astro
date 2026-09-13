@@ -24,10 +24,14 @@ import Layout from '../layouts/Layout.astro';
     </section>
 
     <section id="game-section" class="game-section">
+      <div class="table-frame">
       <div id="table">
         <div class="opp-row">
           <div class="seatbox" id="seat-left">
-            <div class="seat-name"></div>
+            <div class="seat-head">
+              <span class="avatar"></span>
+              <span class="seat-id"><span class="seat-name"></span><span class="seat-sub"></span></span>
+            </div>
             <div class="seat-contract"></div>
             <div class="backs"></div>
             <div class="seat-ledger"></div>
@@ -36,10 +40,14 @@ import Layout from '../layouts/Layout.astro';
             <div class="bubble"></div>
           </div>
           <div class="center-top">
+            <div id="status-eyebrow"></div>
             <div id="status"></div>
           </div>
           <div class="seatbox" id="seat-right">
-            <div class="seat-name"></div>
+            <div class="seat-head">
+              <span class="avatar"></span>
+              <span class="seat-id"><span class="seat-name"></span><span class="seat-sub"></span></span>
+            </div>
             <div class="seat-contract"></div>
             <div class="backs"></div>
             <div class="seat-ledger"></div>
@@ -51,15 +59,32 @@ import Layout from '../layouts/Layout.astro';
 
         <div id="trick"></div>
 
-        <!-- úvodní obrazovka: vějíř skutečných karet, pokaždé jiná sada -->
+        <!-- úvodní obrazovka: karty u okrajů + titulek a výběr varianty -->
         <div id="intro" aria-hidden="true"></div>
+        <div id="intro-panel">
+          <div class="intro-head">
+            <div class="intro-eyebrow">
+              <span class="cs">Hospodská karetní hra</span><span class="en">A pub card game</span><span class="de">Ein Wirtshaus-Kartenspiel</span>
+            </div>
+            <div class="intro-title">Flek!</div>
+            <div class="intro-sub">
+              <span class="cs">Vyber si variantu a rozdej karty</span><span class="en">Pick a variant and deal</span><span class="de">Wähle eine Variante und gib</span>
+            </div>
+          </div>
+          <div class="intro-variants" id="intro-variants"></div>
+          <div class="intro-last" id="intro-last"></div>
+        </div>
 
         <div id="center-float"></div>
 
         <div class="me-row">
           <div id="actions"></div>
           <div id="hand"></div>
-          <div class="me-meta"><span class="seat-contract" id="contract-me"></span><span id="ledger-me"></span></div>
+          <div class="me-meta">
+            <span class="avatar me"></span>
+            <span class="seat-id"><span class="seat-name" id="name-me"></span><span class="seat-sub" id="ledger-me"></span></span>
+            <span class="seat-contract" id="contract-me"></span>
+          </div>
           <div class="pile" id="pile-me"></div>
           <div class="melds" id="melds-me"></div>
           <div class="bubble" id="bubble-me"></div>
@@ -105,8 +130,13 @@ import Layout from '../layouts/Layout.astro';
             <option value="off">vypnuto</option>
           </select>
         </label>
-        <button id="btn-new" class="ctl-btn"><span class="cs">Nový zápas</span><span class="en">New match</span><span class="de">Neue Partie</span></button>
-        <button id="btn-fullscreen" class="ctl-btn" title="Fullscreen">⛶</button>
+        <div class="ctl-right">
+          <button id="btn-new" class="ctl-btn primary"><span class="cs">Nový zápas</span><span class="en">New match</span><span class="de">Neue Partie</span></button>
+          <button id="btn-fullscreen" class="ctl-btn icon" title="Fullscreen" aria-label="Fullscreen">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15"/></svg>
+          </button>
+        </div>
+      </div>
       </div>
     </section>
 
@@ -133,8 +163,16 @@ import Layout from '../layouts/Layout.astro';
 
 <style is:global>
   :root {
-    --table: #24507c;
-    --table-light: #2f6499;
+    --table: #1d4f7c;
+    --table-dark: #173f64;
+    --table-light: #2c6a9e;
+    --frame: #1c2127;
+    --gold: #e1b600;
+    --gold-dim: rgba(225,182,0,.35);
+    --chip: #2f343c;
+    --chip-hover: #383e47;
+    --on-frame: #f6f7f9;
+    --on-frame-dim: #8f99a8;
     --ink: #1f2430;
     --muted: #6b7280;
     --card-w: clamp(52px, 8.5vw, 92px);
@@ -170,24 +208,52 @@ import Layout from '../layouts/Layout.astro';
     width: 100%; height: 100%;
     --card-w: clamp(60px, 9.5vw, 130px);
   }
-  .game-section:fullscreen #table,
-  .game-section.fs-fallback #table { flex: 1; }
-  .game-section:fullscreen .game-controls,
-  .game-section.fs-fallback .game-controls { color: #9aa3ad; }
+  .game-section:fullscreen .table-frame,
+  .game-section.fs-fallback .table-frame {
+    flex: 1; aspect-ratio: auto; min-height: 0; border-radius: 20px;
+  }
+  /*
+   * Rám kolem sukna a lišta uvnitř něj — podle mockupu z Claude Design
+   * (deska 1400×900 včetně 64px lišty, tmavý rám se zlatým lemem sukna).
+   */
+  .table-frame {
+    background: var(--frame);
+    border-radius: 28px;
+    padding: 18px;
+    box-shadow: 0 16px 48px rgba(0,0,0,.4);
+    display: flex; flex-direction: column;
+    aspect-ratio: 1400 / 900;
+  }
   #table {
     position: relative;
-    border-radius: 20px;
-    background: radial-gradient(ellipse at 50% 30%, var(--table-light), var(--table) 75%);
-    box-shadow: inset 0 0 60px rgba(0,0,0,.25), 0 10px 30px rgba(17,24,39,.15);
+    flex: 1;
+    border-radius: 16px;
+    background: radial-gradient(ellipse at 50% 40%, #2c6a9e 0%, var(--table) 55%, var(--table-dark) 100%);
+    box-shadow: inset 0 0 0 2px var(--gold-dim), inset 0 0 80px rgba(0,0,0,.35);
     padding: 14px 14px 10px;
-    min-height: 540px;
+    min-height: 0;
+    /* deska má pevný poměr stran, takže se ruka musí vejít „pod hranu" a ne
+       vytlačit lištu — sukno proto ořezává (v mockupu je hand `bottom:-40px`) */
+    overflow: hidden;
     display: flex; flex-direction: column;
   }
 
   .opp-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
   .seatbox { position: relative; min-width: 140px; }
-  .seat-name { color: #e3eefa; font-weight: 700; font-size: 14px; margin-bottom: 4px; }
-  .seat-ledger { color: #a9c4dd; font-size: 12px; margin-top: 2px; }
+  /* hlavička sedadla: avatar + jméno + podtitulek (mockup „1b Stůl") */
+  .seat-head { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+  #seat-right .seat-head { flex-direction: row-reverse; }
+  .avatar {
+    width: 34px; height: 34px; flex: none; border-radius: 9999px;
+    background: #404854; color: var(--on-frame);
+    display: grid; place-items: center; font-size: 14px; font-weight: 600;
+  }
+  .avatar.me { background: var(--gold); color: var(--frame); }
+  .seat-id { display: flex; flex-direction: column; line-height: 1.25; min-width: 0; }
+  #seat-right .seat-id { align-items: flex-end; }
+  .seat-name { color: var(--on-frame); font-weight: 600; font-size: 15px; }
+  .seat-sub { color: #c5cbd3; font-size: 12px; white-space: nowrap; }
+  .seat-ledger { display: none; }
   .backs { display: flex; padding-top: 6px; min-height: calc(var(--card-w) * 1.12); } /* výška rubu — řádek nesmí kolabovat */
   .backs .back { width: calc(var(--card-w) * .62); border-radius: 5px; margin-right: calc(var(--card-w) * -.4);
     box-shadow: 0 2px 6px rgba(0,0,0,.45); }
@@ -228,8 +294,16 @@ import Layout from '../layouts/Layout.astro';
   #bubble-me.show { transform: translate(-50%, 0); }
   .bubble.show { opacity: 1; transform: translateY(0); }
 
-  .center-top { text-align: center; flex: 1; }
-  #status { color: #eaf2f9; font-size: 15px; min-height: 22px; }
+  .center-top { text-align: center; flex: 1; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  #status-eyebrow {
+    font-size: 12px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--gold); min-height: 14px;
+  }
+  /* stav hry jako pilulka (mockup) */
+  #status { color: var(--on-frame); font-size: 15px; font-weight: 600; min-height: 22px; }
+  #status:not(:empty) {
+    padding: 8px 18px; border-radius: 9999px; background: rgba(0,0,0,.35);
+  }
   #status.me-turn { font-weight: 700; color: #ffe9a8; }
   /* co kdo hraje patří K HRÁČI, ne doprostřed stolu — jméno tam pak není třeba.
      Místo je vyhrazené vždy, aby se karty soupeře nepohnuly, až badge naskočí. */
@@ -271,9 +345,83 @@ import Layout from '../layouts/Layout.astro';
   }
   @media (prefers-reduced-motion: reduce) { #intro img { animation: none; } }
 
-  /* štych: karty leží podle sedadel  /* štych: karty leží podle sedadel — levý soupeř vlevo, pravý vpravo, já dole */
+  /* úvodní obrazovka podle mockupu „1a Úvod" */
+  #intro-panel {
+    /* Panel končí NAD akční řadou: tlačítko „Rozdat" žije v ní, takže ho
+       panel nesmí ani překrýt, ani na něj sedět. */
+    position: absolute; inset: 0 0 96px 0; z-index: 2;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px;
+    padding: 20px; text-align: center; pointer-events: none;
+  }
+  /* klikací jsou JEN karty variant — celý panel by jinak překryl „Rozdat" */
+  #intro-panel .variant-card { pointer-events: auto; }
+  .intro-head { display: flex; flex-direction: column; gap: 8px; align-items: center; }
+  .intro-eyebrow {
+    font-size: 13px; font-weight: 600; letter-spacing: .18em; text-transform: uppercase;
+    color: var(--gold);
+  }
+  .intro-title { font-size: clamp(30px, 4vw, 60px); font-weight: 700; letter-spacing: -.02em; line-height: 1; color: var(--on-frame); }
+  .intro-sub { font-size: 15px; color: #c5cbd3; }
+  .intro-variants { display: flex; gap: 24px; flex-wrap: wrap; justify-content: center; }
+  .variant-card {
+    width: clamp(140px, 14vw, 200px); border: 0; font: inherit; text-align: left; cursor: pointer;
+    border-radius: 14px; background: #f3ead6; padding: 14px;
+    display: flex; flex-direction: column; gap: 8px;
+    box-shadow: 0 10px 30px rgba(0,0,0,.35);
+    outline: 4px solid transparent; outline-offset: 3px;
+    transition: transform .12s ease-out, outline-color .12s;
+  }
+  .variant-card:hover { transform: translateY(-6px); }
+  .variant-card.on { outline-color: var(--gold); transform: translateY(-12px); }
+  .variant-top { display: flex; justify-content: space-between; align-items: flex-start; }
+  .variant-mark { font-size: 28px; font-weight: 700; color: #7a2a1f; line-height: 1; }
+  .variant-tag { font-size: 11px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: #8f99a8; }
+  .variant-figure { display: grid; place-items: center; min-height: clamp(56px, 7vw, 96px); }
+  .variant-figure img { max-height: clamp(56px, 7vw, 96px); border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,.3); }
+  .variant-name { font-size: 18px; font-weight: 600; color: #1c2127; }
+  .variant-desc { font-size: 12px; line-height: 1.4; color: #5f6b7c; }
+  .intro-last { font-size: 12px; color: var(--on-frame-dim); min-height: 15px; }
+
+  /* štych: karty leží podle sedadel  /* úvodní obrazovka podle mockupu „1a Úvod" */
+  #intro-panel {
+    /* Panel končí NAD akční řadou: tlačítko „Rozdat" žije v ní, takže ho
+       panel nesmí ani překrýt, ani na něj sedět. */
+    position: absolute; inset: 0 0 96px 0; z-index: 2;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px;
+    padding: 20px; text-align: center; pointer-events: none;
+  }
+  /* klikací jsou JEN karty variant — celý panel by jinak překryl „Rozdat" */
+  #intro-panel .variant-card { pointer-events: auto; }
+  .intro-head { display: flex; flex-direction: column; gap: 8px; align-items: center; }
+  .intro-eyebrow {
+    font-size: 13px; font-weight: 600; letter-spacing: .18em; text-transform: uppercase;
+    color: var(--gold);
+  }
+  .intro-title { font-size: clamp(30px, 4vw, 60px); font-weight: 700; letter-spacing: -.02em; line-height: 1; color: var(--on-frame); }
+  .intro-sub { font-size: 15px; color: #c5cbd3; }
+  .intro-variants { display: flex; gap: 24px; flex-wrap: wrap; justify-content: center; }
+  .variant-card {
+    width: clamp(140px, 14vw, 200px); border: 0; font: inherit; text-align: left; cursor: pointer;
+    border-radius: 14px; background: #f3ead6; padding: 14px;
+    display: flex; flex-direction: column; gap: 8px;
+    box-shadow: 0 10px 30px rgba(0,0,0,.35);
+    outline: 4px solid transparent; outline-offset: 3px;
+    transition: transform .12s ease-out, outline-color .12s;
+  }
+  .variant-card:hover { transform: translateY(-6px); }
+  .variant-card.on { outline-color: var(--gold); transform: translateY(-12px); }
+  .variant-top { display: flex; justify-content: space-between; align-items: flex-start; }
+  .variant-mark { font-size: 28px; font-weight: 700; color: #7a2a1f; line-height: 1; }
+  .variant-tag { font-size: 11px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: #8f99a8; }
+  .variant-figure { display: grid; place-items: center; min-height: clamp(56px, 7vw, 96px); }
+  .variant-figure img { max-height: clamp(56px, 7vw, 96px); border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,.3); }
+  .variant-name { font-size: 18px; font-weight: 600; color: #1c2127; }
+  .variant-desc { font-size: 12px; line-height: 1.4; color: #5f6b7c; }
+  .intro-last { font-size: 12px; color: var(--on-frame-dim); min-height: 15px; }
+
+  /* štych: karty leží podle sedadel — levý soupeř vlevo, pravý vpravo, já dole */
   #trick {
-    flex: 1; position: relative;
+    flex: 1; min-height: 0; position: relative;
     min-height: calc(var(--card-w) * 2.1);
   }
   #trick .played {
@@ -284,7 +432,34 @@ import Layout from '../layouts/Layout.astro';
   #trick .played.pos-right { transform: translate(calc(-50% + var(--card-w) * 1.15), -64%) rotate(6deg); }
   #trick .played.pos-me    { transform: translate(-50%, -30%); }
 
-  .me-row { text-align: center; position: relative; padding-bottom: 6px; }
+  /*
+   * Spodní řada je ukotvená k hraně sukna (mockup ji má na `bottom:-40px`):
+   * deska má pevný poměr stran, takže se řada nesmí přetahovat s prostředkem
+   * o místo — jinak buď vytlačí lištu, nebo ji ořez úplně schová.
+   */
+  .me-row {
+    position: absolute; left: 0; right: 0; bottom: 0;
+    text-align: center; pointer-events: none;
+  }
+  .me-row > * { pointer-events: auto; }
+  .me-row #hand { margin-bottom: calc(var(--card-w) * -0.3); }
+  /* úvodní obrazovka: prázdná ruka nic nerezervuje, akce jdou k hraně */
+  #table.idle #hand { min-height: 0; margin-bottom: 0; padding: 0; }
+  /* prázdné kontejnery paklu a hlášek nesmí brát kliky tlačítkům */
+  .melds, .pile { pointer-events: none; }
+  .melds img, .pile img { pointer-events: auto; }
+  #actions { position: relative; z-index: 4; }
+  #table.idle .me-row { padding-bottom: 12px; }
+  /* na úvodní obrazovce je u stolu jen Franta a Lojza (mockup „1a Úvod") */
+  #table.idle .me-meta { display: none; }
+  /* konto a pakl do rohů sukna, ať nezabírají výšku nad rukou */
+  /* blok „Ty" nad vějířem — v mockupu je ruka užší a nezasahuje do rohu */
+  .me-meta {
+    position: absolute; left: 12px; bottom: calc(var(--card-w) * 1.55); z-index: 3;
+    display: flex; align-items: center; gap: 10px; text-align: left;
+  }
+  #pile-me { position: absolute; right: 14px; bottom: 10px; margin: 0; z-index: 3; }
+  #melds-me { position: absolute; right: 14px; bottom: calc(var(--card-w) * .72); margin: 0; z-index: 3; }
   #actions { min-height: 40px; display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-bottom: 8px; }
   /* jednotný styl herních tlačítek: obdélník s oblými rohy (à la FLEK dialogy) */
   .action-btn {
@@ -426,17 +601,38 @@ import Layout from '../layouts/Layout.astro';
   .rtrick img:last-child { margin-right: 0; }
   .rtrick .rwin { color: #cfe3f5; font-size: 11px; margin-top: 3px; }
 
+  /* lišta nastavení uvnitř rámu — tmavé „chipy" místo systémových selectů */
   .game-controls {
-    display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: center;
-    padding: 12px 4px;
-    color: var(--muted); font-size: 13px;
+    min-height: 64px; flex: none;
+    display: flex; flex-wrap: wrap; gap: 10px 24px; align-items: center;
+    justify-content: space-between; padding: 8px 8px 0;
+    color: var(--on-frame-dim); font-size: 13px;
   }
-  .game-controls label { display: inline-flex; align-items: center; gap: 6px; }
-  .game-controls select, .ctl-btn {
-    font: 500 13px/1.2 inherit; padding: 6px 10px; border-radius: 8px;
-    border: 1px solid #d5d3c8; background: #fff; color: var(--ink); cursor: pointer;
+  .game-controls label {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase;
+    color: var(--on-frame-dim);
   }
-  .ctl-btn:hover { background: #f7f5ec; }
+  .game-controls select {
+    font: 500 14px/1.2 inherit; padding: 6px 26px 6px 10px; border-radius: 6px;
+    border: 0; background: var(--chip); color: var(--on-frame); cursor: pointer;
+    text-transform: none; letter-spacing: normal;
+    appearance: none; -webkit-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 20 20' fill='none' stroke='%238f99a8' stroke-width='1.8'%3E%3Cpath d='M6 8l4 4 4-4'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 8px center;
+  }
+  .game-controls select:hover { background-color: var(--chip-hover); }
+  .ctl-right { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+  .ctl-btn {
+    font: 600 13px/1.2 inherit; padding: 7px 12px; border-radius: 6px;
+    border: 0; background: none; color: #c5cbd3; cursor: pointer;
+  }
+  .ctl-btn:hover { background: var(--chip); }
+  .ctl-btn.primary {
+    color: var(--gold); border: 1px solid rgba(225,182,0,.5); white-space: nowrap;
+  }
+  .ctl-btn.primary:hover { background: rgba(225,182,0,.12); }
+  .ctl-btn.icon { display: grid; place-items: center; width: 34px; height: 34px; padding: 0; }
 
   footer { text-align: center; color: var(--muted); font-size: 13px; margin-top: 26px; }
   footer a { color: inherit; }
@@ -449,6 +645,6 @@ import Layout from '../layouts/Layout.astro';
     main { padding-top: 64px; }
     .hero h1 { font-size: 32px; }
     .seatbox { min-width: 90px; }
-    #table { min-height: 480px; }
+    .table-frame { aspect-ratio: 4 / 5; padding: 10px; border-radius: 20px; }
   }
 </style>
