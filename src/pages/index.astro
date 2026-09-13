@@ -347,8 +347,8 @@ import Layout from '../layouts/Layout.astro';
        proto se pozice skládá v `left`/`top`, kde jsou procenta ze stolu. */
     position: absolute;
     left: calc(50% + var(--x)); top: calc(50% + var(--y));
-    width: calc(var(--card-w) * 1.35);
-    margin: calc(var(--card-w) * -1.0) 0 0 calc(var(--card-w) * -0.675);
+    width: calc(var(--card-w) * 1.75);
+    margin: calc(var(--card-w) * -1.3) 0 0 calc(var(--card-w) * -0.875);
     border-radius: 9px;
     transform: rotate(var(--rot));
     box-shadow: 0 12px 32px rgba(0,0,0,.4);
@@ -411,11 +411,13 @@ import Layout from '../layouts/Layout.astro';
   }
   .intro-title { font-size: clamp(30px, 4vw, 60px); font-weight: 700; letter-spacing: -.02em; line-height: 1; color: var(--on-frame); }
   .intro-sub { font-size: 15px; color: #c5cbd3; }
-  .intro-variants { display: flex; gap: 24px; flex-wrap: wrap; justify-content: center; }
+  .intro-variants { display: flex; gap: 28px; flex-wrap: wrap; justify-content: center; }
   .variant-card {
-    width: clamp(140px, 14vw, 200px); border: 0; font: inherit; text-align: left; cursor: pointer;
-    border-radius: 14px; background: #f3ead6; padding: 14px;
-    display: flex; flex-direction: column; gap: 8px;
+    /* poměr 220×300 z mockupu — bloky mají být obdélníkové, ne čtvercové */
+    width: clamp(180px, 16vw, 220px); aspect-ratio: 220 / 300;
+    border: 0; font: inherit; text-align: left; cursor: pointer;
+    border-radius: 14px; background: #f3ead6; padding: 18px;
+    display: flex; flex-direction: column; gap: 10px;
     box-shadow: 0 10px 30px rgba(0,0,0,.35);
     outline: 4px solid transparent; outline-offset: 3px;
     transition: transform .12s ease-out, outline-color .12s;
@@ -424,8 +426,12 @@ import Layout from '../layouts/Layout.astro';
   .variant-card.on { outline-color: var(--gold); transform: translateY(-12px); }
   .variant-top { display: flex; justify-content: flex-end; align-items: flex-start; }
   .variant-tag { font-size: 11px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: #8f99a8; }
-  .variant-figure { display: grid; place-items: center; min-height: clamp(56px, 7vw, 96px); }
-  .variant-figure img { max-height: clamp(56px, 7vw, 96px); border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,.3); }
+  .variant-figure { display: grid; place-items: center; flex: 1; min-height: 0; overflow: hidden; }
+  /* POZOR: bez max-width si obrázek vezme svou přirozenou šířku a přeteče kartu */
+  .variant-figure img {
+    max-width: 100%; max-height: 100%; width: auto; height: auto; object-fit: contain;
+    border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,.3);
+  }
   .variant-name { font-size: 18px; font-weight: 600; color: #1c2127; }
   .variant-desc { font-size: 12px; line-height: 1.4; color: #5f6b7c; }
   .intro-last { font-size: 12px; color: var(--on-frame-dim); min-height: 15px; }
@@ -481,11 +487,13 @@ import Layout from '../layouts/Layout.astro';
   }
   .intro-title { font-size: clamp(30px, 4vw, 60px); font-weight: 700; letter-spacing: -.02em; line-height: 1; color: var(--on-frame); }
   .intro-sub { font-size: 15px; color: #c5cbd3; }
-  .intro-variants { display: flex; gap: 24px; flex-wrap: wrap; justify-content: center; }
+  .intro-variants { display: flex; gap: 28px; flex-wrap: wrap; justify-content: center; }
   .variant-card {
-    width: clamp(140px, 14vw, 200px); border: 0; font: inherit; text-align: left; cursor: pointer;
-    border-radius: 14px; background: #f3ead6; padding: 14px;
-    display: flex; flex-direction: column; gap: 8px;
+    /* poměr 220×300 z mockupu — bloky mají být obdélníkové, ne čtvercové */
+    width: clamp(180px, 16vw, 220px); aspect-ratio: 220 / 300;
+    border: 0; font: inherit; text-align: left; cursor: pointer;
+    border-radius: 14px; background: #f3ead6; padding: 18px;
+    display: flex; flex-direction: column; gap: 10px;
     box-shadow: 0 10px 30px rgba(0,0,0,.35);
     outline: 4px solid transparent; outline-offset: 3px;
     transition: transform .12s ease-out, outline-color .12s;
@@ -494,8 +502,12 @@ import Layout from '../layouts/Layout.astro';
   .variant-card.on { outline-color: var(--gold); transform: translateY(-12px); }
   .variant-top { display: flex; justify-content: flex-end; align-items: flex-start; }
   .variant-tag { font-size: 11px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: #8f99a8; }
-  .variant-figure { display: grid; place-items: center; min-height: clamp(56px, 7vw, 96px); }
-  .variant-figure img { max-height: clamp(56px, 7vw, 96px); border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,.3); }
+  .variant-figure { display: grid; place-items: center; flex: 1; min-height: 0; overflow: hidden; }
+  /* POZOR: bez max-width si obrázek vezme svou přirozenou šířku a přeteče kartu */
+  .variant-figure img {
+    max-width: 100%; max-height: 100%; width: auto; height: auto; object-fit: contain;
+    border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,.3);
+  }
   .variant-name { font-size: 18px; font-weight: 600; color: #1c2127; }
   .variant-desc { font-size: 12px; line-height: 1.4; color: #5f6b7c; }
   .intro-last { font-size: 12px; color: var(--on-frame-dim); min-height: 15px; }
@@ -523,7 +535,7 @@ import Layout from '../layouts/Layout.astro';
     text-align: center; pointer-events: none;
   }
   .me-row > * { pointer-events: auto; }
-  .me-row #hand { margin-bottom: calc(var(--card-w) * -0.3); }
+  .me-row #hand { margin-bottom: calc(var(--card-w) * -0.06); }
   /* úvodní obrazovka: prázdná ruka nic nerezervuje, akce jdou k hraně */
   #table.idle #hand { min-height: 0; margin-bottom: 0; padding: 0; }
   /* prázdné kontejnery paklu a hlášek nesmí brát kliky tlačítkům */
@@ -536,7 +548,7 @@ import Layout from '../layouts/Layout.astro';
   /* konto a pakl do rohů sukna, ať nezabírají výšku nad rukou */
   /* blok „Ty" nad vějířem — v mockupu je ruka užší a nezasahuje do rohu */
   .me-meta {
-    position: absolute; left: 12px; bottom: calc(var(--card-w) * 1.55); z-index: 3;
+    position: absolute; left: 12px; bottom: calc(var(--card-w) * 1.75); z-index: 3;
     display: flex; align-items: center; gap: 10px; text-align: left;
   }
   #pile-me { position: absolute; right: 14px; bottom: 10px; margin: 0; z-index: 3; }
@@ -547,13 +559,14 @@ import Layout from '../layouts/Layout.astro';
     /* inline-flex + gap: ikona barvy se zarovná na OPTICKÝ střed textu a mezery
        kolem ní jsou stejné. S vertical-align ikona visela pod účařím a mezery
        kolem ní byly dvojité (text je skládaný z „Hra" + ikona + „+ Kilo"). */
-    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
-    font: 700 14px/20px inherit; padding: 9px 18px; border-radius: 8px; border: 0;
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    font: 600 16px/22px inherit; padding: 12px 28px; border-radius: 8px; border: 0;
     background: #eafcf6; color: #0a4a52; cursor: pointer; box-shadow: 0 2px 0 rgba(0,0,0,.25);
   }
   /* ikona nesmí roztahovat řádek tlačítka */
   .action-btn svg { flex: none; display: block; }
-  .action-btn.primary { background: #ffd75e; color: #4a3200; }
+  .action-btn.primary { background: var(--gold); color: var(--frame); }
+  #table.idle #actions .action-btn { font-size: 18px; padding: 14px 48px; }
   .action-btn:disabled { opacity: .45; cursor: default; }
   .action-note { align-self: center; color: #ffe9a8; font-size: 13px; max-width: 420px; }
   .action-btn:not(:disabled):hover { filter: brightness(1.04); }
@@ -676,11 +689,22 @@ import Layout from '../layouts/Layout.astro';
   .replay-head img { width: calc(var(--card-w) * .5); border-radius: 4px; vertical-align: middle;
     margin-left: 3px; box-shadow: 0 1px 4px rgba(0,0,0,.4); }
   .rtricks { display: flex; flex-wrap: wrap; gap: 8px 16px; justify-content: center; }
+  /*
+   * Štychy v průběhu hry: karty jsou VĚTŠÍ, ale skládají se do kaskády
+   * (každá další níž a víc přes tu předchozí), takže zabírají míň šířky.
+   */
   .rtrick { text-align: center; }
-  .rtrick img { width: calc(var(--card-w) * .58); border-radius: 4px; margin-right: calc(var(--card-w) * -.3);
-    box-shadow: 2px 1px 5px rgba(0,0,0,.4); }
+  /* kaskáda posouvá poslední kartu dolů — popisek štychu pod ní musí mít místo */
+  .rtrick .rcards { display: inline-flex; align-items: flex-start; padding-bottom: calc(var(--card-w) * .38); }
+  .rtrick img {
+    width: calc(var(--card-w) * .92); border-radius: 5px;
+    margin-right: calc(var(--card-w) * -.7);
+    box-shadow: 2px 2px 7px rgba(0,0,0,.45);
+  }
+  .rtrick img:nth-child(2) { transform: translateY(11%); }
+  .rtrick img:nth-child(3) { transform: translateY(22%); }
   .rtrick img:last-child { margin-right: 0; }
-  .rtrick .rwin { color: #cfe3f5; font-size: 11px; margin-top: 3px; }
+  .rtrick .rwin { color: #cfe3f5; font-size: 12px; margin-top: 3px; }
 
   /* lišta nastavení uvnitř rámu — tmavé „chipy" místo systémových selectů */
   .game-controls {

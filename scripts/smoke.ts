@@ -311,6 +311,15 @@ const handFingerprint = async (): Promise<string> =>
  */
 const newGame = async (): Promise<void> => {
   await page.click('#btn-new');
+  /*
+   * Rozehranou hru tlačítko nejdřív UKONČÍ (potvrzení + zúčtování jako prohra)
+   * a teprve pak se z něj stane „Nová hra".
+   */
+  if ((await page.locator('#center-float .felt-panel.warn').count()) > 0) {
+    await page.click('[data-act="confirm"]');
+    await page.waitForTimeout(500);
+    await page.click('#btn-new');
+  }
   await page.waitForSelector('#intro-panel', { state: 'visible', timeout: 4000 });
   await page.click('#actions .action-btn.primary');
 };

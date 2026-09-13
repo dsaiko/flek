@@ -150,6 +150,7 @@ function isHistoryAction(x: unknown): boolean {
     case 'announce-proti':
       return typeof a.sedma === 'boolean' && typeof a.kilo === 'boolean';
     case 'good':
+    case 'concede':
       return true;
     default:
       return false;
