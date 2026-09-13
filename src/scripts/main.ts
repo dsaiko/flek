@@ -10,6 +10,8 @@ import { createWorkerDriver } from '../lib/match/workerDriver';
 import { defaultConfig } from '../lib/rules/sazby';
 import type { GameState, Variant } from '../lib/rules/types';
 import type { Pattern } from '../lib/ui/cardAssets';
+import { createSounds } from '../lib/ui/sounds';
+import type { TalkSet } from '../lib/ui/tableTalk';
 import { currentLang, t } from '../lib/ui/i18n';
 import { TableUI } from '../lib/ui/table';
 
@@ -19,11 +21,15 @@ interface Settings {
   variant: Variant;
   difficulty: Difficulty;
   pattern: Pattern;
+  talk: TalkSet;
+  sounds: boolean;
 }
 
 const SETTINGS_KEY = 'flek.settings.v1';
 
-const DEFAULT_SETTINGS: Settings = { variant: 'voleny', difficulty: 'normal', pattern: 'history' };
+const DEFAULT_SETTINGS: Settings = {
+  variant: 'voleny', difficulty: 'normal', pattern: 'history', talk: 'slusna', sounds: true,
+};
 
 /** Nastavení z localStorage může být poškozené nebo cizí — ověř každou hodnotu. */
 function loadSettings(): Settings {
@@ -36,6 +42,8 @@ function loadSettings(): Settings {
       difficulty: p.difficulty === 'easy' || p.difficulty === 'normal' || p.difficulty === 'hard'
         ? p.difficulty : DEFAULT_SETTINGS.difficulty,
       pattern: p.pattern === 'modern' || p.pattern === 'history' ? p.pattern : DEFAULT_SETTINGS.pattern,
+      talk: p.talk === 'slusna' || p.talk === 'hospodska' || p.talk === 'off' ? p.talk : DEFAULT_SETTINGS.talk,
+      sounds: typeof p.sounds === 'boolean' ? p.sounds : DEFAULT_SETTINGS.sounds,
     };
   } catch {
     return { ...DEFAULT_SETTINGS };
@@ -56,6 +64,12 @@ const $ = <T extends HTMLElement>(id: string): T => {
 
 const settings = loadSettings();
 const driver = createWorkerDriver();
+const sounds = createSounds(settings.sounds);
+
+// Autoplay policy: AudioContext se smí rozjet až po gestu uživatele. Odemykáme
+// při prvním kliku kdekoliv ve hře; do té doby se zvuky tiše zahazují (§5.7).
+document.addEventListener('pointerdown', () => sounds.unlock(), { once: true });
+document.addEventListener('keydown', () => sounds.unlock(), { once: true });
 
 // ?seed=NNN → deterministická rozdání (testy, sdílení zajímavých rozdání);
 // další hry v zápase dostávají seed+1, seed+2, … (logika v seedSequence.ts)
@@ -84,6 +98,8 @@ function makeController(resume?: GameState): MatchController {
 const table = new TableUI($('table'), {
   humanSeat: 0,
   pattern: () => settings.pattern,
+  talk: () => settings.talk,
+  sounds,
 }, {
   onAction: (action) => {
     try { controller.dispatch(action); } catch (e) { console.error(e); }
@@ -123,9 +139,13 @@ if (saved && saved.config.variant === settings.variant && saved.phase.name !== '
 const variantSel = $('set-variant') as HTMLSelectElement;
 const difficultySel = $('set-difficulty') as HTMLSelectElement;
 const patternSel = $('set-pattern') as HTMLSelectElement;
+const talkSel = $('set-talk') as HTMLSelectElement;
+const soundsSel = $('set-sounds') as HTMLSelectElement;
 variantSel.value = settings.variant;
 difficultySel.value = settings.difficulty;
 patternSel.value = settings.pattern;
+talkSel.value = settings.talk;
+soundsSel.value = settings.sounds ? 'on' : 'off';
 
 variantSel.addEventListener('change', () => {
   settings.variant = variantSel.value as Variant;
@@ -141,6 +161,21 @@ patternSel.addEventListener('change', () => {
   settings.pattern = patternSel.value as Pattern;
   saveSettings(settings);
   table.render(controller.state);
+});
+
+talkSel.addEventListener('change', () => {
+  settings.talk = talkSel.value as TalkSet;
+  saveSettings(settings);
+  table.render(controller.state); // hlášky se projeví hned, zápas běží dál
+});
+soundsSel.addEventListener('change', () => {
+  settings.sounds = soundsSel.value === 'on';
+  saveSettings(settings);
+  sounds.setEnabled(settings.sounds);
+  if (settings.sounds) {
+    sounds.unlock();
+    sounds.play('deal'); // slyšitelné potvrzení, že se zvuk zapnul
+  }
 });
 
 $('btn-new').addEventListener('click', () => newMatch());
@@ -167,6 +202,8 @@ function updateControlLabels(): void {
   };
   set(variantSel, { voleny: t('voleny'), licitovany: t('licitovany') });
   set(patternSel, { modern: t('modern'), history: t('history') });
+  set(talkSel, { slusna: t('talkPolite'), hospodska: t('talkPub'), off: t('talkOff') });
+  set(soundsSel, { on: t('soundOn'), off: t('soundOff') });
   void currentLang();
 }
 updateControlLabels();

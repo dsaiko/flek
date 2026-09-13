@@ -24,6 +24,11 @@ export interface HtmlDeps {
   humanSeat: Seat;
   nameOf: (seat: Seat) => string;
   pattern: () => Pattern;
+  /**
+   * Hláška k výsledku (§5.8) — po vzoru FLEK!, kde vyúčtování doprovázel
+   * uštěpačný komentář. Text přichází zvenčí už vybraný; `null` = ticho.
+   */
+  talkLine?: string | null;
 }
 
 export function settlementHtml(r: HandResult, v: PlayerView, deps: HtmlDeps): string {
@@ -64,12 +69,17 @@ export function settlementHtml(r: HandResult, v: PlayerView, deps: HtmlDeps): st
     .map((x) => `${esc(deps.nameOf(x))} ${r.delta[x] >= 0 ? '+' : ''}${esc(fmtMoney(r.delta[x]))}`)
     .join(' · ');
 
+  const comment = deps.talkLine
+    ? `<div class="felt-talk">„${esc(deps.talkLine)}"</div>`
+    : '';
+
   return `<div class="felt-panel">
     <h3>${esc(t('vyuctovani'))}:</h3>
     <div class="felt-sub">${head} — ${esc(deps.nameOf(r.contract.declarer))}</div>
     ${pts}
     <table><tbody>${rows}${deltaLine}${totalLine}</tbody></table>
     <div class="felt-others">${others}</div>
+    ${comment}
   </div>`;
 }
 

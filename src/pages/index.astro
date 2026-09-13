@@ -85,6 +85,21 @@ import Layout from '../layouts/Layout.astro';
             <option value="modern">Modern</option>
           </select>
         </label>
+        <label>
+          <span class="cs">Hlášky</span><span class="en">Table talk</span><span class="de">Sprüche</span>
+          <select id="set-talk">
+            <option value="slusna">slušné</option>
+            <option value="hospodska">hospodské</option>
+            <option value="off">vypnuto</option>
+          </select>
+        </label>
+        <label>
+          <span class="cs">Zvuky</span><span class="en">Sound</span><span class="de">Ton</span>
+          <select id="set-sounds">
+            <option value="on">zapnuto</option>
+            <option value="off">vypnuto</option>
+          </select>
+        </label>
         <button id="btn-new" class="ctl-btn"><span class="cs">Nový zápas</span><span class="en">New match</span><span class="de">Neue Partie</span></button>
         <button id="btn-fullscreen" class="ctl-btn" title="Fullscreen">⛶</button>
       </div>
@@ -337,6 +352,11 @@ import Layout from '../layouts/Layout.astro';
   .felt-panel td.money { text-align: right; font-weight: 700; white-space: nowrap; }
   .felt-panel tr.sum td { border-top: 1px solid rgba(255,255,255,.35); padding-top: 7px; }
   .felt-panel .felt-others { text-align: center; color: #bfeee8; font-size: 12px; margin-top: 8px; }
+  /* uštěpačný komentář k vyúčtování (hlášky §5.8) */
+  .felt-panel .felt-talk {
+    text-align: center; color: #ffe9a8; font-size: 13px; font-style: italic;
+    margin-top: 10px; padding-top: 8px; border-top: 1px dashed rgba(255,255,255,.22);
+  }
   /* tlačítka integrovaná do panelu vyúčtování — obdélníky s oblými rohy (à la FLEK dialogy) */
   .felt-panel.warn { border-color: #ffd75e; max-width: 460px; }
   .felt-panel .warn-msg { margin: 6px 0; font-weight: 700; text-align: center; }

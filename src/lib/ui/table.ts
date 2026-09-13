@@ -16,6 +16,8 @@ import { backSrc, cardName, cardSrc, suitIcon, suitName, type Pattern } from './
 import { aiNames, currentLang, flekName, fmtMoney, marriageWarn, t } from './i18n';
 import { discardWarnings } from './discardWarnings';
 import { playChoice } from './playChoice';
+import { silentSounds, type Sounds } from './sounds';
+import { tableTalk, talkFires, type TalkSet } from './tableTalk';
 import { esc, replayHtml, settlementHtml, type HtmlDeps } from './resultHtml';
 
 export { esc };
@@ -29,6 +31,10 @@ export interface TableCallbacks {
 export interface TableOptions {
   humanSeat: Seat;
   pattern: () => Pattern;
+  /** Sada hlášek (§5.8); výchozí „slušná", `off` = mlčenlivý stůl. */
+  talk?: () => TalkSet;
+  /** Zvuky (§5.7); výchozí tichý dublér, ať testy nepotřebují Web Audio. */
+  sounds?: Sounds;
 }
 
 const $ = <T extends HTMLElement>(root: HTMLElement, sel: string): T => {
@@ -59,6 +65,10 @@ export class TableUI {
   private gen = 0;
   /** Probouzeče běžících spánků — `reset()` je zavolá, aby animace neblokovaly. */
   private readonly sleepers = new Set<() => void>();
+  /** „Momentíček…" — ukáže se, jen když AI opravdu přemýšlí déle než chvilku. */
+  private thinkTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Zvuk konce hry patří ke hře, ne k překreslení (jazyk/vzor překresluje týž stav). */
+  private scoredSoundFor: number | null = null;
   private resultView: 'summary' | 'replay' = 'summary';
 
   constructor(root: HTMLElement, opts: TableOptions, cb: TableCallbacks) {
@@ -86,6 +96,9 @@ export class TableUI {
     // zápasu visela nad rozdáváním toho nového
     for (const timer of this.bubbleTimers.values()) clearTimeout(timer);
     this.bubbleTimers.clear();
+    if (this.thinkTimer !== null) clearTimeout(this.thinkTimer);
+    this.thinkTimer = null;
+    this.scoredSoundFor = null;
     for (const el of this.root.querySelectorAll('.bubble')) el.classList.remove('show');
     this.lastHistoryLen = 0;
   }
@@ -144,10 +157,18 @@ export class TableUI {
     // rozdání po vzoru FLEK!: karty se v ruce objevují postupně
     if (a?.type === 'deal') {
       this.renderNow(state, true);
+      this.sounds.play('shuffle');
       if (!this.reducedMotion()) {
         this.root.classList.add('animating');
         const n = state.hands[this.opts.humanSeat].length;
-        await this.sleep(n * REVEAL_STEP_MS + 350);
+        // ťuknutí ke každé odkryté kartě — spánky jsou přerušitelné, takže
+        // `reset()` smyčku ukončí dřív, než dojde ke konci
+        for (let i = 0; i < n; i += 1) {
+          await this.sleep(REVEAL_STEP_MS);
+          if (gen !== this.gen) break;
+          this.sounds.play('deal');
+        }
+        await this.sleep(350);
         this.root.classList.remove('animating');
       }
       return gen === this.gen; // opuštěný zápas nechá překreslit ten nový
@@ -170,6 +191,9 @@ export class TableUI {
       // po vyměněném zápasu ať se o překreslení postará ten nový
       return gen !== this.gen;
     }
+
+    if (a?.type === 'play') this.sounds.play('play');
+    if (a?.type === 'flek') this.sounds.play('flek');
 
     // dohraný štych → pauza, zvýraznění vítězné karty, odlet do paklu vítěze
     if (a?.type === 'play' && prev !== null && prev.phase.name === 'tricks' && prev.contract) {
@@ -208,6 +232,12 @@ export class TableUI {
     this.renderActions(v, legal);
     this.renderStatus(v, legal);
     this.showLastActionBubble(state);
+    this.scheduleThinkingBubble(v, state);
+    // zvuk konce hry patří ke KONKRÉTNÍ hře, ne ke každému překreslení
+    if (phase.name === 'scored' && this.scoredSoundFor !== v.handNo) {
+      this.scoredSoundFor = v.handNo;
+      this.sounds.play(phase.result.delta[me] >= 0 ? 'win' : 'lose');
+    }
     // popup přežije překreslení týmž stavem (jazyk, vzor karet)
     this.openPopup?.();
   }
@@ -275,8 +305,18 @@ export class TableUI {
       await this.sleep(900);
       return;
     }
+    // hláška vítěze štychu: jen občas, jinak by to u třiceti štychů byl šum
+    const set = this.talkSet;
+    if (set !== 'off' && winner !== this.opts.humanSeat && state !== null) {
+      const seed = [winner, state.handNo, state.history.length];
+      if (talkFires(3, seed)) {
+        const line = tableTalk('trickWon', { set, lang: currentLang(), seed });
+        if (line !== null) this.showBubble(winner, esc(line));
+      }
+    }
     await this.sleep(1250);
     if (gen !== this.gen) return; // zápas se vyměnil — do mrtvého stolu nekresli
+    this.sounds.play('trick');
     for (const img of imgs) img.classList.add(`fly-${this.posOf(winner)}`);
     await this.sleep(430);
   }
@@ -441,6 +481,64 @@ export class TableUI {
       const who = esc(c.declarer === this.opts.humanSeat ? t('you') : this.nameOf(c.declarer));
       info.innerHTML = `${who}: ${parts.join(' · ')}`;
     }
+  }
+
+  private get talkSet(): TalkSet {
+    return this.opts.talk?.() ?? 'slusna';
+  }
+
+  private get sounds(): Sounds {
+    return this.opts.sounds ?? silentSounds;
+  }
+
+  /** Hláška místo popisku — jen tam, kde popisek nenese informaci (§5.8). */
+  private flavourFor(a: PlayerAction, state: GameState): string | null {
+    const set = this.talkSet;
+    if (set === 'off' || a.type === 'deal') return null;
+    const opts = { set, lang: currentLang(), seed: [a.seat, state.handNo, state.history.length] };
+    if (a.type === 'good' || (a.type === 'takeover' && a.claim === 'good')) {
+      return tableTalk('accept', opts);
+    }
+    if (a.type === 'bid' && a.bid === 'pass') return tableTalk('pass', opts);
+    if (a.type === 'choose-trump' && a.card === 'from-people') return tableTalk('fromPeople', opts);
+    return null;
+  }
+
+  private bubbleEl(seat: Seat): HTMLElement {
+    return seat === this.opts.humanSeat
+      ? $(this.root, '#bubble-me')
+      : $(this.root, `#seat-${seat === this.seatAt('left') ? 'left' : 'right'} .bubble`);
+  }
+
+  /** Bublina u sedadla. `html` už musí být escapované. */
+  private showBubble(seat: Seat, html: string): void {
+    const el = this.bubbleEl(seat);
+    el.innerHTML = html;
+    el.classList.add('show');
+    const prev = this.bubbleTimers.get(seat);
+    if (prev) clearTimeout(prev);
+    this.bubbleTimers.set(seat, setTimeout(() => el.classList.remove('show'), 2600));
+  }
+
+  /**
+   * „Momentíček…" u AI, která počítá. Čeká 700 ms, takže u rychlých tahů se
+   * neukáže vůbec — přesně jako v originále, kde se hláška objevila jen
+   * u opravdu dlouhého rozmýšlení.
+   */
+  private scheduleThinkingBubble(v: PlayerView, state: GameState): void {
+    if (this.thinkTimer !== null) {
+      clearTimeout(this.thinkTimer);
+      this.thinkTimer = null;
+    }
+    const set = this.talkSet;
+    if (set === 'off' || v.phase.name === 'idle' || v.phase.name === 'scored') return;
+    const seat = seatOnTurn(v);
+    if (seat === null || seat === this.opts.humanSeat) return;
+    const line = tableTalk('thinking', {
+      set, lang: currentLang(), seed: [seat, state.handNo, state.history.length],
+    });
+    if (line === null) return;
+    this.thinkTimer = setTimeout(() => this.showBubble(seat, esc(line)), 700);
   }
 
   private posOf(seat: Seat): string {
@@ -761,7 +859,23 @@ export class TableUI {
   // ── zúčtování a průběh hry (integrované do stolu, po vzoru FLEK!) ──────────
 
   private get htmlDeps(): HtmlDeps {
-    return { humanSeat: this.opts.humanSeat, nameOf: (s) => this.nameOf(s), pattern: this.opts.pattern };
+    return {
+      humanSeat: this.opts.humanSeat,
+      nameOf: (s) => this.nameOf(s),
+      pattern: this.opts.pattern,
+      talkLine: this.settlementLine(),
+    };
+  }
+
+  /** Uštěpačný komentář k vyúčtování (po vzoru FLEK!). */
+  private settlementLine(): string | null {
+    const set = this.talkSet;
+    const state = this.prevState;
+    if (set === 'off' || state === null || state.phase.name !== 'scored') return null;
+    const delta = state.phase.result.delta[this.opts.humanSeat];
+    return tableTalk(delta >= 0 ? 'handWon' : 'handLost', {
+      set, lang: currentLang(), seed: [state.handNo, delta],
+    });
   }
 
   // ── bubliny (table talk základ) ────────────────────────────────────────────
@@ -773,19 +887,11 @@ export class TableUI {
     this.lastHistoryLen = state.history.length;
     const a = state.history[state.history.length - 1];
     if (!a || a.type === 'deal') return;
-    const text = bubbleText(a, state);
-    if (!text) return;
-    const seat = a.seat;
-    const el =
-      seat === this.opts.humanSeat
-        ? $(this.root, '#bubble-me')
-        : $(this.root, `#seat-${seat === this.seatAt('left') ? 'left' : 'right'} .bubble`);
+    const flavour = this.flavourFor(a, state);
     // text obsahuje jen i18n konstanty, escapované cizí hodnoty a naše SVG ikony
-    el.innerHTML = text;
-    el.classList.add('show');
-    const prev = this.bubbleTimers.get(seat);
-    if (prev) clearTimeout(prev);
-    this.bubbleTimers.set(seat, setTimeout(() => el.classList.remove('show'), 2600));
+    const text = flavour !== null ? esc(flavour) : bubbleText(a, state);
+    if (!text) return;
+    this.showBubble(a.seat, text);
   }
 }
 

@@ -82,6 +82,11 @@ const STRINGS = {
     en: ['hearts', 'leaves', 'bells', 'acorns'],
     de: ['Herz', 'Grün', 'Schellen', 'Eichel'],
   },
+  talkPolite: { cs: 'slušné', en: 'polite', de: 'höflich' },
+  talkPub: { cs: 'hospodské', en: 'pub', de: 'Kneipe' },
+  talkOff: { cs: 'vypnuto', en: 'off', de: 'aus' },
+  soundOn: { cs: 'zapnuto', en: 'on', de: 'an' },
+  soundOff: { cs: 'vypnuto', en: 'off', de: 'aus' },
   drawZero: { cs: 'Bez změny', en: 'No change', de: 'Unverändert' },
   announceQuestion: {
     cs: 'Ohlásit hlášku?',
