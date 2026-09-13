@@ -88,6 +88,21 @@ const STRINGS = {
   talkOff: { cs: 'vypnuto', en: 'off', de: 'aus' },
   soundOn: { cs: 'zapnuto', en: 'on', de: 'an' },
   soundOff: { cs: 'vypnuto', en: 'off', de: 'aus' },
+  lastHand: { cs: 'Minule', en: 'Last hand', de: 'Zuletzt' },
+  variantTagVoleny: { cs: 'klasika', en: 'the classic', de: 'Klassiker' },
+  variantTagLicitovany: { cs: 'pro pokročilé', en: 'for the bold', de: 'für Fortgeschrittene' },
+  variantDescVoleny: {
+    cs: 'Forhont volí trumf ze svých karet. S flekováním.',
+    en: 'Forehand picks the trump from their cards. With fleks.',
+    de: 'Vorhand wählt den Trumpf aus den eigenen Karten. Mit Kontra.',
+  },
+  variantDescLicitovany: {
+    cs: 'O hru se licituje. Vyšší závazek přebíjí nižší.',
+    en: 'The game is bid for. A higher contract beats a lower one.',
+    de: 'Um das Spiel wird geboten. Höheres Spiel schlägt niedrigeres.',
+  },
+  dealerShort: { cs: 'rozdává', en: 'deals', de: 'gibt' },
+  forhont: { cs: 'forhont', en: 'forehand', de: 'Vorhand' },
   drawZero: { cs: 'Bez změny', en: 'No change', de: 'Unverändert' },
   announceQuestion: {
     cs: 'Ohlásit hlášku?',

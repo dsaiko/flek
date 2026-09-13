@@ -6,7 +6,7 @@
  * karty. Žádný přístup ke GameState mimo humanView + veřejné části.
  */
 
-import { suitOf, type Card } from '../cards';
+import { suitOf, card as mkCard, KRAL, SVRSEK, type Card } from '../cards';
 import { legalActions } from '../rules/legal';
 import { trickWinner } from '../rules/tricks';
 import type { GameState, PlayerAction, PlayerView, Seat } from '../rules/types';
@@ -26,6 +26,8 @@ export interface TableCallbacks {
   onAction: (action: PlayerAction) => void;
   onDeal: () => void;
   onNewMatch: () => void;
+  /** Výběr varianty na úvodní obrazovce (mockup „1a Úvod"). */
+  onVariant?: (variant: 'voleny' | 'licitovany') => void;
 }
 
 export interface TableOptions {
@@ -250,6 +252,9 @@ export class TableUI {
     if (phase.name !== 'discard-talon') this.selected.clear();
 
     this.root.classList.remove('animating');
+    // na úvodní obrazovce nemá prázdná ruka co rezervovat — jinak by tlačítko
+    // „Rozdat" viselo v půlce sukna a panel by na něj sedal
+    this.root.classList.toggle('idle', phase.name === 'idle');
     this.root.classList.toggle('pattern-history', this.opts.pattern() === 'history');
     this.renderOpponents(v, reveal, state.unseen.length);
     this.renderCenter(v, state);
@@ -367,9 +372,12 @@ export class TableUI {
     for (const pos of ['left', 'right'] as const) {
       const seat = this.seatAt(pos);
       const box = $(this.root, `#seat-${pos}`);
-      $(box, '.seat-name').textContent =
-        aiNames()[pos === 'left' ? 0 : 1] + (seat === v.dealer ? ' 🂠' : '');
-      $(box, '.seat-ledger').textContent = fmtMoney(v.ledger[seat]);
+      const name = aiNames()[pos === 'left' ? 0 : 1];
+      $(box, '.seat-name').textContent = name;
+      $(box, '.avatar').textContent = name.slice(0, 1);
+      // podtitulek: peníze + role (rozdávající / forhont) — jako v mockupu
+      const role = seat === v.dealer ? t('dealerShort') : seat === forhont(v.dealer) ? t('forhont') : '';
+      $(box, '.seat-sub').textContent = role ? `${role} · ${fmtMoney(v.ledger[seat])}` : fmtMoney(v.ledger[seat]);
       const backs = $(box, '.backs');
       const extraUnseen =
         v.phase.name === 'choose-trump' && seat === forhont(v.dealer) ? unseenCount : 0;
@@ -384,8 +392,16 @@ export class TableUI {
       for (const img of imgs) setSrc(img, backSrc());
       setReveal(backs, imgs, animate);
     }
+    const me = this.opts.humanSeat;
+    const meName = this.root.querySelector<HTMLElement>('#name-me');
+    if (meName) meName.textContent = t('you');
+    const meAvatar = this.root.querySelector<HTMLElement>('.avatar.me');
+    if (meAvatar) meAvatar.textContent = t('you').slice(0, 1);
     const meLedger = this.root.querySelector<HTMLElement>('#ledger-me');
-    if (meLedger) meLedger.textContent = fmtMoney(v.ledger[this.opts.humanSeat]);
+    if (meLedger) {
+      const role = me === v.dealer ? t('dealerShort') : me === forhont(v.dealer) ? t('forhont') : '';
+      meLedger.textContent = role ? `${role} · ${fmtMoney(v.ledger[me])}` : fmtMoney(v.ledger[me]);
+    }
   }
 
   // ── vystavené hlášky (karta lícem + 20/40, po vzoru FLEK!) ──────────────────
@@ -466,7 +482,47 @@ export class TableUI {
    * NE při každém překreslení — jinak by karty přeskakovaly při přepnutí
    * jazyka nebo vzoru.
    */
+  /** Výběr varianty + „minule" na úvodní obrazovce. */
+  private renderIntroPanel(v: PlayerView): void {
+    const panel = $(this.root, '#intro-panel');
+    const idle = v.phase.name === 'idle';
+    panel.style.display = idle ? '' : 'none';
+    if (!idle) return;
+
+    const box = $(this.root, '#intro-variants');
+    const VARIANTS = [
+      { id: 'voleny' as const, mark: 'V', tag: t('variantTagVoleny'), name: t('voleny'), desc: t('variantDescVoleny'), figure: mkCard(0, KRAL) },
+      { id: 'licitovany' as const, mark: 'L', tag: t('variantTagLicitovany'), name: t('licitovany'), desc: t('variantDescLicitovany'), figure: mkCard(1, SVRSEK) },
+    ];
+    const cards = syncChildren(box, VARIANTS.length, () => {
+      const btn = document.createElement('button');
+      btn.className = 'variant-card';
+      btn.type = 'button';
+      return btn;
+    });
+    VARIANTS.forEach((variant, i) => {
+      const btn = cards[i];
+      btn.classList.toggle('on', v.config.variant === variant.id);
+      const html = `<span class="variant-top"><span class="variant-mark">${esc(variant.mark)}</span><span class="variant-tag">${esc(variant.tag)}</span></span>`
+        + `<span class="variant-figure"><img src="${esc(cardSrc(variant.figure, this.opts.pattern()))}" alt=""></span>`
+        + `<span class="variant-name">${esc(variant.name)}</span>`
+        + `<span class="variant-desc">${esc(variant.desc)}</span>`;
+      if (btn.innerHTML !== html) btn.innerHTML = html;
+      btn.onclick = () => this.cb.onVariant?.(variant.id);
+    });
+
+    // „Minule: …" — poslední odehraná hra zápasu
+    const last = $(this.root, '#intro-last');
+    const prev = v.handResults[v.handResults.length - 1];
+    last.textContent = prev
+      ? `${t('lastHand')}: ${([0, 1, 2] as Seat[])
+          .map((s) => `${this.nameOf(s)} ${prev.delta[s] >= 0 ? '+' : ''}${fmtMoney(prev.delta[s])}`)
+          .join(' · ')}`
+      : '';
+  }
+
   private renderIntro(v: PlayerView): void {
+    this.renderIntroPanel(v);
     const el = $(this.root, '#intro');
     if (v.phase.name !== 'idle') {
       if (this.introCards !== null) {
@@ -895,6 +951,11 @@ export class TableUI {
   // ── status ─────────────────────────────────────────────────────────────────
 
   private renderStatus(v: PlayerView, legal: PlayerAction[]): void {
+    const eyebrow = this.root.querySelector<HTMLElement>('#status-eyebrow');
+    if (eyebrow) {
+      eyebrow.textContent =
+        v.phase.name === 'idle' ? '' : t(v.config.variant === 'voleny' ? 'voleny' : 'licitovany');
+    }
     const el = $(this.root, '#status');
     const iAct = legal.some((a) => a.type !== 'deal');
     if (v.phase.name === 'idle') {

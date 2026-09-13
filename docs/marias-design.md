@@ -505,13 +505,34 @@ krémová karta `#f3ead6`, zelený rub `#2d6b46`, lišta nastavení **uvnitř r�
 (tmavé „chipy" místo systémových selectů, zvuky jako přepínač), avataři hráčů s kolečkem,
 stav hry jako pilulka uprostřed nahoře.
 
-Zapracováno zatím: **dekorační karty na úvodní obrazovce**. Mockup tam měl obdélníky
+Zapracováno (v tomto pořadí):
+
+1. **Rám, sukno, poměr stran** — deska 1400×900 (`aspect-ratio: 1400/900`), tmavý rám
+   `#1c2127` s poloměrem 28, sukno se zlatým lemem a radiálním přechodem
+   `#2c6a9e → #1d4f7c → #173f64`. Sukno **ořezává**: deska má pevnou výšku, takže ruka
+   visí přes spodní hranu (v mockupu `bottom:-40px`) místo aby vytlačila lištu.
+2. **Lišta nastavení uvnitř rámu** — tmavé „chipy" místo systémových selectů (vlastní
+   šipka jako data URI), vpravo „Nový zápas" se zlatým obrysem a ikona fullscreenu.
+3. **Avataři** — kolečko s iniciálou, jméno a podtitulek (role + konto); u člověka zlaté.
+4. **Stav hry jako pilulka** se zlatým „eyebrow" (název varianty) nad ní.
+5. **Úvodní obrazovka** — eyebrow, titulek, podtitulek, **výběr varianty dvěma kartami**
+   (s figurou ze zvolené sady) a řádek „Minule". Výběr varianty rovnou přepíná zápas, ale
+   zůstává na úvodní obrazovce (`newMatchIdle`).
+
+Dekorační karty na úvodní obrazovce. Mockup tam měl obdélníky
 s písmenem; místo nich se ukazují **skutečné karty z `cards/history/`** (u okrajů ve dvou
 shlucích, střed volný pro tlačítko), z toho dvě rubem. **Sada se losuje při každém příchodu
 na úvodní obrazovku** — schválně přes `Math.random`, ne přes seedovaný generátor hry, aby se
 dekorace nepletla do reprodukovatelnosti rozdání (`?seed=`). Souřadnice jsou v procentech
 stolu; pozor, že procenta v `translate()` se počítají z velikosti KARTY, takže se pozice
 skládá v `left`/`top`.
+
+Pasti, na které se při tom naráží (všechny stály jeden screenshot navíc):
+- prázdná ruka si i na úvodní obrazovce držela vyhrazenou výšku, takže tlačítko „Rozdat"
+  viselo v půlce sukna → `#table.idle` ji ruší;
+- panel úvodní obrazovky překrýval to tlačítko → končí nad akční řadou a klikací jsou
+  **jen** karty variant, ne celý panel;
+- prázdné kontejnery paklu a hlášek braly kliky → `pointer-events: none`.
 
 ### 5.6 Obsah stránky (dokumenty)
 

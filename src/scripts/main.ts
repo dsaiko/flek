@@ -65,6 +65,7 @@ const $ = <T extends HTMLElement>(id: string): T => {
 
 const settings = loadSettings();
 const driver = createWorkerDriver();
+const variantSel = $('set-variant') as HTMLSelectElement;
 const sounds = createSounds(settings.sounds);
 
 /*
@@ -118,7 +119,23 @@ const table = new TableUI($('table'), {
   },
   onDeal: () => controller.dealNext(),
   onNewMatch: () => newMatch(),
+  onVariant: (variant) => {
+    if (settings.variant === variant) return;
+    settings.variant = variant;
+    variantSel.value = variant;
+    saveSettings(settings);
+    newMatchIdle(); // zůstaň na úvodní obrazovce, jen s jinou variantou
+  },
 });
+
+/** Nový zápas, ale bez rozdání — úvodní obrazovka s vybranou variantou. */
+function newMatchIdle(): void {
+  controller?.stop();
+  clearMatch();
+  table.reset();
+  controller = makeController();
+  table.render(controller.state);
+}
 
 function newMatch(): void {
   controller?.stop();
@@ -148,7 +165,6 @@ if (saved && saved.config.variant === settings.variant && saved.phase.name !== '
 
 // ── ovládací prvky ───────────────────────────────────────────────────────────
 
-const variantSel = $('set-variant') as HTMLSelectElement;
 const difficultySel = $('set-difficulty') as HTMLSelectElement;
 const patternSel = $('set-pattern') as HTMLSelectElement;
 const talkSel = $('set-talk') as HTMLSelectElement;
