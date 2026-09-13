@@ -66,10 +66,21 @@ const settings = loadSettings();
 const driver = createWorkerDriver();
 const sounds = createSounds(settings.sounds);
 
-// Autoplay policy: AudioContext se smí rozjet až po gestu uživatele. Odemykáme
-// při prvním kliku kdekoliv ve hře; do té doby se zvuky tiše zahazují (§5.7).
-document.addEventListener('pointerdown', () => sounds.unlock(), { once: true });
-document.addEventListener('keydown', () => sounds.unlock(), { once: true });
+/*
+ * Autoplay policy: AudioContext se smí rozjet až po gestu uživatele; do té doby
+ * se zvuky tiše zahazují (§5.7).
+ *
+ * Posluchače schválně NEJSOU `{ once: true }`: prohlížeč kontext uspí i bez nás
+ * (tab na pozadí, zamčený displej, jiná aplikace si vezme zvuk) a s jediným
+ * pokusem o odemčení by zvuk po návratu zůstal mrtvý až do konce session.
+ * `unlock()` je idempotentní a při vypnutém zvuku neudělá nic.
+ */
+for (const event of ['pointerdown', 'keydown'] as const) {
+  document.addEventListener(event, () => sounds.unlock());
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') sounds.unlock();
+});
 
 // ?seed=NNN → deterministická rozdání (testy, sdílení zajímavých rozdání);
 // další hry v zápase dostávají seed+1, seed+2, … (logika v seedSequence.ts)

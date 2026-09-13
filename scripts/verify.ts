@@ -2828,7 +2828,6 @@ const KULE = 2 as const;
 {
   const { tableTalk, talkFires, TALK_SITUATIONS, TALK_TABLES } =
     await import('../src/lib/ui/tableTalk');
-  type Situation = (typeof TALK_SITUATIONS)[number];
   const LANGS = ['cs', 'en', 'de'] as const;
   const SETS = ['slusna', 'hospodska'] as const;
 
@@ -2912,7 +2911,17 @@ const KULE = 2 as const;
 
   // ── talkFires: deterministické a přiměřeně řídké ──────────────────────
   {
-    assert.equal(talkFires(3, [1, 2]), talkFires(3, [1, 2]), 'rozhodnutí musí být deterministické');
+    /*
+     * Determinismus se NEDÁ ověřit dvěma voláními v jednom procesu: `Math.random()
+     * < 1/3` by takový test prošlo v pěti případech z devíti. Pinujeme proto
+     * konkrétní vzorek — ten musí sedět napříč běhy i implementacemi.
+     */
+    const pattern = Array.from({ length: 24 }, (_, i) => (talkFires(3, [i]) ? '1' : '0')).join('');
+    assert.equal(pattern, '100111010101000011110001', `vzorek se změnil: ${pattern}`);
+    assert.equal(
+      Array.from({ length: 24 }, (_, i) => (talkFires(3, [i]) ? '1' : '0')).join(''), pattern,
+      'opakovaný běh musí dát týž vzorek',
+    );
     let fired = 0;
     for (let i = 0; i < 300; i += 1) if (talkFires(3, [i])) fired += 1;
     assert.ok(fired > 60 && fired < 140, `hláška u štychu má padnout asi třetinově (padlo ${fired}/300)`);
@@ -2936,7 +2945,8 @@ const KULE = 2 as const;
     assert.doesNotThrow(() => silentSounds.play('win'));
 
     // podvržený AudioContext: sleduje, kolik zdrojů se opravdu rozezvučelo
-    let started = 0;
+    let started: number = 0;
+    let created: number = 0;
     class FakeParam {
       value = 0;
       setValueAtTime(): this { return this; }
@@ -2953,6 +2963,7 @@ const KULE = 2 as const;
     class FakeCtx {
       state: 'suspended' | 'running' = 'suspended';
       currentTime = 0;
+      constructor() { created += 1; }
       sampleRate = 48000;
       destination = new FakeNode();
       createGain(): unknown { return { gain: new FakeParam(), connect: (n: unknown) => n }; }
@@ -2970,6 +2981,27 @@ const KULE = 2 as const;
     const orig = g.AudioContext;
     g.AudioContext = FakeCtx as never;
 
+    /*
+     * Uložené „zvuky vypnuto" se předává KONSTRUKTORU (`createSounds(settings.sounds)`
+     * v main.ts) a `setEnabled` se při startu nevolá — takže konstruktor je jediné
+     * místo, které to nastavení ctí. Bez tohohle testu by `let on = true` znamenalo,
+     * že uživatel s vypnutým zvukem ho slyší po každém načtení stránky.
+     */
+    const off = createSounds(false);
+    off.unlock();
+    await new Promise((r) => setTimeout(r, 5));
+    for (const name of ['shuffle', 'deal', 'play', 'trick', 'flek', 'win', 'lose'] as const) off.play(name);
+    assert.equal(started, 0, 'createSounds(false) nesmí přehrát nic');
+    // a vypnutý zvuk nesmí ani otevřít AudioContext (na mobilu budí zvukovou relaci)
+    assert.equal(created, 0, 'vypnutý zvuk nesmí zakládat AudioContext');
+    // dá se zapnout za běhu
+    off.setEnabled(true);
+    off.unlock();
+    await new Promise((r) => setTimeout(r, 5));
+    off.play('deal');
+    assert.ok(started > 0, 'po zapnutí musí zvuk naskočit i u vypnuto-zrozeného');
+    started = 0;
+
     const snd = createSounds(true);
     // PŘED gestem uživatele se nesmí ozvat nic (autoplay policy)
     snd.play('shuffle');
@@ -2986,10 +3018,12 @@ const KULE = 2 as const;
     for (const name of ['shuffle', 'deal', 'play', 'trick', 'flek', 'win', 'lose'] as const) snd.play(name);
     assert.equal(started, before, 'vypnuté zvuky nesmí nic přehrát');
 
-    // všechny zvuky musí jít přehrát bez výjimky
+    // každý ze sedmi zvuků musí sám o sobě něco rozeznít (ne jen „nespadne")
     snd.setEnabled(true);
     for (const name of ['shuffle', 'deal', 'play', 'trick', 'flek', 'win', 'lose'] as const) {
+      const mark: number = started;
       assert.doesNotThrow(() => snd.play(name), `zvuk ${name} nesmí vyhodit výjimku`);
+      assert.ok(started > mark, `zvuk ${name} nic nerozezněl (chybí větev?)`);
     }
     assert.ok(started > before, 'po zapnutí se zvuky zas ozvou');
 
