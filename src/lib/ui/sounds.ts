@@ -12,8 +12,7 @@
  */
 
 export type SoundName =
-  | 'shuffle' // míchání balíčku
-  | 'deal' // jedna karta při rozdávání
+  | 'deal' // jedna karta při rozdávání (šustění)
   | 'play' // položení karty na stůl
   | 'trick' // sebrání štychu
   | 'flek' // ťuknutí na stůl při fleku
@@ -152,9 +151,6 @@ export function createSounds(enabled = true): Sounds {
       }
       try {
         switch (name) {
-          case 'shuffle':
-            noise(c, master, { dur: 0.42, freq: 1400, sweepTo: 700, q: 0.7, gain: 0.5 });
-            break;
           case 'deal':
             noise(c, master, { dur: 0.05, freq: 2600, q: 1.4, gain: 0.32 });
             break;

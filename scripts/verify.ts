@@ -2834,6 +2834,15 @@ const KULE = 2 as const;
   // ── úplnost: každá situace, každý jazyk, obě sady ──────────────────────
   {
     assert.ok(TALK_SITUATIONS.length >= 7, 'situací má být aspoň sedm');
+    // dost hlášek na to, aby se v jedné hře neopakovaly
+    for (const [name, table] of Object.entries(TALK_TABLES)) {
+      for (const [situation, lines] of Object.entries(table as Record<string, Record<string, readonly string[]>>)) {
+        for (const lang of LANGS) {
+          const n = (lines[lang] ?? []).length;
+          assert.ok(n >= 8, `${name}/${lang}/${situation}: jen ${n} hlášek, má být aspoň 8`);
+        }
+      }
+    }
     for (const situation of TALK_SITUATIONS) {
       for (const set of SETS) {
         for (const lang of LANGS) {
@@ -2891,6 +2900,36 @@ const KULE = 2 as const;
     console.log('PASS hlášky — determinismus, pestrost a odlišnost sad');
   }
 
+  // ── `avoid`: dva soupeři nesmí říct totéž hned po sobě ────────────────
+  {
+    for (const situation of TALK_SITUATIONS) {
+      for (const set of SETS) {
+        const opts = { set, lang: 'cs' as const, seed: [1, 2, 3] };
+        const first = tableTalk(situation, opts) as string;
+        const second = tableTalk(situation, { ...opts, avoid: [first] }) as string;
+        assert.notEqual(second, first, `${set}/${situation}: avoid musí hlášku změnit`);
+
+        // a ani při shodném seedu se nesmí opakovat nic z nedávné historie
+        const recent = [first, second];
+        for (let i = 0; i < 4; i += 1) {
+          const next = tableTalk(situation, { ...opts, avoid: recent }) as string;
+          assert.equal(recent.includes(next), false, `${set}/${situation}: „${next}" padlo nedávno`);
+          recent.push(next);
+        }
+
+        // když „nedávno padlo" pokryje celou tabulku, ať radši mluví, než mlčí
+        const all = (TALK_TABLES.POLITE[situation as keyof typeof TALK_TABLES.POLITE].cs ?? []) as readonly string[];
+        const anyway = tableTalk(situation, { ...opts, avoid: [...all, ...recent] });
+        assert.ok(anyway, 'při vyčerpané tabulce se hláška nesmí ztratit');
+      }
+    }
+    // determinismus platí i s `avoid`
+    const a = tableTalk('accept', { set: 'slusna', lang: 'cs', seed: [9], avoid: ['Dobrá.'] });
+    const b = tableTalk('accept', { set: 'slusna', lang: 'cs', seed: [9], avoid: ['Dobrá.'] });
+    assert.equal(a, b, 'výběr s avoid musí být deterministický');
+    console.log('PASS hlášky — nedávno řečené se neopakují (dva soupeři neřeknou totéž)');
+  }
+
   // ── hygiena textů: jdou do innerHTML a do bubliny ─────────────────────
   {
     let count = 0;
@@ -2939,7 +2978,7 @@ const KULE = 2 as const;
     assert.doesNotThrow(() => {
       const s0 = createSounds(true);
       s0.unlock();
-      s0.play('shuffle');
+      s0.play('deal');
       s0.setEnabled(false);
     }, 'bez AudioContext musí zvuky tiše mlčet');
     assert.doesNotThrow(() => silentSounds.play('win'));
@@ -2990,7 +3029,7 @@ const KULE = 2 as const;
     const off = createSounds(false);
     off.unlock();
     await new Promise((r) => setTimeout(r, 5));
-    for (const name of ['shuffle', 'deal', 'play', 'trick', 'flek', 'win', 'lose'] as const) off.play(name);
+    for (const name of ['deal', 'play', 'trick', 'flek', 'win', 'lose'] as const) off.play(name);
     assert.equal(started, 0, 'createSounds(false) nesmí přehrát nic');
     // a vypnutý zvuk nesmí ani otevřít AudioContext (na mobilu budí zvukovou relaci)
     assert.equal(created, 0, 'vypnutý zvuk nesmí zakládat AudioContext');
@@ -3004,23 +3043,23 @@ const KULE = 2 as const;
 
     const snd = createSounds(true);
     // PŘED gestem uživatele se nesmí ozvat nic (autoplay policy)
-    snd.play('shuffle');
+    snd.play('deal');
     assert.equal(started, 0, 'před gestem uživatele musí být ticho');
 
     snd.unlock();
     await new Promise((r) => setTimeout(r, 5)); // resume() je asynchronní
-    snd.play('shuffle');
+    snd.play('deal');
     assert.ok(started > 0, 'po odemknutí se zvuk ozvat musí');
 
     // vypnutí opravdu vypne
     const before = started;
     snd.setEnabled(false);
-    for (const name of ['shuffle', 'deal', 'play', 'trick', 'flek', 'win', 'lose'] as const) snd.play(name);
+    for (const name of ['deal', 'play', 'trick', 'flek', 'win', 'lose'] as const) snd.play(name);
     assert.equal(started, before, 'vypnuté zvuky nesmí nic přehrát');
 
-    // každý ze sedmi zvuků musí sám o sobě něco rozeznít (ne jen „nespadne")
+    // každý ze šesti zvuků musí sám o sobě něco rozeznít (ne jen „nespadne")
     snd.setEnabled(true);
-    for (const name of ['shuffle', 'deal', 'play', 'trick', 'flek', 'win', 'lose'] as const) {
+    for (const name of ['deal', 'play', 'trick', 'flek', 'win', 'lose'] as const) {
       const mark: number = started;
       assert.doesNotThrow(() => snd.play(name), `zvuk ${name} nesmí vyhodit výjimku`);
       assert.ok(started > mark, `zvuk ${name} nic nerozezněl (chybí větev?)`);
@@ -3028,7 +3067,7 @@ const KULE = 2 as const;
     assert.ok(started > before, 'po zapnutí se zvuky zas ozvou');
 
     if (orig === undefined) delete g.AudioContext; else g.AudioContext = orig;
-    console.log('PASS zvuky — autoplay policy, vypínání a všech sedm zvuků');
+    console.log('PASS zvuky — autoplay policy, vypínání a všech šest zvuků');
   }
 
   // ── komentář k vyúčtování se escapuje (jde do innerHTML) ──────────────

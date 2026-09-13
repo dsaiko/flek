@@ -250,9 +250,15 @@ import Layout from '../layouts/Layout.astro';
   #actions { min-height: 40px; display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-bottom: 8px; }
   /* jednotný styl herních tlačítek: obdélník s oblými rohy (à la FLEK dialogy) */
   .action-btn {
-    font: 700 14px/1 inherit; padding: 10px 20px; border-radius: 8px; border: 0;
+    /* inline-flex + gap: ikona barvy se zarovná na OPTICKÝ střed textu a mezery
+       kolem ní jsou stejné. S vertical-align ikona visela pod účařím a mezery
+       kolem ní byly dvojité (text je skládaný z „Hra" + ikona + „+ Kilo"). */
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    font: 700 14px/20px inherit; padding: 9px 18px; border-radius: 8px; border: 0;
     background: #eafcf6; color: #0a4a52; cursor: pointer; box-shadow: 0 2px 0 rgba(0,0,0,.25);
   }
+  /* ikona nesmí roztahovat řádek tlačítka */
+  .action-btn svg { flex: none; display: block; }
   .action-btn.primary { background: #ffd75e; color: #4a3200; }
   .action-btn:disabled { opacity: .45; cursor: default; }
   .action-note { align-self: center; color: #ffe9a8; font-size: 13px; max-width: 420px; }

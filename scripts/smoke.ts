@@ -159,6 +159,14 @@ let marriageChoices = 0;
 let popupSurvivedLang = false;
 /** Texty bublin viděné během hry — hlášky (§5.8) musí být opravdu vidět. */
 const bubblesSeen = new Set<string>();
+/** Všechny folklórní hlášky — pro kontrolu, že dva soupeři neřeknou totéž. */
+const ALL_TALK = new Set<string>(
+  [TALK_TABLES.POLITE, TALK_TABLES.PUB].flatMap((table) =>
+    Object.values(table as Record<string, Record<string, readonly string[]>>).flatMap((lines) =>
+      (['cs', 'en', 'de'] as const).flatMap((lang) => [...(lines[lang] ?? [])]),
+    ),
+  ),
+);
 /** Hlášky „přemýšlím" ve všech jazycích a sadách — nesmí přežít soupeřův tah. */
 const THINKING = new Set<string>(
   [TALK_TABLES.POLITE.thinking, TALK_TABLES.PUB.thinking].flatMap((t) =>
@@ -173,6 +181,17 @@ for (let i = 0; i < 400; i += 1) {
     .map((t) => t.trim())
     .filter((t) => t.length > 0);
   for (const text of visibleBubbles) bubblesSeen.add(text);
+
+  /*
+   * Dva soupeři nesmí mít na stole tutéž hlášku zároveň — „Dobrá, ale koukej
+   * hrát" dvakrát vedle sebe vypadá jako porucha, ne jako hospoda.
+   */
+  const folkloreNow = visibleBubbles.filter((b) => ALL_TALK.has(b));
+  if (new Set(folkloreNow).size !== folkloreNow.length) {
+    console.error(`CHYBA: dva soupeři říkají totéž: ${folkloreNow.join(' | ')}`);
+    await browser.close();
+    process.exit(1);
+  }
 
   /*
    * „Momentíček…" nesmí viset během animace dohraného štychu: ta začne, až
