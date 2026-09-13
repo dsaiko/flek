@@ -107,7 +107,10 @@ function makeController(resume?: GameState): MatchController {
     aiDelayMs: 650,
     autoGood: true,
   }, resume);
-  mc.onChange((state) => table.render(state));
+  mc.onChange((state) => {
+    table.render(state);
+    updateNewButton();
+  });
   return mc;
 }
 
@@ -227,7 +230,33 @@ soundsBtn.addEventListener('click', () => {
   }
 });
 
-$('btn-new').addEventListener('click', () => newMatchIdle());
+/*
+ * Jedno tlačítko, dva významy: rozehranou hru lze jen UKONČIT (počítá se jako
+ * prohra a vyúčtuje se), teprve pak dává smysl „Nová hra".
+ */
+const newBtn = $('btn-new');
+const inPlay = (): boolean =>
+  controller.state.phase.name !== 'idle' && controller.state.phase.name !== 'scored';
+
+function updateNewButton(): void {
+  const label = inPlay() ? t('endGame') : t('newGame');
+  for (const span of Array.from(newBtn.querySelectorAll('span'))) span.textContent = label;
+}
+
+newBtn.addEventListener('click', () => {
+  if (!inPlay()) {
+    newMatchIdle();
+    updateNewButton();
+    return;
+  }
+  table.confirm(t('endGameWarn'), t('endGame'), () => {
+    try {
+      controller.dispatch({ type: 'concede', seat: 0 });
+    } catch (e) {
+      console.error(e);
+    }
+  });
+});
 
 // fullscreen (iOS Safari neumí requestFullscreen na divu → CSS fallback)
 const gameSection = $('game-section');
@@ -250,11 +279,13 @@ function updateControlLabels(): void {
     }
   };
   set(patternSel, { modern: t('modern'), history: t('history') });
+  updateNewButton(); // popisek tlačítka je jazykový taky
   set(talkSel, { slusna: t('talkPolite'), hospodska: t('talkPub'), vulgarni: t('talkVulgar'), off: t('talkOff') });
   nameInput.placeholder = t('you');
   void currentLang();
 }
 updateControlLabels();
+updateNewButton();
 
 // přepnutí jazyka (lang-pill v Layoutu) → překreslit herní texty i ovládání
 new MutationObserver(() => {

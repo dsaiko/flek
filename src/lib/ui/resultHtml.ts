@@ -42,8 +42,8 @@ export function settlementHtml(r: HandResult, v: PlayerView, deps: HtmlDeps): st
       : esc(t(r.contract.mode));
   const pts =
     r.contract.mode === 'hra'
-      ? `<div class="felt-sub">${esc(t('declarerSide'))} ${esc(r.cardPoints.declarer + r.marriagePoints.declarer)}
-         · ${esc(t('defendersSide'))} ${esc(r.cardPoints.defenders + r.marriagePoints.defenders)} ${esc(t('units'))}</div>`
+      ? `<div class="felt-sub">${esc(t('pointsLabel'))}: ${esc(t('declarerSide'))} ${esc(r.cardPoints.declarer + r.marriagePoints.declarer)}
+         · ${esc(t('defendersSide'))} ${esc(r.cardPoints.defenders + r.marriagePoints.defenders)}</div>`
       : '';
 
   const flekWord = lang === 'de' ? 'Kontra' : 'flek';
@@ -103,7 +103,7 @@ export function replayHtml(state: GameState, r: HandResult, deps: HtmlDeps): str
     const trick = plays.slice(i, i + 3);
     const winner = trickWinner(trick, r.contract.trump, r.contract.mode);
     tricksHtml.push(`<div class="rtrick">
-      <div>${trick.map((p) => cardImg(p.card)).join('')}</div>
+      <div class="rcards">${trick.map((p) => cardImg(p.card)).join('')}</div>
       <div class="rwin">${esc(i / 3 + 1)}. ${esc(deps.nameOf(winner))}</div>
     </div>`);
   }
@@ -112,8 +112,8 @@ export function replayHtml(state: GameState, r: HandResult, deps: HtmlDeps): str
     ? `<span class="rtalon">${esc(t('talon'))}: ${state.talon.map((c) => cardImg(c)).join('')}</span>`
     : '';
   const pts = r.contract.mode === 'hra'
-    ? `${esc(t('declarerSide'))} ${esc(r.cardPoints.declarer + r.marriagePoints.declarer)}
-       · ${esc(t('defendersSide'))} ${esc(r.cardPoints.defenders + r.marriagePoints.defenders)} ${esc(t('units'))} · `
+    ? `${esc(t('pointsLabel'))}: ${esc(t('declarerSide'))} ${esc(r.cardPoints.declarer + r.marriagePoints.declarer)}
+       · ${esc(t('defendersSide'))} ${esc(r.cardPoints.defenders + r.marriagePoints.defenders)} · `
     : '';
 
   return `<div class="replay">

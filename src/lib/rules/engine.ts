@@ -7,7 +7,7 @@
  * takže replay celého zápasu = history.reduce(apply, initialState).
  */
 
-import { DECK, sortHand, suitOf, type Card } from '../cards';
+import { CERVENE, DECK, sortHand, suitOf, type Card } from '../cards';
 import { Random } from '../random';
 import { legalActions, actionMatchesLegal } from './legal';
 import { settle } from './scoring';
@@ -226,9 +226,20 @@ export function assertValid(state: GameState): void {
 // ── reducer ──────────────────────────────────────────────────────────────────
 
 export function apply(state: GameState, action: PlayerAction): GameState {
-  // validace: jediný zdroj pravdy legality
+  /*
+   * Validace: jediný zdroj pravdy legality — s jedinou výjimkou.
+   *
+   * `concede` NENÍ tah ve smyslu pravidel, je to ukončení rozehrané hry, a do
+   * `legalActions` nepatří: kdyby ho měl každý hráč pořád k dispozici, mělo by
+   * „kdo je na tahu" (`actor()` hledá první sedadlo s legální akcí) i AI, která
+   * si z legálních akcí vybírá, úplně jiný význam. Kontroluje se proto zvlášť.
+   */
   const seat: Seat = action.type === 'deal' ? 0 : action.seat;
-  if (!actionMatchesLegal(action, legalActions(view(state, seat)))) {
+  if (action.type === 'concede') {
+    if (state.phase.name === 'idle' || state.phase.name === 'scored') {
+      throw new IllegalActionError('vzdát jde jen rozehranou hru', action);
+    }
+  } else if (!actionMatchesLegal(action, legalActions(view(state, seat)))) {
     throw new IllegalActionError(`nelegální akce ${action.type} ve fázi ${state.phase.name}`, action);
   }
 
@@ -244,6 +255,9 @@ function reduce(state: GameState, action: PlayerAction): GameState {
   switch (action.type) {
     case 'deal':
       return deal(state, action.seed, action.config);
+
+    case 'concede':
+      return concede(state, action.seat);
 
     case 'choose-trump': {
       // volený: trumf z prvních 7, nebo „z lidu" — první karta neprohlédnutého
@@ -510,6 +524,59 @@ function settlePlainHra(state: GameState, contract: Contract): GameState {
     components: [{
       target: 'hra', wonBy: 'declarer', baseRate: s.hra, flekMultiplier: 1,
       extraMultiplier: cerveny, amount, silent: false, note: 'dobrá — nehrálo se',
+    }],
+    delta,
+  };
+  return {
+    ...state,
+    ledger: [state.ledger[0] + delta[0], state.ledger[1] + delta[1], state.ledger[2] + delta[2]],
+    handResults: [...state.handResults, result],
+    phase: { name: 'scored', result },
+  };
+}
+
+/**
+ * Vzdání hry (house rule, §5.5.2). Kdo vzdá, **platí sám**: soupeřům jde sazba
+ * stojícího závazku včetně fleků. Spoluhráč za cizí rozhodnutí neplatí, proto
+ * se nedělí po stranách jako u běžného zúčtování.
+ *
+ * Bez kontraktu (ještě se nekomentovalo) se platí základní sazba hry — vzdát
+ * rozdanou hru něco stát musí, jinak by to bylo zdarma řešení špatných karet.
+ */
+function concede(state: GameState, seat: Seat): GameState {
+  const s = state.config.sazby;
+  const contract = state.contract;
+  const levels = flekLevelsFromHistory(state);
+  const mode = contract?.mode ?? 'hra';
+  const target: import('./types').FlekTarget = mode === 'hra' ? 'hra' : mode;
+  const baseRate = mode === 'betl' ? s.betl : mode === 'durch' ? s.durch : s.hra;
+  const flekMultiplier = 2 ** (levels[target] ?? 0);
+  const cerveny =
+    contract !== null && contract.mode === 'hra' && contract.trump === CERVENE
+      ? state.config.sazby.cervenyMultiplier
+      : 1;
+  const amount = baseRate * flekMultiplier * cerveny;
+
+  const delta: [number, number, number] = [0, 0, 0];
+  for (const other of [0, 1, 2] as Seat[]) {
+    if (other === seat) continue;
+    delta[other] += amount;
+    delta[seat] -= amount;
+  }
+
+  const result: import('./types').HandResult = {
+    handNo: state.handNo,
+    contract: contract ?? {
+      mode: 'hra', trump: CERVENE, declarer: seat, sedma: null, kilo: null, dveSedmy: false,
+    },
+    cardPoints: { declarer: 0, defenders: 0 },
+    marriagePoints: { declarer: 0, defenders: 0 },
+    components: [{
+      target,
+      // kdo vzdal, ten prohrál — bez kontraktu je aktérem dosazený sám vzdávající
+      wonBy: (contract?.declarer ?? seat) === seat ? 'defenders' : 'declarer',
+      baseRate, flekMultiplier, extraMultiplier: cerveny, amount, silent: false,
+      note: 'vzdáno',
     }],
     delta,
   };

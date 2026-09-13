@@ -166,7 +166,12 @@ export type PlayerAction =
   | { type: 'good'; seat: Seat }
   /** Obránce během flekování hlásí sedmu/sto PROTI (než na komponentu padne flek). */
   | { type: 'announce-proti'; seat: Seat; sedma: boolean; kilo: boolean }
-  | { type: 'play'; seat: Seat; card: Card; announceMarriage: boolean };
+  | { type: 'play'; seat: Seat; card: Card; announceMarriage: boolean }
+  /**
+   * Vzdání rozehrané hry (house rule, §5.5.2): kdo vzdá, platí oběma soupeřům
+   * sazbu stojícího závazku včetně fleků. Spoluhráč za jeho rozhodnutí neplatí.
+   */
+  | { type: 'concede'; seat: Seat };
 
 /**
  * PublicAction — akce s redigovanými skrytými payloady (pro PlayerView.publicHistory):

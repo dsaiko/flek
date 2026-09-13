@@ -543,6 +543,21 @@ Pasti, na které se při tom naráží (všechny stály jeden screenshot navíc)
   smoke ho proto bral za konec hry a hru vůbec neodehrál (`count()` nevidí viditelnost).
   Selektory v smoke jsou nově omezené na `#center-float`.
 
+### 5.5.2 Ukončení rozehrané hry (house rule)
+
+Tlačítko v liště má dva významy: na úvodní obrazovce a po zúčtování je to
+**„Nová hra"**, u rozehrané hry **„Ukončit hru"** — a to se nejdřív ptá (stejný popup jako
+varování u odhozu). Potvrzení pošle akci `concede`, která hru **vyúčtuje jako prohru**.
+
+Pravidlo platby: **kdo vzdá, platí sám** — soupeřům jde sazba stojícího závazku včetně fleků
+(červený trumf se násobí). Spoluhráč za cizí rozhodnutí neplatí, proto se nedělí po stranách
+jako u běžného zúčtování. Bez kontraktu (ještě se nekomentovalo) se platí základní sazba hry;
+vzdát rozdanou hru musí něco stát, jinak by to bylo zdarma řešení špatných karet.
+
+**`concede` schválně NENÍ v `legalActions`.** Kdyby ho měl každý hráč pořád k dispozici,
+změnil by význam „kdo je na tahu" (`actor()` hledá první sedadlo s legální akcí) a AI, která
+si z legálních akcí vybírá tah, by hru mohla vzdát sama. Kontroluje se proto zvlášť v `apply()`.
+
 ### 5.6 Obsah stránky (dokumenty)
 
 Pod hracím stolem, bilingválně CZ/EN:

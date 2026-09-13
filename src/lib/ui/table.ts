@@ -97,6 +97,14 @@ export class TableUI {
   }
 
   /**
+   * Potvrzovací popup na stole — pro akce mimo herní smyčku (ukončení hry).
+   * Vypadá stejně jako varování u odhozu, aby stůl mluvil jedním hlasem.
+   */
+  confirm(message: string, confirmLabel: string, onConfirm: () => void): void {
+    this.showConfirmPopup([message], confirmLabel, onConfirm);
+  }
+
+  /**
    * Nový zápas: zapomeň minulý stav a **probuď opuštěné animace**, aby řetěz
    * hned uvolnily.
    *
@@ -1169,12 +1177,12 @@ function setReveal(container: HTMLElement, els: readonly HTMLElement[], animate:
  * sedly na jakoukoliv velikost; v mockupu to bylo ±470..610 px na desce 1400.
  */
 const INTRO_LAYOUT: readonly { x: number; y: number; rot: number; back?: boolean }[] = [
-  { x: -40, y: 7, rot: -22 },
-  { x: -33.6, y: 15.6, rot: -12 },
-  { x: -43.6, y: 27.8, rot: -30, back: true },
-  { x: 40, y: 7.8, rot: 24 },
-  { x: 33.6, y: 16.7, rot: 12 },
-  { x: 43.6, y: 28.9, rot: 32, back: true },
+  { x: -35, y: -2, rot: -22 },
+  { x: -28, y: 9, rot: -12 },
+  { x: -38, y: 21, rot: -30, back: true },
+  { x: 35, y: -2, rot: 24 },
+  { x: 28, y: 9, rot: 12 },
+  { x: 38, y: 21, rot: 32, back: true },
 ];
 
 /**

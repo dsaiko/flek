@@ -47,8 +47,14 @@ const STRINGS = {
   talon: { cs: 'Talon', en: 'Talon', de: 'Talon' },
   result: { cs: 'Zúčtování', en: 'Settlement', de: 'Abrechnung' },
   points: { cs: 'Body', en: 'Points', de: 'Punkte' },
-  declarerSide: { cs: 'Aktér', en: 'Declarer', de: 'Alleinspieler' },
-  defendersSide: { cs: 'Obrana', en: 'Defence', de: 'Verteidigung' },
+  /*
+   * „Aktér" je oficiální termín ČSM pro hrajícího hráče, takže zůstává — ale
+   * ve větě „Aktér 50 · Obrana 120 bodů" vypadal jako jméno. Proto se před
+   * čísla přidává „Body:" a strany jsou malým písmenem.
+   */
+  pointsLabel: { cs: 'Body', en: 'Points', de: 'Punkte' },
+  declarerSide: { cs: 'aktér', en: 'declarer', de: 'Alleinspieler' },
+  defendersSide: { cs: 'obrana', en: 'defence', de: 'Verteidigung' },
   settings: { cs: 'Nastavení', en: 'Settings', de: 'Einstellungen' },
   variant: { cs: 'Varianta', en: 'Variant', de: 'Variante' },
   voleny: { cs: 'Volený (FLEK!)', en: 'Chosen (FLEK!)', de: 'Gewählt (FLEK!)' },
@@ -88,6 +94,13 @@ const STRINGS = {
   talkOff: { cs: 'vypnuto', en: 'off', de: 'aus' },
   soundOn: { cs: 'zapnuto', en: 'on', de: 'an' },
   soundOff: { cs: 'vypnuto', en: 'off', de: 'aus' },
+  newGame: { cs: 'Nová hra', en: 'New game', de: 'Neues Spiel' },
+  endGame: { cs: 'Ukončit hru', en: 'Concede', de: 'Aufgeben' },
+  endGameWarn: {
+    cs: 'Opravdu ukončit rozehranou hru? Počítá se jako prohra a zaplatíš ji.',
+    en: 'Really give up this hand? It counts as a loss and you pay for it.',
+    de: 'Das laufende Spiel wirklich aufgeben? Es zählt als Niederlage und du zahlst.',
+  },
   lastHand: { cs: 'Minule', en: 'Last hand', de: 'Zuletzt' },
   variantTagVoleny: { cs: 'klasika', en: 'the classic', de: 'Klassiker' },
   variantTagLicitovany: { cs: 'pro pokročilé', en: 'for the bold', de: 'für Fortgeschrittene' },
