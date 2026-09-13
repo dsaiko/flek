@@ -42,7 +42,8 @@ function loadSettings(): Settings {
       difficulty: p.difficulty === 'easy' || p.difficulty === 'normal' || p.difficulty === 'hard'
         ? p.difficulty : DEFAULT_SETTINGS.difficulty,
       pattern: p.pattern === 'modern' || p.pattern === 'history' ? p.pattern : DEFAULT_SETTINGS.pattern,
-      talk: p.talk === 'slusna' || p.talk === 'hospodska' || p.talk === 'off' ? p.talk : DEFAULT_SETTINGS.talk,
+      talk: p.talk === 'slusna' || p.talk === 'hospodska' || p.talk === 'vulgarni' || p.talk === 'off'
+        ? p.talk : DEFAULT_SETTINGS.talk,
       sounds: typeof p.sounds === 'boolean' ? p.sounds : DEFAULT_SETTINGS.sounds,
     };
   } catch {
@@ -213,7 +214,7 @@ function updateControlLabels(): void {
   };
   set(variantSel, { voleny: t('voleny'), licitovany: t('licitovany') });
   set(patternSel, { modern: t('modern'), history: t('history') });
-  set(talkSel, { slusna: t('talkPolite'), hospodska: t('talkPub'), off: t('talkOff') });
+  set(talkSel, { slusna: t('talkPolite'), hospodska: t('talkPub'), vulgarni: t('talkVulgar'), off: t('talkOff') });
   set(soundsSel, { on: t('soundOn'), off: t('soundOff') });
   void currentLang();
 }

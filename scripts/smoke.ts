@@ -305,6 +305,29 @@ const handFingerprint = async (): Promise<string> =>
 
 await page.click('#btn-new');
 await page.waitForSelector('#table.animating', { state: 'detached', timeout: 5000 });
+
+/*
+ * Nový zápas se musí ROZDÁVAT, ne jen objevit.
+ *
+ * Klíč testu: klikáme na „Nový zápas" teď, kdy je ruka PLNÁ — karty se
+ * recyklují, takže si nesou třídu `reveal` z minulého rozdání a bez restartu
+ * animace by se nová hra jen probliknula na stůl. (Po zúčtování je ruka
+ * prázdná, elementy vzniknou čerstvé a animace by běžela i s chybou — proto
+ * tahle kontrola nesmí být hned po dohrání.) Na přítomnost třídy se spolehnout
+ * nelze, ptáme se prohlížeče, jestli animace opravdu BĚŽÍ.
+ */
+await page.click('#btn-new');
+await page.waitForTimeout(250);
+const dealAnimations = await page.evaluate(() =>
+  Array.from(document.querySelectorAll('#hand .card-btn'))
+    .flatMap((el) => el.getAnimations().map((a) => a.playState))
+    .filter((state) => state === 'running').length);
+if (dealAnimations === 0) {
+  console.error('CHYBA: nový zápas se nerozdává po kartách (animace se nerestartovala)');
+  await browser.close();
+  process.exit(1);
+}
+await page.waitForSelector('#table.animating', { state: 'detached', timeout: 5000 });
 const fromPeople = page.getByRole('button', { name: /lidu|people|Volk/i });
 if ((await fromPeople.count()) > 0) {
   await fromPeople.first().click();
