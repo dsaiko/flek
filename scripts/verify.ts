@@ -2822,4 +2822,214 @@ const KULE = 2 as const;
   }
 }
 
+
+// ── hlášky u stolu (§5.8) a zvuky (§5.7) ───────────────────────────────────
+
+{
+  const { tableTalk, talkFires, TALK_SITUATIONS, TALK_TABLES } =
+    await import('../src/lib/ui/tableTalk');
+  type Situation = (typeof TALK_SITUATIONS)[number];
+  const LANGS = ['cs', 'en', 'de'] as const;
+  const SETS = ['slusna', 'hospodska'] as const;
+
+  // ── úplnost: každá situace, každý jazyk, obě sady ──────────────────────
+  {
+    assert.ok(TALK_SITUATIONS.length >= 7, 'situací má být aspoň sedm');
+    for (const situation of TALK_SITUATIONS) {
+      for (const set of SETS) {
+        for (const lang of LANGS) {
+          const line = tableTalk(situation, { set, lang, seed: [1] });
+          assert.ok(line, `${set}/${lang}/${situation}: chybí hláška`);
+          assert.ok((line as string).trim().length > 0, `${set}/${lang}/${situation}: prázdná hláška`);
+        }
+      }
+    }
+    // hospodská sada dědí od slušné tam, kde vlastní variantu nemá
+    assert.equal('fromPeople' in TALK_TABLES.PUB, false, 'scénář počítá se zděděnou situací');
+    // zděděná situace bere hlášky ze slušné sady (výběr se liší, seznam ne)
+    const politeFromPeople = TALK_TABLES.POLITE.fromPeople.cs;
+    for (let i = 0; i < 20; i += 1) {
+      const line = tableTalk('fromPeople', { set: 'hospodska', lang: 'cs', seed: [i] }) as string;
+      assert.ok(politeFromPeople.includes(line), `zděděná hláška „${line}" musí být ze slušné sady`);
+    }
+    console.log(`PASS hlášky — úplnost ${TALK_SITUATIONS.length} situací × 3 jazyky × 2 sady`);
+  }
+
+  // ── vypnuto = ticho ───────────────────────────────────────────────────
+  for (const situation of TALK_SITUATIONS) {
+    assert.equal(tableTalk(situation, { set: 'off', lang: 'cs', seed: [1] }), null,
+      `vypnuté hlášky musí mlčet (${situation})`);
+  }
+
+  // ── determinismus a pestrost ──────────────────────────────────────────
+  {
+    // tentýž stav musí dát tutéž hlášku — jinak by text „blikal" při každém
+    // překreslení (přepnutí jazyka, vzoru karet) u téže akce
+    for (let i = 0; i < 20; i += 1) {
+      const seed = [1, i, 'x'];
+      assert.equal(
+        tableTalk('accept', { set: 'slusna', lang: 'cs', seed }),
+        tableTalk('accept', { set: 'slusna', lang: 'cs', seed }),
+        'tentýž seed musí dát tutéž hlášku',
+      );
+    }
+    // …ale napříč okamžiky se hlášky musí střídat
+    for (const situation of TALK_SITUATIONS) {
+      const seen = new Set<string>();
+      for (let i = 0; i < 60; i += 1) {
+        seen.add(tableTalk(situation, { set: 'slusna', lang: 'cs', seed: [i] }) as string);
+      }
+      assert.ok(seen.size >= 3, `${situation}: hlášky se musí střídat (viděno ${seen.size})`);
+    }
+    // sady se od sebe musí lišit (jinak by přepínač nedával smysl)
+    const polite = new Set<string>();
+    const pub = new Set<string>();
+    for (let i = 0; i < 40; i += 1) {
+      polite.add(tableTalk('handLost', { set: 'slusna', lang: 'cs', seed: [i] }) as string);
+      pub.add(tableTalk('handLost', { set: 'hospodska', lang: 'cs', seed: [i] }) as string);
+    }
+    assert.equal([...pub].some((l) => polite.has(l)), false, 'hospodská sada musí mít vlastní hlášky');
+    console.log('PASS hlášky — determinismus, pestrost a odlišnost sad');
+  }
+
+  // ── hygiena textů: jdou do innerHTML a do bubliny ─────────────────────
+  {
+    let count = 0;
+    for (const [name, table] of Object.entries(TALK_TABLES)) {
+      for (const [situation, lines] of Object.entries(table as Record<string, Record<string, readonly string[]>>)) {
+        for (const lang of LANGS) {
+          for (const line of lines[lang] ?? []) {
+            count += 1;
+            assert.equal(/[<>]/.test(line), false, `${name}/${lang}/${situation}: „${line}" má HTML metaznak`);
+            assert.ok(line.length <= 46, `${name}/${lang}/${situation}: „${line}" je na bublinu moc dlouhá`);
+            assert.equal(line.trim(), line, `${name}/${lang}/${situation}: „${line}" má bílé znaky na kraji`);
+          }
+        }
+      }
+    }
+    console.log(`PASS hlášky — hygiena ${count} textů (bez HTML, délka do 46 znaků)`);
+  }
+
+  // ── talkFires: deterministické a přiměřeně řídké ──────────────────────
+  {
+    assert.equal(talkFires(3, [1, 2]), talkFires(3, [1, 2]), 'rozhodnutí musí být deterministické');
+    let fired = 0;
+    for (let i = 0; i < 300; i += 1) if (talkFires(3, [i])) fired += 1;
+    assert.ok(fired > 60 && fired < 140, `hláška u štychu má padnout asi třetinově (padlo ${fired}/300)`);
+    let always = 0;
+    for (let i = 0; i < 50; i += 1) if (talkFires(1, [i])) always += 1;
+    assert.equal(always, 50, 'chanceOneIn 1 znamená vždy');
+    console.log('PASS hlášky — výběr okamžiku je deterministický a řídký');
+  }
+
+  // ── zvuky: autoplay policy a tichý dublér ─────────────────────────────
+  {
+    const { createSounds, silentSounds } = await import('../src/lib/ui/sounds');
+
+    // bez Web Audio (Node, staré prohlížeče) se hra nesmí ani zakuckat
+    assert.doesNotThrow(() => {
+      const s0 = createSounds(true);
+      s0.unlock();
+      s0.play('shuffle');
+      s0.setEnabled(false);
+    }, 'bez AudioContext musí zvuky tiše mlčet');
+    assert.doesNotThrow(() => silentSounds.play('win'));
+
+    // podvržený AudioContext: sleduje, kolik zdrojů se opravdu rozezvučelo
+    let started = 0;
+    class FakeParam {
+      value = 0;
+      setValueAtTime(): this { return this; }
+      exponentialRampToValueAtTime(): this { return this; }
+    }
+    class FakeNode {
+      connect(next: unknown): unknown { return next; }
+    }
+    class FakeSource extends FakeNode {
+      buffer: unknown = null;
+      start(): void { started += 1; }
+      stop(): void {}
+    }
+    class FakeCtx {
+      state: 'suspended' | 'running' = 'suspended';
+      currentTime = 0;
+      sampleRate = 48000;
+      destination = new FakeNode();
+      createGain(): unknown { return { gain: new FakeParam(), connect: (n: unknown) => n }; }
+      createBiquadFilter(): unknown {
+        return { type: '', frequency: new FakeParam(), Q: new FakeParam(), connect: (n: unknown) => n };
+      }
+      createBuffer(): unknown { return { getChannelData: () => new Float32Array(16) }; }
+      createBufferSource(): unknown { return new FakeSource(); }
+      createOscillator(): unknown {
+        return { type: '', frequency: new FakeParam(), connect: (n: unknown) => n, start: () => { started += 1; }, stop: () => {} };
+      }
+      resume(): Promise<void> { this.state = 'running'; return Promise.resolve(); }
+    }
+    const g = globalThis as { AudioContext?: unknown };
+    const orig = g.AudioContext;
+    g.AudioContext = FakeCtx as never;
+
+    const snd = createSounds(true);
+    // PŘED gestem uživatele se nesmí ozvat nic (autoplay policy)
+    snd.play('shuffle');
+    assert.equal(started, 0, 'před gestem uživatele musí být ticho');
+
+    snd.unlock();
+    await new Promise((r) => setTimeout(r, 5)); // resume() je asynchronní
+    snd.play('shuffle');
+    assert.ok(started > 0, 'po odemknutí se zvuk ozvat musí');
+
+    // vypnutí opravdu vypne
+    const before = started;
+    snd.setEnabled(false);
+    for (const name of ['shuffle', 'deal', 'play', 'trick', 'flek', 'win', 'lose'] as const) snd.play(name);
+    assert.equal(started, before, 'vypnuté zvuky nesmí nic přehrát');
+
+    // všechny zvuky musí jít přehrát bez výjimky
+    snd.setEnabled(true);
+    for (const name of ['shuffle', 'deal', 'play', 'trick', 'flek', 'win', 'lose'] as const) {
+      assert.doesNotThrow(() => snd.play(name), `zvuk ${name} nesmí vyhodit výjimku`);
+    }
+    assert.ok(started > before, 'po zapnutí se zvuky zas ozvou');
+
+    if (orig === undefined) delete g.AudioContext; else g.AudioContext = orig;
+    console.log('PASS zvuky — autoplay policy, vypínání a všech sedm zvuků');
+  }
+
+  // ── komentář k vyúčtování se escapuje (jde do innerHTML) ──────────────
+  {
+    const { settlementHtml } = await import('../src/lib/ui/resultHtml');
+    const { defaultConfig } = await import('../src/lib/rules/sazby');
+    const result = {
+      handNo: 0,
+      contract: { mode: 'hra' as const, trump: 2 as const, declarer: 0 as const, sedma: null, kilo: null, dveSedmy: false },
+      cardPoints: { declarer: 60, defenders: 30 },
+      marriagePoints: { declarer: 0, defenders: 0 },
+      components: [], delta: [2, -1, -1] as [number, number, number],
+    };
+    const v = {
+      seat: 0 as const, config: defaultConfig('voleny'), dealer: 2 as const, hand: [],
+      handCounts: [0, 0, 0], revealedTrump: null, unseenCount: 0, talonKnown: [], talon: null,
+      contract: result.contract, phase: { name: 'scored' as const, result },
+      publicHistory: [], handResults: [result], ledger: [2, -1, -1], handNo: 1,
+    };
+    const deps = { humanSeat: 0 as const, nameOf: () => 'Franta', pattern: () => 'modern' as const };
+
+    const plain = settlementHtml(result as never, v as never, deps);
+    assert.equal(plain.includes('felt-talk'), false, 'bez hlášky se komentář nevykresluje');
+
+    const withTalk = settlementHtml(result as never, v as never, { ...deps, talkLine: 'Dobrá hra' });
+    assert.ok(withTalk.includes('felt-talk'), 'hláška se má vykreslit');
+    assert.ok(withTalk.includes('Dobrá hra'), 'text hlášky má být vidět');
+
+    const evil = settlementHtml(result as never, v as never, {
+      ...deps, talkLine: '<img src=x onerror=alert(1)>',
+    });
+    assert.equal(evil.includes('<img src=x'), false, 'komentář musí být escapovaný');
+    assert.ok(evil.includes('&lt;img src=x'), 'escapovat, ne zahazovat');
+    console.log('PASS hlášky — komentář k vyúčtování se escapuje');
+  }
+}
+
 console.log('OK: vše prošlo');

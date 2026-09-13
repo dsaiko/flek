@@ -490,19 +490,45 @@ Pod hracím stolem, bilingválně CZ/EN:
      [Mariage (card game)](https://en.wikipedia.org/wiki/Mariage_(card_game))
 4. **Technická karta** — jak přepis funguje (engine, fér AI vs. původní „koukání do karet")
 
-### 5.7 Zvuky
+### 5.7 Zvuky — ✅ HOTOVO (`src/lib/ui/sounds.ts`)
 
 - Jemné zvukové efekty (vypnutelné v nastavení, pocta volbě „Zvuky" z originálu):
-  **míchání**, **rozdávání**, položení karty, sebrání štychu, flek/re (důraz), výhra/prohra
-- Zdroj: CC0 samply (freesound.org) nebo vlastní nahrávky skutečných karet; krátké, tiché,
-  bez hudby; implementace Web Audio API, soubory v `public/sounds/`, licence zdokumentovat
-- **Autoplay policy**: AudioContext se odemyká prvním uživatelským gestem (klik na „Rozdat")
-  — do té doby se zvuky tiše zahazují, žádná chyba v konzoli
+  **míchání** (při rozdání), **rozdávání** (ťuknutí ke každé odkryté kartě), položení karty,
+  sebrání štychu, flek (ťuknutí kloubů o stůl), výhra/prohra
+- **Rozhodnuto při implementaci: zvuky se syntetizují**, nestahují se samply. Karty jsou
+  filtrovaný šum a krátká ťuknutí, což se dá udělat pár uzly Web Audio — odpadá cizí licence
+  k dohledání, soubory v `public/`, i čekání na načtení (první zvuk nikdy nepřijde pozdě).
+  Kdybychom později chtěli skutečné nahrávky, vymění se implementace `play()`, ne volající.
+  Master gain 0.22 — „jemné, tiché, bez hudby".
+- **Autoplay policy**: `AudioContext` se odemyká prvním gestem (`pointerdown`/`keydown`,
+  `{ once: true }` v `main.ts`) — do té doby se zvuky **tiše zahazují**, žádná chyba v konzoli.
+  Kontext vytvořený přímo při gestu startuje rovnou ve stavu `running`, takže `resume()` se
+  často vůbec nezavolá — test proto ověřuje, že se **před** gestem nic nerozezvučí
+  (podvržený `AudioContext` ve stavu `suspended`), a smoke počítá skutečně spuštěné zdroje.
 
-### 5.8 Mariášové hlášky (table talk)
+### 5.8 Mariášové hlášky (table talk) — ✅ HOTOVO (`src/lib/ui/tableTalk.ts`)
 
-AI hráči „mluví" — bubliny u hráče v příslušné situaci (volba, flek, mazání, zúčtování).
-Dvě sady, přepínatelné v nastavení (výchozí **slušná**; „hospodská" = drsnější, pro pamětníky):
+AI hráči „mluví" — bubliny u hráče v příslušné situaci. Dvě sady, přepínatelné v nastavení
+(výchozí **slušná**; „hospodská" = jadrnější, pro pamětníky; `off` = mlčenlivý stůl).
+
+**Zásada, proč hláška nikdy nepřepíše popisek akce:** bublina je jediná zpětná vazba o tom,
+CO soupeř udělal. Folklor proto mluví jen tam, kde popisek nenese informaci („dobrá", „pas",
+„z lidu"), nebo v okamžicích, které dosud bubliny neměly:
+
+| Situace | Kdy |
+|---|---|
+| `accept` / `pass` / `fromPeople` | místo popisku, který stejně nic neříká |
+| `thinking` | AI počítá déle než 700 ms (u rychlých tahů se neukáže vůbec — jako v originále) |
+| `trickWon` | vítěz štychu, ale jen asi **každý třetí** (u třiceti štychů by to jinak byl šum) |
+| `handWon` / `handLost` | uštěpačný komentář **ve vyúčtování**, po vzoru FLEK! |
+
+Výběr hlášky je **deterministický** (FNV-1a hash přes situaci, sadu a seed okamžiku): tentýž
+stav musí dát tentýž text, jinak by se hláška měnila při každém překreslení (přepnutí jazyka,
+vzoru karet) a bublina by u téže akce „blikala" jiným textem.
+
+Hospodská sada **dědí** od slušné všude, kde nemá vlastní variantu. Tón: jadrná hospoda, ne
+sprostota — „Držím hubu a krok", „Sedma smrdí, viďte", „Vykašli se na mariáš, dej se na
+politiku" (poslední je přímo z originálu). Materiál níže + `docs/original-notes.md`.
 
 - Základ (povinné herní): „Barva!", „Špatná!", „Dobrá.", „Flek!", „Re!", „Tutti!", „Boty!",
   „Kalhoty!", „Sedma!", „Kilo!", „Betl!", „Durch!"
@@ -584,9 +610,9 @@ jen `src/scripts/main.ts` + `src/lib/ui/`.
    sazby → `docs/original-notes.md`, doladit preset SAZBY_FLEK
 5. ✅ **AI**: heuristiky (IQ prahy) + determinizace + ISMCTS (max^n, delta reward) + bezstavový
    worker s watchdogem a fallbackem. Zbývá: doladění síly (noHigherThan constraints, lepší playout)
-6. ✅ **UI — první hratelná verze**: stůl, interakce všech fází, bubliny (základ hlášek),
-   zúčtování, nastavení (varianta/IQ/vzor), autosave+resume, fullscreen, Playwright smoke test.
-   Zbývá: animace karet, zvuky (§5.7), plné hlášky (§5.8), mince/bank, klávesnice, mobil polish
+6. ✅ **UI — první hratelná verze**: stůl, interakce všech fází, bubliny, zúčtování,
+   nastavení (varianta/IQ/vzor/hlášky/zvuky), autosave+resume, fullscreen, Playwright smoke.
+   ✅ zvuky (§5.7) a hlášky obou sad (§5.8). Zbývá: mince/bank, klávesnice, mobil polish
 7. **Obsah**: bilingvální stránka dle §5.6 (tribute Otci + Pivoňka FLEK!, pravidla, dohledat
    a sepsat historii mariáše), zvuky (§5.7), hlášky obou sad (§5.8), EN překlady pravidel, README
    (vzor mars: EN + Česky, „independent tribute", odkazy), LICENSE (MIT; originál zůstává
@@ -661,7 +687,9 @@ Před deployem `make build && make preview` + `make deploy-s3-dryrun`.
    `maxFlekLevel` — kajzr ano/ne) — navrhnout podle chování originálu, vše zůstane konfigurovatelné
 3. Jednotky konta: desetihaléře jako ČSM pravidla / Kč / abstraktní body?
 4. ✅ Zvuky budou (§5.7 — míchání, rozdávání, karty; vypnutelné); rozhodnuto s uživatelem
-5. Hlášky (§5.8): rozsah hospodské sady — jak drsná smí být?
+5. ✅ Hlášky (§5.8): hospodská sada je **jadrná, ale bez vulgarit** — hospodská je od hlášek,
+   ne od nadávek. Implementováno v tomto duchu; k případnému přitvrzení stačí doplnit texty
+   do `PUB` v `tableTalk.ts` (k revizi uživatelem).
 6. ✅ Název: **„Flek!"** (titulek webu „Flek! · Mariáš"), GitHub repo **`flek`**,
    web **`flek.saiko.cz`** (vlastní subdoména, DNS v Route 53) — rozhodnuto s uživatelem
 

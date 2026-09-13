@@ -10,6 +10,7 @@
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { chromium } from 'playwright';
+import { TALK_TABLES } from '../src/lib/ui/tableTalk';
 
 // Pevný seed: smoke musí být reprodukovatelný. Se seedem 10 vede odhoz, který
 // smoke volí (první a poslední karta v ruce), na varovný popup — bez toho by
@@ -35,8 +36,52 @@ page.on('console', (msg) => {
 });
 page.on('pageerror', (e) => console.log('PAGE ERROR:', e.message));
 
+/*
+ * Zvuky (§5.7): obalíme AudioContext ještě před načtením stránky a počítáme,
+ * co se opravdu rozezvučelo. Bez toho by smoke „zvuky zapnuté" nijak neověřil
+ * — zvuk v headless prohlížeči není slyšet a chybějící zvuk nic nezaloguje.
+ */
+/*
+ * Pozor: init skript se předává jako ŘETĚZEC, ne jako funkce. Funkci by tsx
+ * přeložil esbuildem a do jejího zdroje by propašoval pomocníka `__name`,
+ * který v prohlížeči neexistuje (`__name is not defined`).
+ */
+await page.addInitScript({
+  content: `(() => {
+    const Real = window.AudioContext;
+    if (!Real) return;
+    const stats = { created: 0, resumed: 0, started: 0 };
+    window.__audio = stats;
+    const count = (node) => {
+      const start = node.start.bind(node);
+      node.start = (...a) => { stats.started += 1; return start(...a); };
+      return node;
+    };
+    window.AudioContext = function () {
+      const ctx = new Real();
+      stats.created += 1;
+      const resume = ctx.resume.bind(ctx);
+      ctx.resume = () => { stats.resumed += 1; return resume(); };
+      const buf = ctx.createBufferSource.bind(ctx);
+      ctx.createBufferSource = () => count(buf());
+      const osc = ctx.createOscillator.bind(ctx);
+      ctx.createOscillator = () => count(osc());
+      return ctx;
+    };
+  })()`,
+});
+
 await page.goto(url);
 await page.waitForTimeout(500);
+
+const audioBeforeGesture = await page.evaluate(
+  () => (window as unknown as { __audio?: { started: number } }).__audio?.started ?? 0,
+);
+if (audioBeforeGesture !== 0) {
+  console.error('CHYBA: zvuk se ozval ještě před gestem uživatele (autoplay policy)');
+  await browser.close();
+  process.exit(1);
+}
 
 /*
  * i13/i19: CSP doručené stránky. Smoke dosud sbíral jen PORUŠENÍ politiky,
@@ -83,7 +128,7 @@ if (injected) {
 // blokovaná injektáž se zaloguje jako CSP porušení — to je tady ŽÁDOUCÍ
 cspViolations.length = 0;
 
-// Rozdat
+// Rozdat — tenhle klik je zároveň gesto, které odemyká zvuk
 await page.click('#actions .action-btn.primary');
 await page.waitForTimeout(400);
 await page.screenshot({ path: join(outDir, 'smoke-1-deal.png'), clip: await tableClip() });
@@ -112,9 +157,16 @@ let reachedSettlement = false;
 let confirmedWarnings = 0;
 let marriageChoices = 0;
 let popupSurvivedLang = false;
+/** Texty bublin viděné během hry — hlášky (§5.8) musí být opravdu vidět. */
+const bubblesSeen = new Set<string>();
 let fromPeopleCancelled = false;
 for (let i = 0; i < 200; i += 1) {
   await page.waitForTimeout(350);
+
+  for (const text of await page.locator('.bubble.show').allTextContents()) {
+    const trimmed = text.trim();
+    if (trimmed) bubblesSeen.add(trimmed);
+  }
 
   const status = await page.textContent('#status');
   const phaseShot = async (name: string) => {
@@ -258,6 +310,45 @@ if (!popupSurvivedLang) {
   console.error('CHYBA: v běhu nenastal žádný popup — kontrola přepnutí jazyka neproběhla');
   process.exit(1);
 }
+
+// zvuky: po gestu se musí kontext vytvořit, odemknout a něco zahrát
+const audio = await page.evaluate(
+  () => (window as unknown as { __audio?: { created: number; resumed: number; started: number } }).__audio
+    ?? { created: 0, resumed: 0, started: 0 },
+);
+/*
+ * `resumed` schválně nekontrolujeme: kontext vytvořený PŘI gestu startuje
+ * rovnou ve stavu 'running', takže `resume()` se nikdy nezavolá. Že se před
+ * gestem nesmí ozvat nic, hlídá jednotkový test s podvrženým AudioContextem
+ * (stav 'suspended'); tady jde o to, že se zvuky v reálné hře opravdu ozvou.
+ */
+if (audio.created === 0 || audio.started === 0) {
+  console.error(
+    `CHYBA: zvuky se nerozezvučely (kontextů: ${audio.created}, zvuků: ${audio.started})`,
+  );
+  await browser.close();
+  process.exit(1);
+}
+console.log(`Zvuky: ${audio.started} přehraných v ${audio.created} kontextu`);
+
+// hlášky u stolu: aspoň jedna folklórní (ne jen funkční popisek) musí padnout
+const folklore = new Set<string>();
+for (const table of [TALK_TABLES.POLITE, TALK_TABLES.PUB]) {
+  for (const lines of Object.values(table as Record<string, Record<string, readonly string[]>>)) {
+    for (const lang of ['cs', 'en', 'de'] as const) {
+      for (const line of lines[lang] ?? []) folklore.add(line);
+    }
+  }
+}
+const heard = [...bubblesSeen].filter((b) => folklore.has(b));
+if (heard.length === 0) {
+  console.error(
+    `CHYBA: během hry nepadla ani jedna hláška u stolu (bubliny: ${[...bubblesSeen].join(' | ')})`,
+  );
+  await browser.close();
+  process.exit(1);
+}
+console.log(`Hlášky u stolu: ${heard.length} různých (${heard.slice(0, 3).join(' · ')}…)`);
 
 if (!fromPeopleCancelled) {
   console.error('CHYBA: nenašlo se tlačítko „z lidu" — kontrola zrušení odhalení neproběhla');
