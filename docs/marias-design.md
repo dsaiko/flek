@@ -70,6 +70,28 @@ sto a sedm). Renonc paušál 1 = 10×, paušál 2 = 50×, limit 500×/750×.
 > shodně betl 15× a durch 30× (licitovaný to má v tabulce jako 3,00 / 6,00 Kč při základu 0,20).
 > Dřívější formulace v tomto dokumentu tvrdila opak a svedla i jedno review (§18, i7).
 
+### Křížový mariáš — vědomě NEhrajeme (rozhodnuto 2026-09-14)
+
+ČSM má i pravidla **křížového** mariáše (volený i licitovaný). Není to varianta pravidel, ale
+jiná stavba hry: **4 hráči**, rozdává se 2× po čtyřech (8 karet na hráče) a **talon vůbec
+není**; volící hráč odloží jednu kartu lícem dolů a **oznámí výšku karty, se kterou chce hrát**
+— tím si volá spoluhráče, aniž ví, kdo to je (může zavolat i sám sebe). Volba „z lidu" je
+zakázaná, hraje se 2 na 2 a platí se po dvojicích, betl se po prvním štychu dohrává
+z otevřených karet a durch smí být jen „sám", ne „s chytrým".
+
+Proč ne:
+1. **Není to FLEK!** — Pivoňkovy hry jsou tři hráči (FLEK! volený, RE! licitovaný). Křížový do
+   tributu nepatří.
+2. **Není to přepínač, ale přestavba enginu.** Tři hráči nejsou parametr, jsou to typy:
+   `Seat = 0 | 1 | 2`, ruce `[Card[], Card[], Card[]]`, konto a výplaty `[number, number, number]`,
+   rotace `% 3` — 31 míst v typech a 12 rotací v 11 souborech (engine, scoring, AI, persistence,
+   UI). K tomu partnerství, které AI dnes neumí: musela by odvozovat zavolaného spoluhráče
+   z průběhu hry, což je nová vrstva v ISMCTS.
+
+Kdyby se někdy chtěla další hra, přirozenější krok je závazek **dvě sedmy** v licitovaném
+(už je v typech i v žebříčku, chybí jen scoring) — jedna hra navíc v existující variantě,
+ne nová architektura.
+
 ### 3.2 Společné jádro
 
 - 32 karet, německé barvy: **červené, zelené, kule, žaludy**; hodnoty 7, 8, 9, 10, spodek, svršek, král, eso
