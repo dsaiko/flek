@@ -73,6 +73,8 @@ export class TableUI {
   private readonly bubbleShownAt = new Map<Seat, number>();
   /** Hláška čekající, až uplyne minimální čas té předchozí. */
   private readonly bubblePending = new Map<Seat, ReturnType<typeof setTimeout>>();
+  /** Karty na úvodní obrazovce — vybrané jednou, ať při překreslení nepřeskakují. */
+  private introCards: Card[] | null = null;
   /** Pohled pro delegovaný klik na kartu (tlačítka se recyklují, ne převěšují). */
   private handView: PlayerView | null = null;
   private handClickBound = false;
@@ -257,6 +259,7 @@ export class TableUI {
     this.renderMelds(state, v);
     this.renderActions(v, legal);
     this.renderStatus(v, legal);
+    this.renderIntro(v);
     this.showLastActionBubble(state);
     this.scheduleThinkingBubble(v, state);
     // zvuk konce hry patří ke KONKRÉTNÍ hře, ne ke každému překreslení
@@ -455,6 +458,35 @@ export class TableUI {
         el.appendChild(count);
       }
     }
+  }
+
+  /**
+   * Úvodní obrazovka: vějíř skutečných karet na prázdném stole. Sada se losuje
+   * při každém příchodu na úvodní obrazovku (tedy při načtení stránky), ale
+   * NE při každém překreslení — jinak by karty přeskakovaly při přepnutí
+   * jazyka nebo vzoru.
+   */
+  private renderIntro(v: PlayerView): void {
+    const el = $(this.root, '#intro');
+    if (v.phase.name !== 'idle') {
+      if (this.introCards !== null) {
+        this.introCards = null;
+        el.innerHTML = '';
+      }
+      return;
+    }
+    if (this.introCards === null) this.introCards = pickIntroCards();
+    const cards = this.introCards;
+    const imgs = syncChildren(el, INTRO_LAYOUT.length, () => document.createElement('img'));
+    imgs.forEach((img, i) => {
+      const spot = INTRO_LAYOUT[i];
+      setSrc(img, spot.back === true ? backSrc() : cardSrc(cards[i], this.opts.pattern()));
+      img.alt = '';
+      img.style.setProperty('--x', `${spot.x}%`);
+      img.style.setProperty('--y', `${spot.y}%`);
+      img.style.setProperty('--rot', `${spot.rot}deg`);
+      img.style.animationDelay = `${i * 70}ms`;
+    });
   }
 
   // ── střed stolu ────────────────────────────────────────────────────────────
@@ -1062,6 +1094,35 @@ function setReveal(container: HTMLElement, els: readonly HTMLElement[], animate:
     el.classList.add('reveal');
   });
 }
+/**
+ * Rozmístění dekoračních karet na úvodní obrazovce — přesně podle mockupu
+ * (Claude Design, artboard „1a Úvod"): dva shluky u okrajů, střed zůstává
+ * volný pro titulek a tlačítko. Souřadnice jsou v % šířky/výšky stolu, aby
+ * sedly na jakoukoliv velikost; v mockupu to bylo ±470..610 px na desce 1400.
+ */
+const INTRO_LAYOUT: readonly { x: number; y: number; rot: number; back?: boolean }[] = [
+  { x: -40, y: 7, rot: -22 },
+  { x: -33.6, y: 15.6, rot: -12 },
+  { x: -43.6, y: 27.8, rot: -30, back: true },
+  { x: 40, y: 7.8, rot: 24 },
+  { x: 33.6, y: 16.7, rot: 12 },
+  { x: 43.6, y: 28.9, rot: 32, back: true },
+];
+
+/**
+ * Náhodné karty pro úvodní obrazovku — schválně `Math.random`, ne seedovaný
+ * generátor hry: je to dekorace, která se nesmí plést do reprodukovatelnosti
+ * rozdání (`?seed=`).
+ */
+function pickIntroCards(): Card[] {
+  const deck = Array.from({ length: 32 }, (_, i) => i as Card);
+  for (let i = deck.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [deck[i], deck[j]] = [deck[j], deck[i]];
+  }
+  return deck.slice(0, INTRO_LAYOUT.length);
+}
+
 /** Kolik posledních hlášek si pamatujeme, ať se neopakují. */
 const RECENT_TALK = 6;
 /** Jak dlouho bublina visí, a nejkratší doba, než ji smí přebít další. */

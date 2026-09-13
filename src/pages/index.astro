@@ -51,6 +51,9 @@ import Layout from '../layouts/Layout.astro';
 
         <div id="trick"></div>
 
+        <!-- úvodní obrazovka: vějíř skutečných karet, pokaždé jiná sada -->
+        <div id="intro" aria-hidden="true"></div>
+
         <div id="center-float"></div>
 
         <div class="me-row">
@@ -241,7 +244,34 @@ import Layout from '../layouts/Layout.astro';
   .seat-contract svg { flex: none; display: block; }
   #contract-me:not(:empty) { margin: 0 8px 0 0; }
 
-  /* štych: karty leží podle sedadel — levý soupeř vlevo, pravý vpravo, já dole */
+  /*
+   * Úvodní obrazovka: karty rozhozené u okrajů stolu (podle mockupu z Claude
+   * Design, artboard „1a Úvod"). Střed zůstává volný pro tlačítko a titulek.
+   * Vrstva je absolutní, takže nemění výšku stolu.
+   */
+  #intro {
+    position: absolute; inset: 0; overflow: hidden; border-radius: 16px;
+    pointer-events: none; z-index: 0;
+  }
+  #intro img {
+    /* POZOR: procenta v `translate()` se počítají z velikosti KARTY, ne stolu —
+       proto se pozice skládá v `left`/`top`, kde jsou procenta ze stolu. */
+    position: absolute;
+    left: calc(50% + var(--x)); top: calc(50% + var(--y));
+    width: calc(var(--card-w) * 1.35);
+    margin: calc(var(--card-w) * -1.0) 0 0 calc(var(--card-w) * -0.675);
+    border-radius: 9px;
+    transform: rotate(var(--rot));
+    box-shadow: 0 12px 32px rgba(0,0,0,.4);
+    opacity: .92;
+    animation: intro-in .55s cubic-bezier(.2,.8,.3,1) both;
+  }
+  @keyframes intro-in {
+    from { opacity: 0; transform: rotate(0deg) scale(.9); }
+  }
+  @media (prefers-reduced-motion: reduce) { #intro img { animation: none; } }
+
+  /* štych: karty leží podle sedadel  /* štych: karty leží podle sedadel — levý soupeř vlevo, pravý vpravo, já dole */
   #trick {
     flex: 1; position: relative;
     min-height: calc(var(--card-w) * 2.1);
