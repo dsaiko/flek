@@ -215,9 +215,11 @@ for (let i = 0; i < 400; i += 1) {
     }
   };
 
+  // POZOR na selektory: `.felt-panel` má i (skrytý) panel nastavení, a
+  // `count()` nevidí viditelnost — proto se hledá jen v `#center-float`.
   // popup na stole je potřeba potvrdit, ne ho brát za konec hry.
   // U volby hlášky se střídá „ohlásit" a „bez hlášky", ať se odzkouší obě větve.
-  if ((await page.locator('.felt-panel.warn').count()) > 0) {
+  if ((await page.locator('#center-float .felt-panel.warn').count()) > 0) {
     /*
      * Přepnutí jazyka překresluje stůl TÝMŽ stavem — otevřený popup i s
      * čekající volbou to nesmí zahodit (jinak hráč klikl a nic se nestalo).
@@ -226,7 +228,7 @@ for (let i = 0; i < 400; i += 1) {
     if (!popupSurvivedLang) {
       await page.click('.langpill button[data-lang="en"]');
       await page.waitForTimeout(250);
-      const stillThere = await page.locator('.felt-panel.warn').count();
+      const stillThere = await page.locator('#center-float .felt-panel.warn').count();
       if (stillThere === 0) {
         console.error('CHYBA: přepnutí jazyka zahodilo otevřený popup i s čekající volbou');
         await browser.close();
@@ -234,7 +236,7 @@ for (let i = 0; i < 400; i += 1) {
       }
       await page.click('.langpill button[data-lang="cs"]');
       await page.waitForTimeout(250);
-      if ((await page.locator('.felt-panel.warn').count()) === 0) {
+      if ((await page.locator('#center-float .felt-panel.warn').count()) === 0) {
         console.error('CHYBA: popup nepřežil přepnutí jazyka zpět');
         await browser.close();
         process.exit(1);
@@ -254,7 +256,7 @@ for (let i = 0; i < 400; i += 1) {
   }
 
   // výsledková obrazovka (panel na stole) → konec smoke testu
-  if ((await page.locator('.felt-panel:not(.warn)').count()) > 0) {
+  if ((await page.locator('#center-float .felt-panel:not(.warn)').count()) > 0) {
     await page.screenshot({ path: join(outDir, 'smoke-5-result.png'), clip: await tableClip() });
     reachedSettlement = true;
     console.log('OK: dohráno až k zúčtování');
@@ -303,7 +305,17 @@ const handFingerprint = async (): Promise<string> =>
     (imgs) => imgs.map((i) => (i as HTMLImageElement).getAttribute('src') ?? '').join('|'),
   ));
 
-await page.click('#btn-new');
+/*
+ * „Nová hra" vede na ÚVODNÍ obrazovku s volbou varianty — teprve „Rozdat"
+ * začne hru. Smoke to musí projít stejně jako člověk.
+ */
+const newGame = async (): Promise<void> => {
+  await page.click('#btn-new');
+  await page.waitForSelector('#intro-panel', { state: 'visible', timeout: 4000 });
+  await page.click('#actions .action-btn.primary');
+};
+
+await newGame();
 await page.waitForSelector('#table.animating', { state: 'detached', timeout: 5000 });
 
 /*
@@ -316,7 +328,7 @@ await page.waitForSelector('#table.animating', { state: 'detached', timeout: 500
  * tahle kontrola nesmí být hned po dohrání.) Na přítomnost třídy se spolehnout
  * nelze, ptáme se prohlížeče, jestli animace opravdu BĚŽÍ.
  */
-await page.click('#btn-new');
+await newGame();
 await page.waitForTimeout(250);
 const dealAnimations = await page.evaluate(() =>
   Array.from(document.querySelectorAll('#hand .card-btn'))
@@ -332,7 +344,7 @@ const fromPeople = page.getByRole('button', { name: /lidu|people|Volk/i });
 if ((await fromPeople.count()) > 0) {
   await fromPeople.first().click();
   await page.waitForTimeout(150); // odhalení „z lidu" právě běží (1,8 s)
-  await page.click('#btn-new');
+  await newGame();
   await page.waitForSelector('#table.animating', { state: 'detached', timeout: 6000 });
   const afterNewMatch = await handFingerprint();
   await page.waitForTimeout(2500); // delší než opuštěné odhalení + jeho dokreslení
@@ -356,7 +368,7 @@ if ((await fromPeople.count()) > 0) {
  */
 await page.click('#btn-new');
 await page.waitForTimeout(50);
-await page.click('#btn-new');
+await newGame();
 await page.waitForTimeout(1800);
 const dealtAfterRestarts = await page.locator('#hand .card-btn').count();
 const stillAnimating = await page.locator('#table.animating').count();
