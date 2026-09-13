@@ -496,6 +496,23 @@ procesem. Jeden worker pro obě AI (myslí sekvenčně).
 - Stránka podle mars vzoru: `Layout.astro` (lang-pill CZ/EN, meta, GoatCounter), nahoře hrací
   stůl, pod ním obsahové sekce (viz §5.6)
 
+### 5.5.1 Úvodní obrazovka (podle mockupu z Claude Design)
+
+Mockup `Marias.dc.html` (projekt 787ace27) má dva artboardy: **1a Úvod** (výběr varianty
++ rozdání) a **1b Stůl** (herní stůl s nastavením v rámu). Společné prvky: tmavý rám kolem
+sukna se zlatým lemem `inset 0 0 0 2px rgba(225,182,0,.35)`, akcentní zlatá `#e1b600`,
+krémová karta `#f3ead6`, zelený rub `#2d6b46`, lišta nastavení **uvnitř rámu** pod suknem
+(tmavé „chipy" místo systémových selectů, zvuky jako přepínač), avataři hráčů s kolečkem,
+stav hry jako pilulka uprostřed nahoře.
+
+Zapracováno zatím: **dekorační karty na úvodní obrazovce**. Mockup tam měl obdélníky
+s písmenem; místo nich se ukazují **skutečné karty z `cards/history/`** (u okrajů ve dvou
+shlucích, střed volný pro tlačítko), z toho dvě rubem. **Sada se losuje při každém příchodu
+na úvodní obrazovku** — schválně přes `Math.random`, ne přes seedovaný generátor hry, aby se
+dekorace nepletla do reprodukovatelnosti rozdání (`?seed=`). Souřadnice jsou v procentech
+stolu; pozor, že procenta v `translate()` se počítají z velikosti KARTY, takže se pozice
+skládá v `left`/`top`.
+
 ### 5.6 Obsah stránky (dokumenty)
 
 Pod hracím stolem, bilingválně CZ/EN:
