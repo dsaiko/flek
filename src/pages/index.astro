@@ -544,15 +544,15 @@ import Layout from '../layouts/Layout.astro';
        deklarace je pak neplatná a tlačítko spadne na výchozích 13 px. Proto
        jsou vlastnosti rozepsané. */
     font-family: inherit; font-weight: 600;
-    font-size: clamp(15px, 2.75cqh, 32px); line-height: 1.25;
-    padding: clamp(9px, 1.9cqh, 24px) clamp(24px, 5.6cqh, 70px);
+    font-size: clamp(14px, 2.3cqh, 28px); line-height: 1.25;
+    padding: clamp(8px, 1.55cqh, 19px) clamp(20px, 4.5cqh, 56px);
     border-radius: 9px; border: 0;
     background: #eafcf6; color: #0a4a52; cursor: pointer; box-shadow: 0 2px 0 rgba(0,0,0,.25);
   }
   /* ikona nesmí roztahovat řádek tlačítka */
   .action-btn svg { flex: none; display: block; }
   .action-btn.primary { background: var(--gold); color: var(--frame); }
-  #table.idle #actions .action-btn { padding-inline: clamp(30px, 7.6cqh, 94px); }
+  #table.idle #actions .action-btn { padding-inline: clamp(26px, 6.2cqh, 78px); }
   .action-btn:disabled { opacity: .45; cursor: default; }
   .action-note { align-self: center; color: #ffe9a8; font-size: 13px; max-width: 420px; }
   .action-btn:not(:disabled):hover { filter: brightness(1.04); }
