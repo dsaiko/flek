@@ -1255,3 +1255,31 @@ plus devět duplicit a nízkohodnotných testových nálezů.
 
 Všechny tři nové browser kontroly (vyúčtování ve francouzštině, sticky dotaz, přetečení
 figury) byly ověřeny **negativní kontrolou** — s vrácenou chybou skutečně padají.
+
+## 22. Fixpoint review PR — druhé kolo (2026-09-14, po 5fd2b6f)
+
+16 nálezů, 7 zamítnutých soudcem. Bezpečnostní čočka opět nic. Tři nálezy míří na testy
+z prvního kola — to je dobrá zpráva: recenzenti čtou i to, čím se opravy dokazují.
+
+| # | závažnost | nález | oprava |
+|---|---|---|---|
+| i4 | high | ve fázi **převzetí** drží nárok `phase.standing`, zatímco `state.contract` je překonaná deklarace — vzdání proti převzatému betlu se účtovalo jako holá hra (sazba 1 místo 15) a do výsledku šel aktér, který hru už nedrží | `contractToSettle()` bere ve fázi `takeover` nárok ze `standing`; převzetí betlem ruší sedmu i kilo z překonané deklarace |
+| i9 | high | test vzdání neprokazoval, že **každá komponenta má svůj flek** — kdyby měly všechny stejnou úroveň, sdílený multiplikátor by prošel | flekování ve fixtuře jede podle rozpisu (hra 2×, sedma 1×) a test **tvrdí, že se úrovně liší** |
+| i15 | high | blok s betlem/durchem byl schovaný v `if` a mohl tiše nikdy neproběhnout | scénář je vynucený: nárok `betl` je ve fázi převzetí legální vždy, takže se dá vyvolat deterministicky (a rovnou pokrývá i i4) |
+| i1 | medium | potvrzení **zastaralého** dotazu na ukončení (hra mezitím sama doběhla) smazalo obsah středu a vyúčtování se už nevrátilo | větev „není co vzdávat" překreslí stůl |
+| i5 | medium | návrat na úvodní obrazovku zakládal **nový zápas** — konto se nulovalo při každé nové hře a řádek „Minule" byl vždy prázdný | `newMatchIdle(keepBank)` přenáší konto, odehrané hry i rotaci rozdávajícího; nuluje jen nastavení |
+| i7 | medium | kontrola i16 („dva rychlé restarty") po zavedení „Ukončit hru" **nic neověřovala** — první klik jen otevře dotaz, jehož tlačítka jsou během animace inertní, takže se dvě rozdání nepřekryjí | kontrola přepsaná na to, co reálně nastat může: restart uprostřed rozdávání nesmí zaseknout řetěz (měří se wall-clock); rušení opuštěných animací dál hlídá kontrola „z lidu", kde je překryv skutečný |
+| i12 | medium | strážce u „Vynulovat konto" neměl test | smoke: dotaz musí přijít a zamítnutí nesmí změnit rozehranou hru |
+| — | low | `openPopupSticky` bylo samostatné pole a **přežívalo popup**, pro který bylo nastavené (po sticky dotazu by se neplatná volba hlášky překreslila nad cizím stavem) | stav popupu je jeden objekt `{ paint, sticky }` — vlastnost nemůže popup přežít |
+| i3 | low | francouzské „Couleur ?" místo výzvy k převzetí | „Tu acceptes, ou tu reprends ?" |
+| i6 | low | vzdání bez deklarace si dosazovalo trumf ♥ a vyúčtování hlásilo barvu, která nepadla | `trump: null` |
+
+**Vedlejší důsledek i5:** rozdávající se nově posouvá i přes „Novou hru", takže člověk je
+forhont až každé třetí rozdání (správně podle pravidel). Smoke si na „z lidu" proto počká
+a zkusí až tři rozdání — dřív spoléhal na to, že restart vždycky vrátí člověka na forhonta.
+
+Zamítnuto: sedm duplicit a nízkohodnotných nálezů, mimo jiné „zrušení sticky popupu obchází
+frontu překreslování" (okno zavírá CSS: `#table.animating .action-btn { pointer-events: none }`).
+
+Negativní kontrolou ověřeno všech pět nových kontrol (účtování převzetí, vlastní flek
+komponenty, dotaz u nulování konta, přenos konta a řádku „Minule").

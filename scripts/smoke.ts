@@ -218,6 +218,38 @@ await page.waitForSelector('#table.animating', { state: 'detached', timeout: 500
 }
 
 /*
+ * „Vynulovat konto" zakládá nový zápas, takže by rozehranou hru zahodilo bez
+ * zúčtování. Musí se proto nejdřív zeptat — a dokud hráč nepotvrdí, nesmí se
+ * na stole nic změnit.
+ */
+{
+  const handBefore = await page.locator('#hand .card-btn img').evaluateAll(
+    (els) => els.map((e) => (e as HTMLImageElement).src).join('|'),
+  );
+  await page.click('#btn-settings');
+  await page.waitForSelector('#settings-float:not([hidden])', { timeout: 2000 });
+  await page.click('#settings-reset');
+  const warn = page.locator('#center-float .felt-panel.warn');
+  try {
+    await warn.waitFor({ timeout: 2000 });
+  } catch {
+    console.error('CHYBA: „Vynulovat konto" zahodilo rozehranou hru bez dotazu');
+    await browser.close();
+    process.exit(1);
+  }
+  await page.click('[data-act="cancel"]');
+  await page.waitForTimeout(200);
+  const handAfter = await page.locator('#hand .card-btn img').evaluateAll(
+    (els) => els.map((e) => (e as HTMLImageElement).src).join('|'),
+  );
+  if (handAfter !== handBefore || handAfter.length === 0) {
+    console.error('CHYBA: zamítnuté vynulování konta přesto změnilo rozehranou hru');
+    await browser.close();
+    process.exit(1);
+  }
+}
+
+/*
  * i3: přepnutí jazyka hned po rozdání (historie má délku 1) nesmí znovu
  * přehrát animaci rozdávání — výjimka pro nový zápas nesmí obejít ochranu
  * proti překreslení TÝMŽ stavem.
@@ -490,7 +522,16 @@ if (dealAnimations === 0) {
   process.exit(1);
 }
 await page.waitForSelector('#table.animating', { state: 'detached', timeout: 5000 });
+/*
+ * „Z lidu" nabízí jen forhont, a rozdávající se od té doby, co „Nová hra"
+ * pokračuje ve stejném zápase, POSOUVÁ — člověk je tedy forhont až každé
+ * třetí rozdání. Zkusíme proto až tři rozdání, než kontrolu vzdáme.
+ */
 const fromPeople = page.getByRole('button', { name: /lidu|people|Volk/i });
+for (let attempt = 0; attempt < 3 && (await fromPeople.count()) === 0; attempt += 1) {
+  await newGame();
+  await page.waitForSelector('#table.animating', { state: 'detached', timeout: 6000 });
+}
 if ((await fromPeople.count()) > 0) {
   await fromPeople.first().click();
   await page.waitForTimeout(150); // odhalení „z lidu" právě běží (1,8 s)
@@ -513,22 +554,70 @@ if ((await fromPeople.count()) > 0) {
 }
 
 /*
- * i16: dva rychlé kliky na „Nový zápas" nesmí zařadit nový zápas do fronty za
- * animacemi opuštěných — bez zrušení by se čekalo ~2,5 s místo ~1,3 s.
+ * i16 (přepsáno). Původní podoba — dva rychlé kliky na „Nový zápas" — už nic
+ * neověřovala: od zavedení „Ukončit hru" první klik jen otevře dotaz, jehož
+ * tlačítka jsou během animace nekliknutelná
+ * (`#table.animating .action-btn { pointer-events: none }`). Dvě rozdání se
+ * přes UI nepřekryjí a kontrola procházela vždycky.
+ *
+ * Co zůstává ověřitelné: klik na „Nová hra" UPROSTŘED rozdávání nesmí řetěz
+ * překreslování zaseknout — dotaz se objeví, po doběhnutí animace zafunguje
+ * a nové rozdání doběhne v čase jednoho rozdávání, ne dvou. Samotné rušení
+ * opuštěných animací hlídá kontrola „z lidu" výš, kde odhalení `animating`
+ * nenastavuje a překryv je skutečný.
  */
-await page.click('#btn-new');
-await page.waitForTimeout(50);
 await newGame();
-await page.waitForTimeout(1800);
-const dealtAfterRestarts = await page.locator('#hand .card-btn').count();
-const stillAnimating = await page.locator('#table.animating').count();
-if (dealtAfterRestarts === 0 || stillAnimating > 0) {
-  console.error(
-    `CHYBA: nový zápas uvízl za animacemi opuštěných (karet: ${dealtAfterRestarts}, animuje: ${stillAnimating})`,
-  );
+await page.waitForTimeout(120);
+if ((await page.locator('#table.animating').count()) === 0) {
+  console.error('CHYBA: rozdávání neběželo — kontrola restartu za běhu animace by nic neověřila');
   await browser.close();
   process.exit(1);
 }
+await page.click('#btn-new'); // za běhu animace: dotaz se otevře, tlačítka zatím nereagují
+await page.waitForSelector('#center-float .felt-panel.warn', { timeout: 3000 });
+const restartStart = Date.now();
+await page.click('[data-act="confirm"]'); // Playwright počká, až tlačítko ožije
+// potvrzení hru vyúčtuje jako prohru → na úvodní obrazovku vede až další klik
+await page.waitForSelector('#center-float .felt-panel:not(.warn)', { timeout: 4000 });
+await page.click('#btn-new');
+await page.waitForSelector('#intro-panel', { state: 'visible', timeout: 4000 });
+
+/*
+ * Úvodní obrazovka je vstup do KAŽDÉ hry, ne začátek nového zápasu: konto
+ * i řádek „Minule" musí přechod přežít. Kdyby „Nová hra" zakládala nový
+ * zápas, banka by nikdy nevznikla a shrnutí by bylo vždycky prázdné.
+ */
+{
+  const last = ((await page.locator('#intro-last').innerText()) ?? '').trim();
+  if (last.length === 0) {
+    console.error('CHYBA: úvodní obrazovka zapomněla minulou hru (řádek „Minule" je prázdný)');
+    await browser.close();
+    process.exit(1);
+  }
+  // právě jsme hru vzdali, takže konto člověka nesmí být nulové
+  const money = ((await page.locator('#seat-me .seat-meta, .me-meta').first().innerText()) ?? '').trim();
+  if (/^0[,.]00/.test(money) || !/[1-9]/.test(money)) {
+    console.error(`CHYBA: „Nová hra" vynulovala konto (u hráče stojí „${money}")`);
+    await browser.close();
+    process.exit(1);
+  }
+}
+
+await page.click('#actions .action-btn.primary');
+await page.waitForSelector('#table.animating', { state: 'detached', timeout: 6000 });
+const restartMs = Date.now() - restartStart;
+if ((await page.locator('#hand .card-btn').count()) === 0) {
+  console.error('CHYBA: po restartu uprostřed rozdávání se nerozdalo');
+  await browser.close();
+  process.exit(1);
+}
+// jedno rozdávání ≈ 1,3 s; kdyby nové čekalo za opuštěným, přibyly by ~2,5 s
+if (restartMs > 4500) {
+  console.error(`CHYBA: restart uprostřed rozdávání trval ${restartMs} ms — řetěz se zadrhl`);
+  await browser.close();
+  process.exit(1);
+}
+console.log(`Restart uprostřed rozdávání: ${restartMs} ms`);
 
 if (!popupSurvivedLang) {
   console.error('CHYBA: v běhu nenastal žádný popup — kontrola přepnutí jazyka neproběhla');

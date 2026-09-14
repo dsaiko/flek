@@ -543,9 +543,35 @@ function settlePlainHra(state: GameState, contract: Contract): GameState {
  * Bez kontraktu (ještě se nekomentovalo) se platí základní sazba hry — vzdát
  * rozdanou hru něco stát musí, jinak by to bylo zdarma řešení špatných karet.
  */
+/**
+ * Závazek, který se u vzdání platí.
+ *
+ * Ve fázi převzetí žije nárok v `phase.standing`, zatímco `state.contract`
+ * pořád drží PŘEKONANOU deklaraci. Bez tohohle přepočtu by se vzdání proti
+ * převzatému betlu účtovalo jako holá hra (sazba 1 místo 15) a do výsledku
+ * by se zapsal aktér, který už hru nedrží.
+ */
+function contractToSettle(state: GameState): Contract | null {
+  const phase = state.phase;
+  if (phase.name !== 'takeover') return state.contract;
+  const st = phase.standing;
+  const same = state.contract !== null
+    && state.contract.declarer === st.declarer
+    && state.contract.mode === st.mode;
+  return {
+    mode: st.mode ?? 'hra',
+    trump: st.trump,
+    declarer: st.declarer,
+    // sedma/kilo patřily k překonané deklaraci; převzetí betlem je ruší
+    sedma: same ? state.contract!.sedma : null,
+    kilo: same ? state.contract!.kilo : null,
+    dveSedmy: same ? state.contract!.dveSedmy : false,
+  };
+}
+
 function concede(state: GameState, seat: Seat): GameState {
   const s = state.config.sazby;
-  const contract = state.contract;
+  const contract = contractToSettle(state);
   const levels = flekLevelsFromHistory(state);
   const mode = contract?.mode ?? 'hra';
   // červený trumf násobí barevné závazky (hra/sedma/kilo), betl a durch ne
@@ -602,7 +628,9 @@ function concede(state: GameState, seat: Seat): GameState {
   const result: import('./types').HandResult = {
     handNo: state.handNo,
     contract: contract ?? {
-      mode: 'hra', trump: CERVENE, declarer: seat, sedma: null, kilo: null, dveSedmy: false,
+      // ještě se nekomentovalo: hra bez trumfu, ať vyúčtování nehlásí barvu,
+      // která nikdy nepadla (a která by naznačovala červený násobek)
+      mode: 'hra', trump: null, declarer: seat, sedma: null, kilo: null, dveSedmy: false,
     },
     cardPoints: { declarer: 0, defenders: 0 },
     marriagePoints: { declarer: 0, defenders: 0 },

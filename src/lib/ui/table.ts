@@ -62,9 +62,14 @@ export class TableUI {
    * vzoru karet) čistí `#center-float`, což by jinak popup i s čekající volbou
    * hráče tiše zahodilo — proto se umí znovu postavit.
    */
-  private openPopup: (() => void) | null = null;
-  /** Popup, který přežije i skutečný posun hry (dotaz mimo herní stav). */
-  private openPopupSticky = false;
+  /**
+   * Otevřený popup i s jeho „lepivostí" v jednom objektu.
+   *
+   * Vlastnost nesmí žít zvlášť: kdyby zůstala v samostatném poli, přežila by
+   * popup, pro který byla nastavená — po sticky dotazu by se pak neplatný
+   * dotaz na hlášku překreslil nad stavem, do kterého už nepatří.
+   */
+  private openPopup: { paint: () => void; sticky: boolean } | null = null;
   /**
    * Generace zápasu. Animace spí až ~1,8 s a jsou zařazené do `chain`, takže
    * nový zápas by čekal za animacemi toho starého (a při opakovaných klicích
@@ -128,7 +133,6 @@ export class TableUI {
     this.gen += 1;
     this.prevState = null;
     this.openPopup = null;
-    this.openPopupSticky = false;
     this.selected.clear();
     for (const wake of [...this.sleepers]) wake();
     // bubliny mají vlastní 2,6s časovač — bez zhasnutí by hláška mrtvého
@@ -157,7 +161,7 @@ export class TableUI {
     this.prevState = state;
     // skutečný posun hry popup zneplatňuje (obnovuje se jen při překreslení
     // TÝMŽ stavem, tedy při přepnutí jazyka nebo vzoru karet)
-    if (prev !== null && prev !== state && !this.openPopupSticky) this.openPopup = null;
+    if (prev !== null && prev !== state && this.openPopup?.sticky !== true) this.openPopup = null;
     /*
      * Jakmile se stav pohne, „Momentíček…" přestává platit — a sundat ho je
      * potřeba TEĎ, ne až v renderNow: mezi tím leží animace dohraného štychu
@@ -297,7 +301,7 @@ export class TableUI {
       if (delta !== 0) this.sounds.play(delta > 0 ? 'win' : 'lose');
     }
     // popup přežije překreslení týmž stavem (jazyk, vzor karet)
-    this.openPopup?.();
+    this.openPopup?.paint();
   }
 
   // ── animace ────────────────────────────────────────────────────────────────
@@ -1026,8 +1030,7 @@ export class TableUI {
   private showConfirmPopup(
     messages: string[], confirmLabel: string, onConfirm: () => void, sticky = false,
   ): void {
-    this.openPopupSticky = sticky;
-    this.openPopup = () => this.paintConfirmPopup(messages, confirmLabel, onConfirm);
+    this.openPopup = { paint: () => this.paintConfirmPopup(messages, confirmLabel, onConfirm), sticky };
     this.paintConfirmPopup(messages, confirmLabel, onConfirm);
   }
 
@@ -1043,13 +1046,11 @@ export class TableUI {
     </div>`;
     float.querySelector('[data-act="cancel"]')?.addEventListener('click', () => {
       this.openPopup = null;
-      this.openPopupSticky = false;
       if (this.prevState) this.renderNow(this.prevState);
       else { float.classList.remove('open'); float.innerHTML = ''; }
     });
     float.querySelector('[data-act="confirm"]')?.addEventListener('click', () => {
       this.openPopup = null;
-      this.openPopupSticky = false;
       float.classList.remove('open');
       float.innerHTML = '';
       onConfirm();
@@ -1062,7 +1063,8 @@ export class TableUI {
     primary: { label: string; onPick: () => void },
     secondary: { label: string; onPick: () => void },
   ): void {
-    this.openPopup = () => this.paintChoicePopup(question, primary, secondary);
+    // volba je vždycky o AKTUÁLNÍM stavu → nikdy sticky
+    this.openPopup = { paint: () => this.paintChoicePopup(question, primary, secondary), sticky: false };
     this.paintChoicePopup(question, primary, secondary);
   }
 
