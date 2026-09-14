@@ -3236,18 +3236,27 @@ console.log('PASS karty — názvy barev a hodnot ve všech čtyřech jazycích'
   type S = ReturnType<typeof init>;
   const cfg = defaultConfig('licitovany');
 
-  /** Dohraj aukci; ve fázi fleků upřednostni flek, ať je multiplikátor > 1. */
-  const driveToTricks = (seed: number): S => {
+  /**
+   * Dohraj aukci a ve fázi fleků flekuj podle rozpisu `want`.
+   *
+   * Rozpis je tam schválně: kdyby měly všechny komponenty STEJNOU úroveň
+   * fleku, test by nerozlišil „každá komponenta má svůj flek" od „všechny
+   * berou flek hry". Proto se flekuje hra dvakrát a sedma jednou.
+   */
+  const driveToTricks = (seed: number, want: string[] = ['hra', 'hra', 'sedma']): S => {
     let st: S = ap(init(cfg, 2), { type: 'deal', seed });
-    let fleks = 0;
+    const queue = [...want];
     for (let steps = 0; steps < 400 && st.phase.name !== 'tricks' && st.phase.name !== 'scored'; steps += 1) {
       for (const seat of [0, 1, 2] as const) {
         const v = viewOf(st, seat);
         const acts = legal(v);
         if (acts.length === 0) continue;
-        const flekAct = fleks < 2 ? acts.find((a) => a.type === 'flek') : undefined;
+        const wanted = queue[0];
+        const flekAct = wanted === undefined
+          ? undefined
+          : acts.find((a) => a.type === 'flek' && a.target === wanted);
         if (flekAct) {
-          fleks += 1;
+          queue.shift();
           st = ap(st, flekAct);
         } else {
           const { action } = thinkC({
@@ -3269,8 +3278,14 @@ console.log('PASS karty — názvy barev a hodnot ve všech čtyřech jazycích'
   assert.notEqual(contract.sedma, null, 'seed 4 měl hlásit sedmu — test by jinak nic neověřil');
   assert.notEqual(contract.kilo, null, 'seed 4 měl hlásit kilo — test by jinak nic neověřil');
   assert.equal(contract.trump, CERV, 'seed 4 měl hrát červené — test by jinak neověřil násobek');
-  const flekCount = st.history.filter((a) => a.type === 'flek').length;
-  assert.ok(flekCount > 0, 've fázi fleků nepadl ani jeden flek — test by neověřil multiplikátor');
+  const flekLevels: Record<string, number> = {};
+  for (const a of st.history) if (a.type === 'flek') flekLevels[a.target] = (flekLevels[a.target] ?? 0) + 1;
+  assert.ok((flekLevels.hra ?? 0) > 0, 'na hru nepadl flek — test by neověřil multiplikátor');
+  assert.ok((flekLevels.sedma ?? 0) > 0, 'na sedmu nepadl flek — test by neověřil vlastní flek komponenty');
+  assert.notEqual(
+    flekLevels.hra, flekLevels.sedma,
+    'hra a sedma mají stejnou úroveň fleku — test by nerozlišil vlastní flek od sdíleného',
+  );
 
   // vzdání NENÍ v legálních akcích — jinak by ho AI mohla zahrát sama
   for (const seat of [0, 1, 2] as const) {
@@ -3332,29 +3347,64 @@ console.log('PASS karty — názvy barev a hodnot ve všech čtyřech jazycích'
   assert.throws(() => ap(init(cfg, 2), { type: 'concede', seat: 0 }), /rozehranou/, 'concede v idle musí selhat');
   assert.throws(() => ap(after, { type: 'concede', seat: 0 }), /rozehranou/, 'concede po zúčtování musí selhat');
 
-  // betl/durch se vzdává za svou sazbu, bez červeného násobku
+  /*
+   * Převzetí betlem: ve fázi `takeover` drží nárok `phase.standing`, zatímco
+   * `state.contract` je PŘEKONANÁ deklarace. Vzdání se proto musí účtovat
+   * podle nároku (betl), ne podle staré hry — jinak by šlo utéct z betlu za
+   * sazbu holé hry. Scénář je vynucený (nárok `betl` je legální vždy), takže
+   * nemůže tiše vypadnout.
+   */
   {
-    let bst: S = ap(init(cfg, 2), { type: 'deal', seed: 4 });
-    for (let steps = 0; steps < 400 && bst.phase.name !== 'tricks' && bst.phase.name !== 'scored'; steps += 1) {
+    const cfgV = defaultConfig('voleny');
+    let tst: S = ap(init(cfgV, 2), { type: 'deal', seed: 4 });
+    let claimed: number | null = null;
+    for (let steps = 0; steps < 200 && tst.phase.name !== 'tricks' && tst.phase.name !== 'scored'; steps += 1) {
+      if (tst.phase.name === 'takeover' && claimed === null) {
+        const actor = tst.phase.toAct;
+        const claim = legal(viewOf(tst, actor)).find((a) => a.type === 'takeover' && a.claim === 'betl');
+        assert.ok(claim, 'převzetí betlem musí být ve fázi takeover vždy legální');
+        claimed = actor;
+        tst = ap(tst, claim);
+        break; // vzdáváme ROVNOU ve fázi převzetí, dokud je contract překonaný
+      }
       for (const seat of [0, 1, 2] as const) {
-        const v = viewOf(bst, seat);
+        const v = viewOf(tst, seat);
         const acts = legal(v);
         if (acts.length === 0) continue;
         const { action } = thinkC({
-          view: v, difficulty: 'easy', seed: Rnd.derive(999, steps * 3 + seat), budgetMs: 0, iterations: 0,
+          view: v, difficulty: 'easy', seed: Rnd.derive(4, steps * 3 + seat), budgetMs: 0, iterations: 0,
         });
-        bst = ap(bst, action);
+        tst = ap(tst, action);
         break;
       }
     }
-    if (bst.phase.name === 'tricks' && bst.contract && bst.contract.mode !== 'hra') {
-      const mode = bst.contract.mode;
-      const out = ap(bst, { type: 'concede', seat: bst.contract.declarer });
-      const r = out.phase.name === 'scored' ? out.phase.result : null;
-      assert.ok(r);
-      assert.deepEqual(r.components.map((c) => c.target), [mode], 'betl/durch se vzdává jako jediná komponenta');
-      assert.equal(r.components[0]!.extraMultiplier, 1, 'betl/durch nemá červený násobek');
-    }
+    assert.notEqual(claimed, null, 'scénář s převzetím betlem vůbec nenastal — test by nic neověřil');
+    assert.equal(tst.phase.name, 'takeover', 'po převzetí se má pokračovat ve fázi takeover');
+    // rozlišující bod: starý kontrakt je pořád hra, nárok je betl
+    assert.notEqual(tst.contract, null, 'fixtura předpokládá už deklarovanou hru');
+    assert.equal(tst.contract!.mode, 'hra', 'fixtura předpokládá překonanou hru v contractu');
+
+    const out = ap(tst, { type: 'concede', seat: claimed as 0 | 1 | 2 });
+    const r = out.phase.name === 'scored' ? out.phase.result : null;
+    assert.ok(r);
+    assert.deepEqual(r.components.map((c) => c.target), ['betl'], 'vzdání po převzetí se účtuje jako betl');
+    assert.equal(r.components[0]!.baseRate, cfgV.sazby.betl, 'účtuje se sazba betlu, ne hry');
+    assert.equal(r.components[0]!.extraMultiplier, 1, 'betl nemá červený násobek');
+    assert.equal(r.contract.declarer, claimed, 'do výsledku patří ten, kdo hru drží po převzetí');
+    assert.equal(-r.delta[claimed as 0 | 1 | 2], 2 * cfgV.sazby.betl, 'vzdávající platí betl oběma');
+    assert.notEqual(cfgV.sazby.betl, cfgV.sazby.hra, 'sazby betlu a hry se musí lišit, jinak test nic nerozliší');
+  }
+
+  // vzdání ještě před deklarací: základní sazba hry a ŽÁDNÁ vymyšlená barva
+  {
+    const cfgV = defaultConfig('voleny');
+    const fresh: S = ap(init(cfgV, 2), { type: 'deal', seed: 4 });
+    assert.equal(fresh.contract, null, 'fixtura předpokládá stav před deklarací');
+    const out = ap(fresh, { type: 'concede', seat: 0 });
+    const r = out.phase.name === 'scored' ? out.phase.result : null;
+    assert.ok(r);
+    assert.equal(r.contract.trump, null, 'bez deklarace se nesmí dosadit trumfová barva');
+    assert.equal(-r.delta[0], 2 * cfgV.sazby.hra, 'bez kontraktu se platí základní sazba hry');
   }
 }
 console.log('PASS vzdání — platí se celý stojící závazek, mimo legalActions, replay sedí');

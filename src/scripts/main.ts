@@ -7,8 +7,9 @@ import { MatchController } from '../lib/match/controller';
 import { clearMatch, loadMatch, saveMatch } from '../lib/match/persist';
 import { createSeedSequence, parseSeedParam } from '../lib/match/seedSequence';
 import { createWorkerDriver } from '../lib/match/workerDriver';
+import { initialState } from '../lib/rules/engine';
 import { defaultConfig } from '../lib/rules/sazby';
-import type { GameState, Variant } from '../lib/rules/types';
+import { nextSeat, type GameState, type Variant } from '../lib/rules/types';
 import type { Pattern } from '../lib/ui/cardAssets';
 import { createSounds } from '../lib/ui/sounds';
 import type { TalkSet } from '../lib/ui/tableTalk';
@@ -140,13 +141,32 @@ const table = new TableUI($('table'), {
   },
 });
 
-/** Nový zápas, ale bez rozdání — úvodní obrazovka s vybranou variantou. */
-function newMatchIdle(): void {
+/**
+ * Zpět na úvodní obrazovku, bez rozdání.
+ *
+ * `keepBank` = konto, odehrané hry a rotace rozdávajícího se přenesou.
+ * „Nová hra" je od té doby, co je úvodní obrazovka vstupem do každé hry,
+ * běžný přechod mezi hrami — kdyby nulovala konto, banka by nikdy nevznikla
+ * a řádek „Minule" by byl vždycky prázdný. Konto nuluje jen nastavení.
+ */
+function newMatchIdle(keepBank = true): void {
+  const prev = controller?.state ?? null;
   controller?.stop();
   clearMatch();
   table.reset();
-  controller = makeController();
+  const carry =
+    keepBank && prev !== null && prev.handResults.length > 0
+      ? {
+          ...initialState(defaultConfig(settings.variant), nextSeat(prev.dealer)),
+          ledger: prev.ledger,
+          handResults: prev.handResults,
+          handNo: prev.handNo,
+        }
+      : undefined;
+  controller = makeController(carry);
   table.render(controller.state);
+  // banku je potřeba udržet i přes reload, jinak ji sebere refresh na úvodní obrazovce
+  if (carry) saveMatch(controller.state);
 }
 
 function newMatch(): void {
@@ -213,12 +233,12 @@ $('settings-reset').addEventListener('click', () => {
   // konto je součást stavu hry, takže ho nuluje až nový zápas — a ten by
   // zahodil rozehranou hru. Bez dotazu by o ni hráč přišel jedním kliknutím.
   if (!inPlay()) {
-    newMatchIdle();
+    newMatchIdle(false);
     updateNewButton();
     return;
   }
   table.confirm(t('resetMoneyWarn'), t('resetMoney'), () => {
-    newMatchIdle();
+    newMatchIdle(false); // jediné místo, kde se konto opravdu nuluje
     updateNewButton();
   }, true);
 });
@@ -284,8 +304,13 @@ newBtn.addEventListener('click', () => {
   }
   // sticky: dotaz není o stavu hry, takže ho tah AI nesmí sundat pod rukama
   table.confirm(t('endGameWarn'), t('endGame'), () => {
-    // hra mohla mezitím sama doběhnout — pak není co vzdávat
-    if (!inPlay()) { updateNewButton(); return; }
+    // hra mohla mezitím sama doběhnout — pak není co vzdávat, ale popup už
+    // smazal obsah středu, takže se musí vrátit vyúčtování
+    if (!inPlay()) {
+      table.render(controller.state);
+      updateNewButton();
+      return;
+    }
     try {
       controller.dispatch({ type: 'concede', seat: 0 });
     } catch (e) {
