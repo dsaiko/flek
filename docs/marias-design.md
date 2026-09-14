@@ -1222,3 +1222,36 @@ přesně v to tiché no-op, o kterém review mluví.
 | i12 | low | `reset()` probudil animace, ale nechal běžet 2,6s časovače bublin — hláška mrtvého zápasu tak visela nad rozdáváním nového | `reset()` zhasne bubliny a zapomene `lastHistoryLen` |
 
 `make verify` má **64 PASS bloků**, `make smoke` kontroluje šest věcí v prohlížeči.
+
+## 21. Fixpoint review PR — první kolo (2026-09-14, PR #2 „design stolu, francouzština")
+
+Tři recenzenti × čtyři čočky (bugs, security, concurrency, tests), 25 nálezů, 10 zamítnutých
+soudcem jako duplicity nebo málo hodnotné. Bezpečnostní čočka nenašla nic.
+
+| # | závažnost | nález | oprava |
+|---|---|---|---|
+| i1/i8/i11 | high | `compLabel()` skládal popisek z `base[lang]` jen pro en/de — s francouzštinou byl `base['fr']` `undefined` a **padalo každé vyúčtování** (a s ním hra) | tabulka je `Record<Lang, …>` s explicitními popisky pro všechny čtyři jazyky; pátý jazyk teď neprojde kompilací |
+| i9 | high | vzdání účtovalo jen holou hru — vyflekovaná sedma nebo kilo se daly „vyřešit" vzdáním za základní sazbu | `concede()` účtuje **každý stojící závazek** (hra/betl/durch + sedma + kilo + dvě sedmy), každý se svým flekem a červeným násobkem |
+| i14/i15/i21 | high | vzdání nemělo žádný deterministický test — ani platbu, ani strážce fází | nový blok ve `verify.ts`: cena podle kontraktu se sedmou, kilem a flekem, zero-sum, `concede` mimo `legalActions`, replay historie, obě zakázané fáze |
+| i2 | medium | „Vynulovat konto" zahodilo rozehranou hru bez dotazu a bez zúčtování | ptá se stejným popupem jako ukončení hry |
+| i3 | medium | dotaz „opravdu ukončit hru?" zmizel, jakmile mezitím táhla AI — hráč klikl do prázdna | popup umí být **sticky**: dotaz mimo herní stav přežije překreslení jiným stavem |
+| i5 | medium | francouzské varování u odhozu půlky hlášky vracelo anglickou větu | `Record<Lang, …>` místo kaskády `if`ů |
+| i10 | medium | bloky výběru varianty se na úzkém stole ořezávaly | výška je omezená i šířkou sukna (`min(39,6cqh, 54,5cqw)`) |
+| i23 | medium | francouzština nebyla v end-to-end pokrytí | smoke prochází vyúčtování ve všech čtyřech jazycích a kontroluje nadpis v daném jazyce |
+| i6 | low | odkaz „PROJEKTY" neměl francouzskou variantu — ve francouzštině byl prázdný | doplněn `<span class="fr">` |
+| i7 | low | francouzská sada karet měla v SVG české `<title>` | `cardTitle()` podle jazyka sady |
+| i19/i26 | low | kontrola přetečení figury ve WebKitu neměřila levou hranu | měří všechny čtyři |
+
+**Navíc (odhaleno při ověřování i1):** smoke sice výjimku z aplikace vypsal, ale prošel —
+řetěz překreslování si ji chytá vlastním `catch`, takže se nedostane do `pageerror`.
+Smoke teď **padá na každé výjimce** v konzoli (CSP hlášky jsou jediná povolená výjimka,
+injektáž si vyvolává sám) a navíc kontroluje, že se panel opravdu překreslil do zvoleného
+jazyka — samotná existence panelu nestačí, po chybě uprostřed renderu zůstane text toho
+předchozího.
+
+Zamítnuto (soudcem, s odůvodněním): rozpad částky ve vyúčtování vzdání „nesedí" (jde
+o zavedenou konvenci — `amount` je částka na jednoho soupeře, `delta` aktéra je dvojnásobek),
+plus devět duplicit a nízkohodnotných testových nálezů.
+
+Všechny tři nové browser kontroly (vyúčtování ve francouzštině, sticky dotaz, přetečení
+figury) byly ověřeny **negativní kontrolou** — s vrácenou chybou skutečně padají.

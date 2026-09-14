@@ -111,6 +111,13 @@ const STRINGS = {
     de: 'Das laufende Spiel wirklich aufgeben? Es zählt als Niederlage und du zahlst.',
     fr: 'Vraiment abandonner la partie en cours ? Elle compte comme une défaite et tu la paies.',
   },
+  resetMoney: { cs: 'Vynulovat', en: 'Reset', de: 'Zurücksetzen', fr: 'Remettre à zéro' },
+  resetMoneyWarn: {
+    cs: 'Vynulování konta začne nový zápas — rozehraná hra se zahodí bez zúčtování. Pokračovat?',
+    en: 'Resetting the money starts a new match — the hand in progress is dropped unpaid. Continue?',
+    de: 'Das Zurücksetzen startet eine neue Partie — das laufende Spiel verfällt ohne Abrechnung. Fortfahren?',
+    fr: 'Remettre à zéro lance une nouvelle partie — la donne en cours est abandonnée sans décompte. Continuer ?',
+  },
   lastHand: { cs: 'Minule', en: 'Last hand', de: 'Zuletzt', fr: 'Dernière partie' },
   variantTagVoleny: { cs: 'klasika', en: 'the classic', de: 'Klassiker', fr: 'le classique' },
   variantTagLicitovany: { cs: 'pro pokročilé', en: 'for the bold', de: 'für Fortgeschrittene', fr: 'pour les hardis' },
@@ -191,33 +198,78 @@ export function fmtMoney(units: number): string {
   return lang === 'de' || lang === 'fr' ? `${num} €` : `${num} Kč`;
 }
 
-/** Varování při odhozu půlky hlášky do talonu — FLEKova formulace. */
+/**
+ * Varování při odhozu půlky hlášky do talonu — FLEKova formulace.
+ *
+ * `Record<Lang, …>`, ne řetězec kaskády `if`ů: pátý jazyk pak neprojde
+ * kompilací, místo aby tiše dostal anglickou větu.
+ */
+const MARRIAGE_WARN: Record<Lang, (adj: string) => string> = {
+  cs: (adj) => `A co ${adj} mariáš?`,
+  en: (adj) => `What about the ${adj} marriage?`,
+  de: (adj) => `Und die ${adj}-Meldung?`,
+  fr: (adj) => `Et le mariage ${adj} ?`,
+};
+
 export function marriageWarn(suit: 0 | 1 | 2 | 3): string {
   const lang = currentLang();
-  const adj = STRINGS.marriageWarnAdj[lang][suit];
-  if (lang === 'cs') return `A co ${adj} mariáš?`;
-  if (lang === 'de') return `Und die ${adj}-Meldung?`;
-  return `What about the ${adj} marriage?`;
+  return MARRIAGE_WARN[lang](STRINGS.marriageWarnAdj[lang][suit] ?? '');
 }
 
-/** Popisek komponenty vyúčtování ve stylu FLEK! („Prohrané kilo", „Vyhraný betl"…). */
+/**
+ * Popisek komponenty vyúčtování ve stylu FLEK! („Prohrané kilo", „Vyhraný betl"…).
+ *
+ * Tabulka je `Record<Lang, …>` úmyslně: dřív se skládala z `base[lang]` jen
+ * pro en/de a čeština se řešila zvlášť, takže přidání francouzštiny shodilo
+ * KAŽDÉ vyúčtování (`base['fr']` bylo `undefined`). Takhle chybějící jazyk
+ * neprojde kompilací.
+ *
+ * Rody se v češtině i francouzštině liší podle komponenty, proto se skloňuje
+ * celý popisek, ne jen přípona.
+ */
+const COMP_TARGETS = ['hra', 'sedma', 'kilo', 'betl', 'durch', 'dveSedmy'] as const;
+type CompTarget = (typeof COMP_TARGETS)[number];
+
+const COMP_LABEL: Record<Lang, Record<CompTarget, readonly [won: string, lost: string]>> = {
+  cs: {
+    hra: ['Vyhraná hra', 'Prohraná hra'],
+    sedma: ['Vyhraná sedma', 'Prohraná sedma'],
+    kilo: ['Vyhrané kilo', 'Prohrané kilo'],
+    betl: ['Vyhraný betl', 'Prohraný betl'],
+    durch: ['Vyhraný durch', 'Prohraný durch'],
+    dveSedmy: ['Vyhrané dvě sedmy', 'Prohrané dvě sedmy'],
+  },
+  en: {
+    hra: ['Game won', 'Game lost'],
+    sedma: ['Seven won', 'Seven lost'],
+    kilo: ['Hundred won', 'Hundred lost'],
+    betl: ['Betl won', 'Betl lost'],
+    durch: ['Durch won', 'Durch lost'],
+    dveSedmy: ['Two sevens won', 'Two sevens lost'],
+  },
+  de: {
+    hra: ['Spiel gewonnen', 'Spiel verloren'],
+    sedma: ['Sieben gewonnen', 'Sieben verloren'],
+    kilo: ['Hundert gewonnen', 'Hundert verloren'],
+    betl: ['Bettel gewonnen', 'Bettel verloren'],
+    durch: ['Durchmarsch gewonnen', 'Durchmarsch verloren'],
+    dveSedmy: ['Zwei Sieben gewonnen', 'Zwei Sieben verloren'],
+  },
+  fr: {
+    hra: ['Partie gagnée', 'Partie perdue'],
+    sedma: ['Sept gagné', 'Sept perdu'],
+    kilo: ['Cent gagné', 'Cent perdu'],
+    betl: ['Betl gagné', 'Betl perdu'],
+    durch: ['Durch gagné', 'Durch perdu'],
+    dveSedmy: ['Deux sept gagnés', 'Deux sept perdus'],
+  },
+};
+
+function isCompTarget(x: string): x is CompTarget {
+  return (COMP_TARGETS as readonly string[]).includes(x);
+}
+
 export function compLabel(target: string, won: boolean): string {
-  const lang = currentLang();
-  if (lang === 'cs') {
-    const w: Record<string, string> = {
-      hra: 'Vyhraná hra', sedma: 'Vyhraná sedma', kilo: 'Vyhrané kilo',
-      betl: 'Vyhraný betl', durch: 'Vyhraný durch', dveSedmy: 'Vyhrané dvě sedmy',
-    };
-    const l: Record<string, string> = {
-      hra: 'Prohraná hra', sedma: 'Prohraná sedma', kilo: 'Prohrané kilo',
-      betl: 'Prohraný betl', durch: 'Prohraný durch', dveSedmy: 'Prohrané dvě sedmy',
-    };
-    return (won ? w : l)[target] ?? target;
-  }
-  const base: Record<string, Record<string, string>> = {
-    en: { hra: 'Game', sedma: 'Seven', kilo: 'Hundred', betl: 'Betl', durch: 'Durch', dveSedmy: 'Two sevens' },
-    de: { hra: 'Spiel', sedma: 'Sieben', kilo: 'Hundert', betl: 'Bettel', durch: 'Durchmarsch', dveSedmy: 'Zwei Sieben' },
-  };
-  const suffix = lang === 'en' ? (won ? 'won' : 'lost') : won ? 'gewonnen' : 'verloren';
-  return `${base[lang][target] ?? target} ${suffix}`;
+  if (!isCompTarget(target)) return target;
+  return COMP_LABEL[currentLang()][target][won ? 0 : 1];
 }

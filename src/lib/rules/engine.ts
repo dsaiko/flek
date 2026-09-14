@@ -548,14 +548,49 @@ function concede(state: GameState, seat: Seat): GameState {
   const contract = state.contract;
   const levels = flekLevelsFromHistory(state);
   const mode = contract?.mode ?? 'hra';
-  const target: import('./types').FlekTarget = mode === 'hra' ? 'hra' : mode;
-  const baseRate = mode === 'betl' ? s.betl : mode === 'durch' ? s.durch : s.hra;
-  const flekMultiplier = 2 ** (levels[target] ?? 0);
-  const cerveny =
-    contract !== null && contract.mode === 'hra' && contract.trump === CERVENE
-      ? state.config.sazby.cervenyMultiplier
-      : 1;
-  const amount = baseRate * flekMultiplier * cerveny;
+  // červený trumf násobí barevné závazky (hra/sedma/kilo), betl a durch ne
+  const cerveny = contract?.trump === CERVENE ? s.cervenyMultiplier : 1;
+
+  /*
+   * Vzdává se CELÝ stojící závazek, ne jen hra. Kdyby se platila jen hra,
+   * bylo by vzdání levným únikem z vyflekované sedmy nebo kila: hlásím,
+   * nechám se vyflekovat a pak to vzdám za základní sazbu.
+   *
+   * Komponenty odpovídají těm, které by spočítalo `settle()` — každá se svým
+   * flekovým multiplikátorem. Kilo se platí v základu: škálování po deseti
+   * bodech vychází z odehraných bodů, a ty u vzdané hry neexistují.
+   */
+  const components: import('./types').ComponentResult[] = [];
+  const push = (
+    target: import('./types').FlekTarget,
+    baseRate: number,
+    extraMultiplier: number,
+    note: string,
+  ): void => {
+    const flekMultiplier = 2 ** (levels[target] ?? 0);
+    components.push({
+      target,
+      // kdo vzdal, ten prohrál — bez kontraktu je aktérem dosazený sám vzdávající
+      wonBy: (contract?.declarer ?? seat) === seat ? 'defenders' : 'declarer',
+      baseRate,
+      flekMultiplier,
+      extraMultiplier,
+      amount: baseRate * flekMultiplier * extraMultiplier,
+      silent: false,
+      note,
+    });
+  };
+
+  if (mode === 'betl' || mode === 'durch') {
+    push(mode, mode === 'betl' ? s.betl : s.durch, 1, 'vzdáno');
+  } else {
+    push('hra', s.hra, cerveny, 'vzdáno');
+    if (contract?.sedma != null) push('sedma', s.sedma, cerveny, 'vzdáno');
+    if (contract?.kilo != null) push('kilo', s.kilo, cerveny, 'vzdáno');
+    if (contract?.dveSedmy === true) push('dveSedmy', s.dveSedmy, cerveny, 'vzdáno');
+  }
+
+  const amount = components.reduce((sum, c) => sum + c.amount, 0);
 
   const delta: [number, number, number] = [0, 0, 0];
   for (const other of [0, 1, 2] as Seat[]) {
@@ -571,13 +606,7 @@ function concede(state: GameState, seat: Seat): GameState {
     },
     cardPoints: { declarer: 0, defenders: 0 },
     marriagePoints: { declarer: 0, defenders: 0 },
-    components: [{
-      target,
-      // kdo vzdal, ten prohrál — bez kontraktu je aktérem dosazený sám vzdávající
-      wonBy: (contract?.declarer ?? seat) === seat ? 'defenders' : 'declarer',
-      baseRate, flekMultiplier, extraMultiplier: cerveny, amount, silent: false,
-      note: 'vzdáno',
-    }],
+    components,
     delta,
   };
   return {

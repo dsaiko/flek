@@ -63,6 +63,8 @@ export class TableUI {
    * hráče tiše zahodilo — proto se umí znovu postavit.
    */
   private openPopup: (() => void) | null = null;
+  /** Popup, který přežije i skutečný posun hry (dotaz mimo herní stav). */
+  private openPopupSticky = false;
   /**
    * Generace zápasu. Animace spí až ~1,8 s a jsou zařazené do `chain`, takže
    * nový zápas by čekal za animacemi toho starého (a při opakovaných klicích
@@ -102,8 +104,15 @@ export class TableUI {
    * Potvrzovací popup na stole — pro akce mimo herní smyčku (ukončení hry).
    * Vypadá stejně jako varování u odhozu, aby stůl mluvil jedním hlasem.
    */
-  confirm(message: string, confirmLabel: string, onConfirm: () => void): void {
-    this.showConfirmPopup([message], confirmLabel, onConfirm);
+  /**
+   * Potvrzovací dotaz v panelu na stole.
+   *
+   * `sticky` = dotaz NENÍ o aktuálním stavu hry (typicky „opravdu ukončit?"),
+   * takže nesmí zmizet, když mezitím táhne AI. Bez toho hráč otevře dialog,
+   * soupeř zahraje a tlačítko pod prstem se ztratí.
+   */
+  confirm(message: string, confirmLabel: string, onConfirm: () => void, sticky = false): void {
+    this.showConfirmPopup([message], confirmLabel, onConfirm, sticky);
   }
 
   /**
@@ -119,6 +128,7 @@ export class TableUI {
     this.gen += 1;
     this.prevState = null;
     this.openPopup = null;
+    this.openPopupSticky = false;
     this.selected.clear();
     for (const wake of [...this.sleepers]) wake();
     // bubliny mají vlastní 2,6s časovač — bez zhasnutí by hláška mrtvého
@@ -147,7 +157,7 @@ export class TableUI {
     this.prevState = state;
     // skutečný posun hry popup zneplatňuje (obnovuje se jen při překreslení
     // TÝMŽ stavem, tedy při přepnutí jazyka nebo vzoru karet)
-    if (prev !== null && prev !== state) this.openPopup = null;
+    if (prev !== null && prev !== state && !this.openPopupSticky) this.openPopup = null;
     /*
      * Jakmile se stav pohne, „Momentíček…" přestává platit — a sundat ho je
      * potřeba TEĎ, ne až v renderNow: mezi tím leží animace dohraného štychu
@@ -1013,7 +1023,10 @@ export class TableUI {
 
   // ── potvrzovací popup vestavěný do stolu ─────────────────────────────────────
 
-  private showConfirmPopup(messages: string[], confirmLabel: string, onConfirm: () => void): void {
+  private showConfirmPopup(
+    messages: string[], confirmLabel: string, onConfirm: () => void, sticky = false,
+  ): void {
+    this.openPopupSticky = sticky;
     this.openPopup = () => this.paintConfirmPopup(messages, confirmLabel, onConfirm);
     this.paintConfirmPopup(messages, confirmLabel, onConfirm);
   }
@@ -1030,11 +1043,13 @@ export class TableUI {
     </div>`;
     float.querySelector('[data-act="cancel"]')?.addEventListener('click', () => {
       this.openPopup = null;
+      this.openPopupSticky = false;
       if (this.prevState) this.renderNow(this.prevState);
       else { float.classList.remove('open'); float.innerHTML = ''; }
     });
     float.querySelector('[data-act="confirm"]')?.addEventListener('click', () => {
       this.openPopup = null;
+      this.openPopupSticky = false;
       float.classList.remove('open');
       float.innerHTML = '';
       onConfirm();
