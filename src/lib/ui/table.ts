@@ -35,6 +35,8 @@ export interface TableOptions {
   pattern: () => Pattern;
   /** Jméno člověka u stolu (nastavení); výchozí „Ty". */
   playerName?: () => string;
+  /** Jména protihráčů (nastavení); prázdné = výchozí podle jazyka. */
+  opponentNames?: () => readonly [string, string];
   /** Sada hlášek (§5.8); výchozí „slušná", `off` = mlčenlivý stůl. */
   talk?: () => TalkSet;
   /** Zvuky (§5.7); výchozí tichý dublér, ať testy nepotřebují Web Audio. */
@@ -382,9 +384,9 @@ export class TableUI {
     for (const pos of ['left', 'right'] as const) {
       const seat = this.seatAt(pos);
       const box = $(this.root, `#seat-${pos}`);
-      const name = aiNames()[pos === 'left' ? 0 : 1];
+      const name = this.nameOf(seat);
       $(box, '.seat-name').textContent = name;
-      $(box, '.avatar').textContent = name.slice(0, 1);
+      $(box, '.avatar').textContent = name.slice(0, 1).toUpperCase();
       // podtitulek: peníze + role (rozdávající / forhont) — jako v mockupu
       const role = seat === v.dealer ? t('dealerShort') : seat === forhont(v.dealer) ? t('forhont') : '';
       $(box, '.seat-sub').textContent = role ? `${role} · ${fmtMoney(v.ledger[seat])}` : fmtMoney(v.ledger[seat]);
@@ -760,7 +762,9 @@ export class TableUI {
       const own = this.opts.playerName?.().trim();
       return own !== undefined && own !== '' ? own : t('you');
     }
-    return aiNames()[seat === this.seatAt('left') ? 0 : 1];
+    const idx = seat === this.seatAt('left') ? 0 : 1;
+    const own = this.opts.opponentNames?.()[idx]?.trim();
+    return own !== undefined && own !== '' ? own : aiNames()[idx];
   }
 
   // ── ruka ───────────────────────────────────────────────────────────────────
@@ -1219,6 +1223,11 @@ const BID_LABEL_CS: Record<string, string> = {
   sedma: 'Sedma', sto: 'Sto', 'sto-sedma': 'Sto a sedma',
   betl: 'Betl', durch: 'Durch', 'dve-sedmy': 'Dvě sedmy', 'dve-sedmy-sto': 'Dvě sedmy a sto',
 };
+const BID_LABEL_FR: Record<string, string> = {
+  sedma: 'Sept', sto: 'Cent', 'sto-sedma': 'Cent et sept',
+  betl: 'Bettel', durch: 'Durch', 'dve-sedmy': 'Deux sept',
+  'dve-sedmy-sto': 'Deux sept et cent',
+};
 const BID_LABEL_DE: Record<string, string> = {
   sedma: 'Sieben', sto: 'Hundert', 'sto-sedma': 'Hundert und Sieben',
   betl: 'Bettel', durch: 'Durchmarsch', 'dve-sedmy': 'Zwei Siebener',
@@ -1231,7 +1240,11 @@ const BID_LABEL_EN: Record<string, string> = {
 
 export function bidLabel(b: { kind: string; cervena: boolean }): string {
   const lang = currentLang();
-  const table = lang === 'en' ? BID_LABEL_EN : lang === 'de' ? BID_LABEL_DE : BID_LABEL_CS;
+  const table =
+    lang === 'en' ? BID_LABEL_EN
+    : lang === 'de' ? BID_LABEL_DE
+    : lang === 'fr' ? BID_LABEL_FR
+    : BID_LABEL_CS;
   const base = table[b.kind] ?? esc(b.kind);
   return b.cervena ? `${base} ${suitIcon(0)}` : base;
 }
@@ -1254,6 +1267,7 @@ const TARGET_ACC: Record<Lang, Record<string, string>> = {
   cs: { hra: 'hru', sedma: 'sedmu', kilo: 'kilo', betl: 'betla', durch: 'durcha', dveSedmy: 'dvě sedmy' },
   en: { hra: 'the game', sedma: 'the seven', kilo: 'the hundred', betl: 'betl', durch: 'durch', dveSedmy: 'two sevens' },
   de: { hra: 'das Spiel', sedma: 'die Sieben', kilo: 'Hundert', betl: 'Bettel', durch: 'Durchmarsch', dveSedmy: 'zwei Siebener' },
+  fr: { hra: 'le jeu', sedma: 'la sept', kilo: 'le cent', betl: 'le bettel', durch: 'le durch', dveSedmy: 'les deux sept' },
 };
 
 /** Jméno fleku bez vykřičníku — do věty „Flek na hru" se „Flek!" nehodí. */

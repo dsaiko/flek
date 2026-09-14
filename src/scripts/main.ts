@@ -12,7 +12,7 @@ import type { GameState, Variant } from '../lib/rules/types';
 import type { Pattern } from '../lib/ui/cardAssets';
 import { createSounds } from '../lib/ui/sounds';
 import type { TalkSet } from '../lib/ui/tableTalk';
-import { currentLang, t } from '../lib/ui/i18n';
+import { aiNames, currentLang, t } from '../lib/ui/i18n';
 import { TableUI } from '../lib/ui/table';
 
 // ── nastavení ────────────────────────────────────────────────────────────────
@@ -20,6 +20,8 @@ import { TableUI } from '../lib/ui/table';
 interface Settings {
   /** Jméno hráče u stolu; prázdné = použije se „Ty" podle jazyka. */
   name: string;
+  /** Jména protihráčů; prázdné = výchozí podle jazyka (Franta/Lojza…). */
+  opponents: [string, string];
   variant: Variant;
   difficulty: Difficulty;
   pattern: Pattern;
@@ -30,7 +32,7 @@ interface Settings {
 const SETTINGS_KEY = 'flek.settings.v1';
 
 const DEFAULT_SETTINGS: Settings = {
-  name: '', variant: 'voleny', difficulty: 'normal', pattern: 'history', talk: 'slusna', sounds: true,
+  name: '', opponents: ['', ''], variant: 'voleny', difficulty: 'normal', pattern: 'history', talk: 'slusna', sounds: true,
 };
 
 /** Nastavení z localStorage může být poškozené nebo cizí — ověř každou hodnotu. */
@@ -41,6 +43,9 @@ function loadSettings(): Settings {
     const p = JSON.parse(raw) as Partial<Settings>;
     return {
       name: typeof p.name === 'string' ? p.name.slice(0, 16) : DEFAULT_SETTINGS.name,
+      opponents: Array.isArray(p.opponents) && p.opponents.length === 2
+        ? [String(p.opponents[0] ?? '').slice(0, 12), String(p.opponents[1] ?? '').slice(0, 12)]
+        : [...DEFAULT_SETTINGS.opponents],
       variant: p.variant === 'voleny' || p.variant === 'licitovany' ? p.variant : DEFAULT_SETTINGS.variant,
       difficulty: p.difficulty === 'easy' || p.difficulty === 'normal' || p.difficulty === 'hard'
         ? p.difficulty : DEFAULT_SETTINGS.difficulty,
@@ -118,6 +123,7 @@ const table = new TableUI($('table'), {
   humanSeat: 0,
   pattern: () => settings.pattern,
   playerName: () => settings.name,
+  opponentNames: () => settings.opponents,
   talk: () => settings.talk,
   sounds,
 }, {
@@ -176,6 +182,8 @@ const patternSel = $('set-pattern') as HTMLSelectElement;
 const talkSel = $('set-talk') as HTMLSelectElement;
 const soundsBtn = $('set-sounds') as HTMLButtonElement;
 const nameInput = $('set-name') as HTMLInputElement;
+const opp1Input = $('set-opp1') as HTMLInputElement;
+const opp2Input = $('set-opp2') as HTMLInputElement;
 const settingsFloat = $<HTMLElement>('settings-float');
 
 difficultySel.value = settings.difficulty;
@@ -183,6 +191,8 @@ patternSel.value = settings.pattern;
 talkSel.value = settings.talk;
 nameInput.value = settings.name;
 nameInput.placeholder = t('you');
+opp1Input.value = settings.opponents[0];
+opp2Input.value = settings.opponents[1];
 soundsBtn.setAttribute('aria-checked', String(settings.sounds));
 
 const openSettings = (open: boolean): void => {
@@ -194,11 +204,22 @@ $('settings-close').addEventListener('click', () => openSettings(false));
 settingsFloat.addEventListener('click', (ev) => {
   if (ev.target === settingsFloat) openSettings(false); // klik mimo panel zavírá
 });
+document.addEventListener('keydown', (ev) => {
+  // Esc zavírá nastavení stejně jako křížek — panel je modální, nesmí uvíznout.
+  if (ev.key === 'Escape' && settingsFloat.hidden !== true) openSettings(false);
+});
 $('settings-reset').addEventListener('click', () => {
   openSettings(false);
   newMatchIdle(); // konto je součást stavu hry — nový zápas ho vynuluje
 });
 
+for (const [i, input] of [opp1Input, opp2Input].entries()) {
+  input.addEventListener('input', () => {
+    settings.opponents[i] = input.value.slice(0, 12);
+    saveSettings(settings);
+    table.render(controller.state);
+  });
+}
 nameInput.addEventListener('input', () => {
   settings.name = nameInput.value.slice(0, 16);
   saveSettings(settings);
@@ -207,7 +228,9 @@ nameInput.addEventListener('input', () => {
 difficultySel.addEventListener('change', () => {
   settings.difficulty = difficultySel.value as Difficulty;
   saveSettings(settings);
-  newMatchIdle(); // obtížnost od příštího zápasu — jednoduché a předvídatelné
+  // IQ se mění za běhu: shodit rozehraný zápas kvůli přepínači v nastavení
+  // by byla ztráta hry, kterou hráč nikde nepotvrdil.
+  controller.setDifficulty(settings.difficulty, BUDGETS[settings.difficulty]);
 });
 patternSel.addEventListener('change', () => {
   settings.pattern = patternSel.value as Pattern;
@@ -260,6 +283,35 @@ newBtn.addEventListener('click', () => {
 
 // fullscreen (iOS Safari neumí requestFullscreen na divu → CSS fallback)
 const gameSection = $('game-section');
+/*
+ * Jazyk jako rozbalovací nabídka: sbalená ukazuje jen aktuální vlajku.
+ * Samotné přepnutí jazyka řeší skript v Layoutu (poslouchá na `[data-lang]`),
+ * tady se jen otevírá/zavírá a překresluje se vlajka na tlačítku.
+ */
+const langBtn = $('btn-lang');
+const langList = $<HTMLElement>('lang-list');
+const langCurrent = $('lang-current');
+
+function syncLangFlag(): void {
+  const active = langList.querySelector(`[data-lang="${currentLang()}"] svg`);
+  langCurrent.innerHTML = '';
+  if (active) langCurrent.appendChild(active.cloneNode(true));
+}
+const openLang = (open: boolean): void => {
+  langList.hidden = !open;
+  langBtn.setAttribute('aria-expanded', String(open));
+};
+langBtn.addEventListener('click', (ev) => {
+  ev.stopPropagation();
+  openLang(langList.hidden === true);
+});
+langList.addEventListener('click', () => openLang(false));
+document.addEventListener('click', () => openLang(false));
+document.addEventListener('keydown', (ev) => {
+  if (ev.key === 'Escape') openLang(false);
+});
+syncLangFlag();
+
 $('btn-fullscreen').addEventListener('click', async () => {
   if (document.fullscreenElement) {
     await document.exitFullscreen();
@@ -280,6 +332,7 @@ function updateControlLabels(): void {
   };
   set(patternSel, { modern: t('modern'), history: t('history') });
   updateNewButton(); // popisek tlačítka je jazykový taky
+  syncLangFlag();
   set(talkSel, { slusna: t('talkPolite'), hospodska: t('talkPub'), vulgarni: t('talkVulgar'), off: t('talkOff') });
   nameInput.placeholder = t('you');
   void currentLang();

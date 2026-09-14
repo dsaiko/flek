@@ -46,6 +46,12 @@ const POLITE: Record<TalkSituation, Lines> = {
       'It stands', 'Be my guest', 'Go ahead then', 'Good luck'],
     de: ['Bei mir gut', 'Einverstanden.', 'Meinetwegen', 'Passt schon', 'Kein Einwand', 'Nichts dagegen',
       'Gilt', 'Nur zu', 'Dann los', 'Viel Glück'],
+    fr: [
+      'Ça me va', 'D’accord.', 'Comme tu veux',
+      'Je prends', 'Entendu', 'Rien contre',
+      'Ça tient', 'Je t’en prie', 'Vas-y alors',
+      'Bonne chance',
+    ],
   },
   pass: {
     cs: ['Já jsem zticha', 'Já se točit nebudu', 'Nechám to na vás', 'Mlčím', 'Bez mého',
@@ -54,6 +60,12 @@ const POLITE: Record<TalkSituation, Lines> = {
       'Not this time', "I'll sit this one out", 'Not my hand', 'Go on without me', 'Not a word'],
     de: ['Ich schweige', 'Ich bin raus', 'Überlasse ich euch', 'Weiter', 'Nicht von mir',
       'Diesmal nicht', 'Ich setze aus', 'Nichts für mich', 'Macht ohne mich', 'Kein Wort'],
+    fr: [
+      'Je me tais', 'Je passe', 'Je vous laisse',
+      'Sans moi', 'Pas de mon côté', 'Pas cette fois',
+      'Je saute mon tour', 'Pas ma main', 'Continuez sans moi',
+      'Pas un mot',
+    ],
   },
   fromPeople: {
     cs: ['Z lidu, pánové!', 'Ať rozhodne balíček', 'Naslepo a nebát se', 'Co dá, to dá',
@@ -62,6 +74,11 @@ const POLITE: Record<TalkSituation, Lines> = {
       "I'll take what comes", "Let's try our luck", 'Blind it is!', 'Let the cards speak'],
     de: ['Blind, meine Herren!', 'Der Stapel entscheidet', 'Blind und mutig', 'Was kommt, das kommt',
       'Ich nehme, was kommt', 'Versuchen wir es', 'Also blind!', 'Die Karten sollen reden'],
+    fr: [
+      'À l’aveugle, messieurs !', 'Que le talon décide', 'À l’aveugle et sans peur',
+      'Ce qui vient, vient', 'Je prends ce qui tombe', 'Tentons notre chance',
+      'Va pour l’aveugle !', 'Que les cartes parlent',
+    ],
   },
   thinking: {
     cs: ['Momentíček…', 'Nechte mě přemýšlet', 'Hmm…', 'Počkat, počkat', 'Rozmýšlím se',
@@ -70,6 +87,11 @@ const POLITE: Record<TalkSituation, Lines> = {
       'Just a moment', 'Now what', 'Almost there', 'Let me count'],
     de: ['Moment mal…', 'Lasst mich denken', 'Hmm…', 'Warte kurz', 'Ich überlege',
       'Einen Augenblick', 'Was nun', 'Gleich habe ich es', 'Lasst mich rechnen'],
+    fr: [
+      'Un instant…', 'Laissez-moi réfléchir', 'Hmm…',
+      'Attendez', 'Je réfléchis', 'Encore un moment',
+      'Voyons voir', 'J’y suis presque', 'Laissez-moi compter',
+    ],
   },
   trickWon: {
     cs: ['Ten je můj', 'Děkuji pěkně', 'Kdo maže, ten jede', 'To se povedlo', 'Beru',
@@ -78,6 +100,11 @@ const POLITE: Record<TalkSituation, Lines> = {
       'A fine trick', 'There we go', 'Over here', "I'll keep that one"],
     de: ['Der gehört mir', 'Danke schön', 'Wer schmiert, der fährt', 'Gut gelaufen', 'Nehme ich',
       'Schöner Stich', 'Da haben wir es', 'Her damit', 'Den behalte ich'],
+    fr: [
+      'Celle-là est à moi', 'Merci bien', 'Qui graisse avance',
+      'Joliment joué', 'Je prends', 'Belle levée',
+      'Et voilà', 'Par ici', 'Je la garde',
+    ],
   },
   handWon: {
     cs: ['Co je doma, to se počítá', 'Dobrá hra', 'Tak se to hraje', 'Sedlo to',
@@ -86,6 +113,11 @@ const POLITE: Record<TalkSituation, Lines> = {
       'It came off', 'Never in doubt', 'It played itself', 'Counted and signed'],
     de: ['Gewonnen ist gewonnen', 'Gutes Spiel', 'So spielt man das', 'Hat gepasst',
       'Es ist aufgegangen', 'War nie in Gefahr', 'Ging von allein', 'Gezählt und fertig'],
+    fr: [
+      'Gagné, c’est gagné', 'Belle partie', 'C’est comme ça qu’on joue',
+      'Ça a marché', 'C’est passé', 'Jamais douté',
+      'Ça s’est joué tout seul', 'Compté et signé',
+    ],
   },
   handLost: {
     cs: ['Karta jak noha', 'To se stává', 'Příště to vrátím', 'Smůla, jdeme dál',
@@ -94,6 +126,11 @@ const POLITE: Record<TalkSituation, Lines> = {
       'Nothing to be done', 'So close', 'Next time then', 'Not my day today'],
     de: ['Miserable Karten', 'Kommt vor', 'Das hole ich zurück', 'Pech, weiter geht es',
       'Da war nichts zu machen', 'Knapp daneben', 'Dann eben nächstes Mal', 'Heute nicht mein Tag'],
+    fr: [
+      'Des cartes de bois', 'Ça arrive', 'Je me rattraperai',
+      'Pas de chance, on continue', 'Rien à faire', 'Il s’en fallait de peu',
+      'La prochaine alors', 'Pas mon jour',
+    ],
   },
 };
 
@@ -112,6 +149,11 @@ const PUB: Partial<Record<TalkSituation, Lines>> = {
     de: ['Gut, aber verbock es nicht', 'Einverstanden, nun spiel', 'Ich sitze still', 'Von mir aus',
       'Meinetwegen, du vergeigst es eh', 'Gut, Hände auf den Tisch', 'Spiel, bringen wir es hinter uns',
       'Wehe, du verlierst'],
+    fr: [
+      'Ça me va, mais joue bien', 'D’accord, alors joue', 'Je me tais et je regarde',
+      'Fais comme tu veux', 'Vas-y, tu vas te planter', 'D’accord, mains sur la table',
+      'Joue, qu’on en finisse', 'N’avise pas de perdre',
+    ],
   },
   pass: {
     cs: ['Držím hubu a krok', 'Do toho mi nic není', 'Já mám v ruce seno', 'Ani náhodou',
@@ -122,6 +164,11 @@ const PUB: Partial<Record<TalkSituation, Lines>> = {
     de: ['Ich halte den Mund', 'Geht mich nichts an', 'Ich halte Heu', 'Auf keinen Fall',
       'Damit komme ich nirgends hin', 'Spiel es doch selbst', 'Ohne mich',
       'Das gewinne ich nicht mal aus Versehen'],
+    fr: [
+      'Je ferme ma bouche', 'Ça ne me regarde pas', 'J’ai du foin en main',
+      'Certainement pas', 'Je ne vais nulle part avec ça', 'Joue-la toi-même',
+      'Je m’en moque', 'Je ne gagnerais pas ça par accident',
+    ],
   },
   thinking: {
     cs: ['Momentíček, nehoří', 'Nekoukej mi do karet', 'Neremcej, počítám', 'Času dost',
@@ -131,6 +178,11 @@ const PUB: Partial<Record<TalkSituation, Lines>> = {
     de: ['Moment, es brennt nicht', 'Guck nicht in meine Karten', 'Ruhe, ich rechne', 'Zeit genug',
       'Atme mir nicht im Nacken', 'Gleich, ganz ruhig', 'Lass mich, ich bin keine Maschine',
       'Dräng mich nicht'],
+    fr: [
+      'Un instant, ça ne brûle pas', 'Ne regarde pas mes cartes', 'Silence, je compte',
+      'On a le temps', 'Ne me souffle pas dans le cou', 'Du calme, j’arrive',
+      'Laisse-moi, je ne suis pas une machine', 'Ne me presse pas',
+    ],
   },
   trickWon: {
     cs: ['Ten je můj, chlapci', 'Sedma smrdí, viďte', 'Kdo maže, ten jede', 'A je to doma',
@@ -139,6 +191,11 @@ const PUB: Partial<Record<TalkSituation, Lines>> = {
       'Thank the gentleman', "That's how it's done", 'Too good for you', "I'm taking that one home"],
     de: ['Meiner, Jungs', 'Die Sieben stinkt, was', 'Wer schmiert, der fährt', 'Und das sitzt',
       'Dankt dem Herrn', 'So macht man das', 'Dafür seid ihr zu klein', 'Den nehme ich mit'],
+    fr: [
+      'Celle-là est à moi, les gars', 'La sept sent mauvais, hein', 'Qui graisse avance',
+      'Et c’est dans la poche', 'Remerciez le monsieur', 'C’est comme ça qu’on fait',
+      'Vous êtes trop courts', 'Je l’emporte',
+    ],
   },
   handWon: {
     cs: ['Co je doma, to se počítá', 'Plať a nekoukej', 'Škola základ života', 'To bylo za ty peníze',
@@ -148,6 +205,11 @@ const PUB: Partial<Record<TalkSituation, Lines>> = {
     de: ['Gewonnen ist gewonnen', 'Zahlen und nicht meckern', 'Lehrgeld nennt man das', 'Das war es wert',
       'Raus mit dem Kleingeld', 'Gib zu, du hast weniger erwartet', 'Noch mal, und besser',
       'Gut, aber teuer'],
+    fr: [
+      'Gagné, c’est gagné', 'Paye et ne râle pas', 'Ça s’appelle une leçon',
+      'Ça valait le prix', 'Sors la monnaie', 'Avoue que tu attendais moins',
+      'Encore, et mieux', 'Bien joué, mais cher',
+    ],
   },
   handLost: {
     cs: ['Karta jak noha!', 'Vykašli se na mariáš, dej se na politiku', 'U Bucků zhasli', 'To byla bída',
@@ -157,6 +219,11 @@ const PUB: Partial<Record<TalkSituation, Lines>> = {
     de: ['Karten wie Stroh!', 'Lass die Karten, geh in die Politik', 'Bei mir gingen die Lichter aus',
       'Das war elend', 'Damit schafft es kein Heiliger', 'Wer hat das gegeben?',
       'Das merke ich mir', 'Nächstes Mal mischt ihr'],
+    fr: [
+      'Des cartes de bois !', 'Laisse les cartes, fais de la politique', 'Les lumières se sont éteintes',
+      'C’était la misère', 'Même un saint n’y ferait rien', 'Qui a donné ça ?',
+      'Je m’en souviendrai', 'La prochaine, c’est vous qui mêlez',
+    ],
   },
 };
 
@@ -178,6 +245,11 @@ const VULGAR: Partial<Record<TalkSituation, Lines>> = {
     de: ['Gut, verdammt', 'Spiel endlich, verdammt', 'Gut, du Klugscheißer', 'Spiel schon, Herrgott',
       'Scheiße, mach wie du willst', 'Nehme ich, du Angeber', 'Klar, mach dir nicht ins Hemd',
       'Meinetwegen, du versaust es eh'],
+    fr: [
+      'Bon, bordel', 'Joue, nom d’un chien', 'Ça va, monsieur je-sais-tout',
+      'Joue donc, merde', 'Bon sang, fais comme tu veux', 'Je prends, gros malin',
+      'Ouais, ne te chie pas dessus', 'Vas-y, tu vas tout foirer',
+    ],
   },
   pass: {
     cs: ['Ani hovno', 'Mám v ruce hovno', 'Držím hubu', 'Kašlu na to',
@@ -188,6 +260,11 @@ const VULGAR: Partial<Record<TalkSituation, Lines>> = {
     de: ['Einen Scheiß', 'Ich halte Mist', 'Ich halte die verdammte Klappe', 'Ist mir scheißegal',
       'Zum Teufel damit', 'Das Blatt ist Müll', 'Auf gar keinen Fall, verdammt',
       'Da fasse ich nichts an'],
+    fr: [
+      'Que dalle', 'J’ai de la merde en main', 'Je ferme ma gueule',
+      'Je m’en fous', 'Au diable ce truc', 'Cette main est une poubelle',
+      'Certainement pas, merde', 'J’y touche pas',
+    ],
   },
   fromPeople: {
     cs: ['Z lidu, kurva', 'Ať rozhodne ten zasranej balíček', 'Naslepo, co má bejt',
@@ -199,6 +276,11 @@ const VULGAR: Partial<Record<TalkSituation, Lines>> = {
     de: ['Blind, verdammt', 'Der verdammte Stapel entscheidet', 'Blind, na und', 'Scheiß drauf, was kommt',
       'Blind und basta', 'Bringen wir es hinter uns', 'Was kommt, das kommt, verdammt',
       'Dann blind, ist eh alles Mist'],
+    fr: [
+      'À l’aveugle, bordel', 'Que ce fichu talon décide', 'À l’aveugle, et alors',
+      'Merde, je prends ce qui vient', 'À l’aveugle et puis voilà', 'Qu’on en finisse',
+      'Ce qui vient vient, bon sang', 'À l’aveugle, c’est foutu d’avance',
+    ],
   },
   thinking: {
     cs: ['Momentíček, kurva', 'Nekoukej mi do karet, vole', 'Drž hubu, počítám',
@@ -210,6 +292,11 @@ const VULGAR: Partial<Record<TalkSituation, Lines>> = {
     de: ['Einen Moment, verdammt', 'Guck nicht rein, du Depp', 'Klappe, ich rechne',
       'Nerv mich nicht, ich denke', 'Lass mich in Ruhe, verdammt', 'Warte, verdammt',
       'Hetz mich nicht', 'Noch eine verdammte Sekunde'],
+    fr: [
+      'Un instant, bordel', 'Ne mate pas mes cartes, crétin', 'Ta gueule, je compte',
+      'Me casse pas les pieds, je réfléchis', 'Fous-moi la paix', 'Attends, merde',
+      'Ne me presse pas', 'Une foutue seconde',
+    ],
   },
   trickWon: {
     cs: ['Ten je můj, vole', 'Sedma smrdí, co', 'A je to doma, kurva', 'Máš hovno',
@@ -221,6 +308,11 @@ const VULGAR: Partial<Record<TalkSituation, Lines>> = {
     de: ['Meiner, du Depp', 'Die Sieben stinkt, was', 'Und das sitzt, verdammt', 'Du kriegst nichts',
       'So macht man das, Genie', 'Steck dir den an den Hut', 'Bedank dich und zahl',
       'Gegen mich bist du nichts, Freundchen'],
+    fr: [
+      'À moi, crétin', 'La sept pue, hein', 'Et c’est dans la poche, bordel',
+      'Tu n’as rien', 'C’est comme ça qu’on fait, génie', 'Mets-toi ça où je pense',
+      'Remercie et paye', 'Tu fais pas le poids, mon vieux',
+    ],
   },
   handWon: {
     cs: ['Plať, ty držgrešle', 'Vyklop prachy', 'Co je doma, to se počítá, kurva',
@@ -232,6 +324,11 @@ const VULGAR: Partial<Record<TalkSituation, Lines>> = {
     de: ['Zahl, du Geizhals', 'Rück die verdammte Kohle raus', 'Gewonnen ist verdammt nochmal gewonnen',
       'Lehrgeld, du Depp', 'Das war jeden Cent wert', 'Noch mal, du Anfänger',
       'Her damit und hör auf zu jammern', 'Das hast du vom Klugscheißen'],
+    fr: [
+      'Paye, radin', 'Sors ton fric', 'Gagné, c’est gagné, bordel',
+      'Ça s’appelle une leçon, crétin', 'Ça valait chaque centime', 'Encore, amateur',
+      'Donne et arrête de pleurnicher', 'Ça t’apprendra à faire le malin',
+    ],
   },
   handLost: {
     cs: ['Do prdele s takovou kartou', 'Karta jak hovno', 'Kdo to, kurva, rozdával?',
@@ -243,6 +340,11 @@ const VULGAR: Partial<Record<TalkSituation, Lines>> = {
     de: ['Scheiß auf diese Karten', 'Karten wie Mist', 'Wer hat das verdammt nochmal gegeben?',
       'Verdammtes Pech', 'Alles im Eimer', 'So einen Mist hatte ich lange nicht',
       'Nächstes Mal mischt ihr, verdammt', 'Lass die Karten, geh in die Politik'],
+    fr: [
+      'Au diable ces cartes', 'Des cartes de merde', 'Qui a donné ça, bon sang ?',
+      'Foutue malchance', 'Tout est foutu', 'Une merde pareille, ça faisait longtemps',
+      'La prochaine c’est vous qui mêlez, merde', 'Laisse les cartes, fais de la politique',
+    ],
   },
 };
 

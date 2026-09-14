@@ -28,6 +28,7 @@ checkDeck('cards/modern-en', 'svg');
 // německá sada se servíruje německým hráčům (cardAssets.ts), takže musí projít
 // týmiž kontrolami jako ostatní
 checkDeck('cards/modern-de', 'svg');
+checkDeck('cards/modern-fr', 'svg');
 checkDeck('cards/history', 'png');
 assert.ok(existsSync(join(ROOT, 'cards/modern/back.svg')), 'chybí rub moderní sady');
 
@@ -38,10 +39,14 @@ assert.match(uh, />J</, 'EN spodek má mít index J');
 assert.match(oh, />Q</, 'EN svršek má mít index Q');
 const uhCs = readFileSync(join(ROOT, 'cards/modern/UH.svg'), 'utf8');
 assert.match(uhCs, />S</, 'CZ spodek má mít index S');
-console.log('PASS indexy CZ (S V K A) / EN (J Q K A)');
+const uhFr = readFileSync(join(ROOT, 'cards/modern-fr/UH.svg'), 'utf8');
+const ohFr = readFileSync(join(ROOT, 'cards/modern-fr/OH.svg'), 'utf8');
+assert.match(uhFr, />V</, 'FR spodek má mít index V (valet)');
+assert.match(ohFr, />D</, 'FR svršek má mít index D (dame)');
+console.log('PASS indexy CZ (S V K A) / EN (J Q K A) / FR (V D R A)');
 
 // SVG neobsahují externí reference (self-contained; xmlns namespace je v pořádku)
-for (const set of ['cards/modern', 'cards/modern-en', 'cards/modern-de']) {
+for (const set of ['cards/modern', 'cards/modern-en', 'cards/modern-de', 'cards/modern-fr']) {
   for (const f of readdirSync(join(ROOT, set)).filter((f) => f.endsWith('.svg'))) {
     const svg = readFileSync(join(ROOT, set, f), 'utf8');
     assert.doesNotMatch(svg, /(href|src)\s*=\s*"https?:/, `${set}/${f}: externí odkaz`);
@@ -2207,7 +2212,7 @@ const KULE = 2 as const;
     };
     const { bidLabel } = await import('../src/lib/ui/table');
     const { t: t9, flekName: flekName9 } = await import('../src/lib/ui/i18n');
-    const setLang = (lang: 'cs' | 'en' | 'de'): void => {
+    const setLang = (lang: 'cs' | 'en' | 'de' | 'fr'): void => {
       classes.clear();
       if (lang !== 'cs') classes.add(`lang-${lang}`);
     };
@@ -2215,7 +2220,7 @@ const KULE = 2 as const;
     // VŠECH sedm hodnot Bid.kind — 'dve-sedmy*' jsou právě ty, které existují
     // jen v licitovaném, a bidLabel pro nezmapovaný kind propadne na slug
     const kinds = ['sedma', 'sto', 'sto-sedma', 'betl', 'durch', 'dve-sedmy', 'dve-sedmy-sto'];
-    for (const lang of ['cs', 'en', 'de'] as const) {
+    for (const lang of ['cs', 'en', 'de', 'fr'] as const) {
       setLang(lang);
       for (const kind of kinds) {
         const label = bidLabel({ kind, cervena: false });
@@ -2227,11 +2232,13 @@ const KULE = 2 as const;
     setLang('cs'); const cs = bidLabel({ kind: 'sto-sedma', cervena: false });
     setLang('en'); const en = bidLabel({ kind: 'sto-sedma', cervena: false });
     setLang('de'); const de = bidLabel({ kind: 'sto-sedma', cervena: false });
+    setLang('fr'); const fr = bidLabel({ kind: 'sto-sedma', cervena: false });
+    assert.notEqual(cs, fr, 'FR popisek se musí lišit od CS');
     assert.notEqual(cs, en, 'EN popisek se musí lišit od CS');
     assert.notEqual(cs, de, 'DE popisek se musí lišit od CS');
 
     // klíčové texty musí existovat ve všech jazycích
-    for (const lang of ['cs', 'en', 'de'] as const) {
+    for (const lang of ['cs', 'en', 'de', 'fr'] as const) {
       setLang(lang);
       for (const key of ['hra', 'betl', 'durch', 'sedma', 'kilo', 'drawZero', 'youWon', 'youLost'] as const) {
         const val = t9(key);
@@ -2662,7 +2669,7 @@ const KULE = 2 as const;
     // žádný zástupný host: goatcounter je self-service, *.goatcounter.com
     // by povolil i domény cizích lidí
     assert.equal(policy.includes('*'), false, `CSP nesmí obsahovat žádný zástupný znak: ${policy}`);
-    assert.ok(policy.includes('https://saiko-flek.goatcounter.com'), 'povolen je jen náš subdomain');
+    assert.ok(policy.includes('https://flek.goatcounter.com'), 'povolen je jen náš subdomain');
     // blob: ve worker-src je zbytečná cesta ke spuštění cizího kódu
     const worker = policy.split(';').find((d) => d.trim().startsWith('worker-src')) as string;
     assert.equal(worker.includes('blob:'), false, 'worker-src nesmí povolovat blob:');
@@ -2828,7 +2835,7 @@ const KULE = 2 as const;
 {
   const { tableTalk, talkFires, TALK_SITUATIONS, TALK_TABLES } =
     await import('../src/lib/ui/tableTalk');
-  const LANGS = ['cs', 'en', 'de'] as const;
+  const LANGS = ['cs', 'en', 'de', 'fr'] as const;
   const SETS = ['slusna', 'hospodska', 'vulgarni'] as const;
 
   // ── úplnost: každá situace, každý jazyk, obě sady ──────────────────────
@@ -2861,7 +2868,7 @@ const KULE = 2 as const;
       assert.ok(politeFromPeople.includes(line), `zděděná hláška „${line}" musí být ze slušné sady`);
     }
     console.log(
-      `PASS hlášky — úplnost ${TALK_SITUATIONS.length} situací × 3 jazyky × ${SETS.length} sady`,
+      `PASS hlášky — úplnost ${TALK_SITUATIONS.length} situací × ${LANGS.length} jazyky × ${SETS.length} sady`,
     );
   }
 
@@ -3112,5 +3119,99 @@ const KULE = 2 as const;
     console.log('PASS hlášky — komentář k vyúčtování se escapuje');
   }
 }
+
+
+// ── IQ za běhu ───────────────────────────────────────────────────────────────
+/*
+ * Přepnutí obtížnosti v nastavení nesmí shodit rozehraný zápas (dřív volalo
+ * UI „nový zápas", takže hráč spadl na úvodní obrazovku a o hru přišel).
+ * Kontrola je na požadavcích, které controller posílá driveru: musí se změnit
+ * OBTÍŽNOST i ROZPOČET, a to bez ztráty stavu.
+ */
+{
+  const { MatchController: MC9 } = await import('../src/lib/match/controller');
+  const { defaultConfig } = await import('../src/lib/rules/sazby');
+  const { think } = await import('../src/lib/ai/think');
+
+  const seen: { difficulty: string; budgetMs: number }[] = [];
+  const driver = {
+    think: async (req: Parameters<typeof think>[0] & { requestId: number }) => {
+      seen.push({ difficulty: req.difficulty, budgetMs: req.budgetMs });
+      return think({ view: req.view, difficulty: 'easy', seed: req.seed, budgetMs: 0 });
+    },
+    cancel: () => {},
+  };
+
+  let seed = 700;
+  const mc = new MC9(driver, {
+    config: defaultConfig('voleny'),
+    humanSeat: 0,
+    difficulty: 'easy',
+    budgetMs: 0,
+    seedSource: () => (seed += 1),
+    aiDelayMs: 0,
+    autoGood: true,
+  });
+  mc.dealNext();
+  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+  const historyBefore = mc.state.history.length;
+  const handBefore = JSON.stringify(mc.state.hands[0]);
+
+  mc.setDifficulty('hard', 2200);
+  // rozehrané rozdání zůstává — žádný reset, žádná nová ruka
+  assert.equal(mc.state.phase.name !== 'idle', true, 'IQ nesmí zahodit rozehranou hru');
+  assert.equal(JSON.stringify(mc.state.hands[0]), handBefore, 'IQ nesmí přerozdat karty');
+  assert.ok(mc.state.history.length >= historyBefore, 'IQ nesmí umazat historii');
+
+  // dotlač hru k tahu AI, ať driver dostane další požadavek
+  let guard = 0;
+  while (mc.actor() === 0 && mc.state.phase.name !== 'scored') {
+    guard += 1;
+    assert.ok(guard < 200, 'IQ test: zaseknutý zápas');
+    const legal = mc.humanLegal();
+    if (legal.length === 0) break;
+    mc.dispatch(legal[0]!);
+  }
+  await sleep(30);
+  const afterSwitch = seen.filter((r) => r.difficulty === 'hard' && r.budgetMs === 2200);
+  assert.ok(afterSwitch.length > 0, 'po přepnutí musí AI dostat nové IQ i rozpočet');
+}
+console.log('PASS IQ — přepnutí obtížnosti platí hned a nezahodí rozehraný zápas');
+
+
+// ── názvy karet ve všech jazycích ────────────────────────────────────────────
+/*
+ * Názvy barev a hodnot jdou do přístupnostních popisků. Chybějící jazyk se
+ * dřív tiše propadl na češtinu — Francouz by slyšel „zelené desítka".
+ * `currentLang()` čte třídu na <html>, takže si test podstrčí minimální
+ * dokument a jazyk mění přes něj.
+ */
+{
+  let lang = 'cs';
+  const g = globalThis as { document?: unknown };
+  const hadDocument = 'document' in g;
+  g.document = { documentElement: { classList: { contains: (c: string) => c === `lang-${lang}` } } };
+
+  const { suitName, cardName } = await import('../src/lib/ui/cardAssets');
+  const names = new Map<string, string>();
+  for (const l of ['cs', 'en', 'de', 'fr']) {
+    lang = l;
+    for (let c = 0; c < 32; c += 1) {
+      const n = cardName(c);
+      assert.ok(n.length > 0 && !/undefined/.test(n), `${l}: název karty ${c} = „${n}"`);
+    }
+    for (let sIdx = 0; sIdx < 4; sIdx += 1) {
+      const n = suitName(sIdx as 0 | 1 | 2 | 3);
+      assert.ok(n.length > 0 && !/undefined/.test(n), `${l}: název barvy ${sIdx} = „${n}"`);
+    }
+    names.set(l, `${suitName(0)}|${cardName(7)}`);
+  }
+  // rozlišující kontrola: žádný jazyk nesmí být jen propadnutá čeština
+  for (const l of ['en', 'de', 'fr']) {
+    assert.notEqual(names.get(l), names.get('cs'), `${l}: názvy karet propadly na češtinu`);
+  }
+  if (!hadDocument) delete g.document;
+}
+console.log('PASS karty — názvy barev a hodnot ve všech čtyřech jazycích');
 
 console.log('OK: vše prošlo');

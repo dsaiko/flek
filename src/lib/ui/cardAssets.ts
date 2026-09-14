@@ -21,7 +21,8 @@ export function cardCode(c: Card): string {
 export function cardSrc(c: Card, pattern: Pattern): string {
   if (pattern === 'history') return `/cards/history/${cardCode(c)}.webp`;
   const lang = currentLang();
-  const set = lang === 'en' ? 'modern-en' : lang === 'de' ? 'modern-de' : 'modern';
+  const set =
+    lang === 'en' ? 'modern-en' : lang === 'de' ? 'modern-de' : lang === 'fr' ? 'modern-fr' : 'modern';
   return `/cards/${set}/${cardCode(c)}.svg`;
 }
 
@@ -36,6 +37,9 @@ const SUIT_NAME_DE = ['Herz', 'Grün', 'Schellen', 'Eichel'];
 const RANK_NAME_CS = ['sedma', 'osma', 'devítka', 'desítka', 'spodek', 'svršek', 'král', 'eso'];
 const RANK_NAME_EN = ['seven', 'eight', 'nine', 'ten', 'unter', 'ober', 'king', 'ace'];
 const RANK_NAME_DE = ['Sieben', 'Acht', 'Neun', 'Zehn', 'Unter', 'Ober', 'König', 'Ass'];
+/* francouzská sada má indexy V/D/R/A, takže i názvy jsou francouzské figury */
+const SUIT_NAME_FR = ['cœur', 'feuille', 'grelot', 'gland'];
+const RANK_NAME_FR = ['sept', 'huit', 'neuf', 'dix', 'valet', 'dame', 'roi', 'as'];
 
 /**
  * Inline SVG symboly barev — stejné tvary jako na kartách (gen-cards.ts),
@@ -57,12 +61,16 @@ export function suitIcon(s: Suit, size = 20): string {
 
 export function suitName(s: Suit): string {
   const lang = currentLang();
-  return lang === 'en' ? SUIT_NAME_EN[s] : lang === 'de' ? SUIT_NAME_DE[s] : SUIT_NAME_CS[s];
+  if (lang === 'en') return SUIT_NAME_EN[s]!;
+  if (lang === 'de') return SUIT_NAME_DE[s]!;
+  if (lang === 'fr') return SUIT_NAME_FR[s]!;
+  return SUIT_NAME_CS[s]!;
 }
 
 export function cardName(c: Card): string {
   const lang = currentLang();
   if (lang === 'en') return `${RANK_NAME_EN[rankOf(c)]} of ${SUIT_NAME_EN[suitOf(c)]}`;
   if (lang === 'de') return `${SUIT_NAME_DE[suitOf(c)]} ${RANK_NAME_DE[rankOf(c)]}`;
+  if (lang === 'fr') return `${RANK_NAME_FR[rankOf(c)]} de ${SUIT_NAME_FR[suitOf(c)]}`;
   return `${SUIT_NAME_CS[suitOf(c)]} ${RANK_NAME_CS[rankOf(c)]}`;
 }

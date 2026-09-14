@@ -77,6 +77,16 @@ export class MatchController {
     this.state = resumeState ?? initialState(opts.config, 2);
   }
 
+  /**
+   * Změna obtížnosti za běhu. Zápas se kvůli ní nesmí zahazovat — hráč
+   * přehodí IQ uprostřed hry a čeká, že se dohraje, jen chytřeji. Nový
+   * parametr platí od PŘÍŠTÍHO požadavku na AI; ten právě běžící dopočítá.
+   */
+  setDifficulty(difficulty: Difficulty, budgetMs: number): void {
+    this.opts.difficulty = difficulty;
+    this.opts.budgetMs = budgetMs;
+  }
+
   onChange(fn: (state: GameState) => void): void {
     this.listeners.push(fn);
   }

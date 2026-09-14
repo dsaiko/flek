@@ -16,10 +16,11 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const LANG: 'cs' | 'en' | 'de' = process.argv[2] === 'en' ? 'en' : process.argv[2] === 'de' ? 'de' : 'cs';
+const LANG: 'cs' | 'en' | 'de' | 'fr' =
+  process.argv[2] === 'en' ? 'en' : process.argv[2] === 'de' ? 'de' : process.argv[2] === 'fr' ? 'fr' : 'cs';
 const OUT = join(
   dirname(fileURLToPath(import.meta.url)), '..', 'cards',
-  LANG === 'en' ? 'modern-en' : LANG === 'de' ? 'modern-de' : 'modern',
+  LANG === 'en' ? 'modern-en' : LANG === 'de' ? 'modern-de' : LANG === 'fr' ? 'modern-fr' : 'modern',
 );
 
 // ── geometrie karty ──────────────────────────────────────────────────────────
@@ -120,23 +121,25 @@ interface RankDef {
   labelCs: string; // rohový index (česky)
   labelEn: string; // rohový index (anglicky; Unter→J, Ober→Q)
   labelDe: string; // rohový index (německy; Unter→U, Ober→O, Ass→A)
+  labelFr: string; // rohový index (francouzsky; Valet→V, Dame→D, Roi→R, As→A)
   nameCs: string;
   nameEn: string;
   nameDe: string;
 }
 
 const RANKS: RankDef[] = [
-  { code: '7', labelCs: '7', labelEn: '7', labelDe: '7', nameCs: 'sedma', nameEn: 'seven', nameDe: 'Sieben' },
-  { code: '8', labelCs: '8', labelEn: '8', labelDe: '8', nameCs: 'osma', nameEn: 'eight', nameDe: 'Acht' },
-  { code: '9', labelCs: '9', labelEn: '9', labelDe: '9', nameCs: 'devítka', nameEn: 'nine', nameDe: 'Neun' },
-  { code: 'T', labelCs: '10', labelEn: '10', labelDe: '10', nameCs: 'desítka', nameEn: 'ten', nameDe: 'Zehn' },
-  { code: 'U', labelCs: 'S', labelEn: 'J', labelDe: 'U', nameCs: 'spodek', nameEn: 'unter (jack)', nameDe: 'Unter' },
-  { code: 'O', labelCs: 'V', labelEn: 'Q', labelDe: 'O', nameCs: 'svršek', nameEn: 'ober (queen)', nameDe: 'Ober' },
-  { code: 'K', labelCs: 'K', labelEn: 'K', labelDe: 'K', nameCs: 'král', nameEn: 'king', nameDe: 'König' },
-  { code: 'D', labelCs: 'A', labelEn: 'A', labelDe: 'A', nameCs: 'eso', nameEn: 'ace', nameDe: 'Ass' },
+  { code: '7', labelCs: '7', labelEn: '7', labelDe: '7', labelFr: '7', nameCs: 'sedma', nameEn: 'seven', nameDe: 'Sieben' },
+  { code: '8', labelCs: '8', labelEn: '8', labelDe: '8', labelFr: '8', nameCs: 'osma', nameEn: 'eight', nameDe: 'Acht' },
+  { code: '9', labelCs: '9', labelEn: '9', labelDe: '9', labelFr: '9', nameCs: 'devítka', nameEn: 'nine', nameDe: 'Neun' },
+  { code: 'T', labelCs: '10', labelEn: '10', labelDe: '10', labelFr: '10', nameCs: 'desítka', nameEn: 'ten', nameDe: 'Zehn' },
+  { code: 'U', labelCs: 'S', labelEn: 'J', labelDe: 'U', labelFr: 'V', nameCs: 'spodek', nameEn: 'unter (jack)', nameDe: 'Unter' },
+  { code: 'O', labelCs: 'V', labelEn: 'Q', labelDe: 'O', labelFr: 'D', nameCs: 'svršek', nameEn: 'ober (queen)', nameDe: 'Ober' },
+  { code: 'K', labelCs: 'K', labelEn: 'K', labelDe: 'K', labelFr: 'R', nameCs: 'král', nameEn: 'king', nameDe: 'König' },
+  { code: 'D', labelCs: 'A', labelEn: 'A', labelDe: 'A', labelFr: 'A', nameCs: 'eso', nameEn: 'ace', nameDe: 'Ass' },
 ];
 
-const rankLabel = (r: RankDef) => (LANG === 'en' ? r.labelEn : LANG === 'de' ? r.labelDe : r.labelCs);
+const rankLabel = (r: RankDef) =>
+  LANG === 'en' ? r.labelEn : LANG === 'de' ? r.labelDe : LANG === 'fr' ? r.labelFr : r.labelCs;
 
 // ── rohové indexy (jen číslo/písmeno, bez mini symbolu) ─────────────────────
 function cornerIndex(suit: SuitDef, rank: RankDef): string {
