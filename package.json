@@ -1,6 +1,6 @@
 {
   "name": "flek",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Flek! — online mariáš · tribute to FLEK!/RE! by Pivoňka Software",
   "scripts": {
     "dev": "astro dev",
@@ -10,6 +10,7 @@
     "verify": "tsx scripts/verify.ts",
     "cards": "tsx scripts/gen-cards.ts && tsx scripts/gen-cards.ts en && tsx scripts/gen-cards.ts de && tsx scripts/gen-cards.ts fr",
     "assets": "tsx scripts/prep-history-cards.ts && tsx scripts/assets.ts",
+    "capture": "tsx scripts/capture.ts",
     "smoke": "tsx scripts/smoke.ts"
   },
   "repository": {

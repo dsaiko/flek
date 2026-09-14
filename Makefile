@@ -1,4 +1,4 @@
-.PHONY: help setup dev build preview verify cards assets all clean distclean \
+.PHONY: help setup dev build preview verify cards assets capture smoke all clean distclean \
         deploy-s3 deploy-s3-dryrun deploy-invalidate deploy
 
 # Lokální deployment konfigurace. Makefile.local je záměrně v .gitignore.
@@ -23,7 +23,9 @@ help:
 	@echo "  make verify             — testy enginu (scripts/verify.ts)"
 	@echo "  make cards              — přegenerování SVG sad karet (modern, modern-en)"
 	@echo "  make assets             — příprava public/cards/ (kopie SVG + WebP historické sady)"
-	@echo "  make all                — verify + build"
+	@echo "  make smoke              — browser testy (Playwright: Chromium + WebKit)"
+	@echo "  make capture            — snímek úvodní obrazovky pro README"
+	@echo "  make all                — verify + build + smoke"
 	@echo ""
 	@echo "  make deploy             — build, upload na S3, invalidace CloudFront"
 	@echo "  make deploy-s3-dryrun   — ukáže změny na S3 bez uploadu"
@@ -64,6 +66,18 @@ smoke: build
 	    curl -sf http://127.0.0.1:$(PREVIEW_PORT)/ > /dev/null && break || sleep 1; \
 	  done; \
 	  npm run smoke -- http://127.0.0.1:$(PREVIEW_PORT)/?seed=10
+
+# Snímek úvodní obrazovky pro README — stejné schéma jako smoke (preview na
+# pozadí, po doběhnutí se zabije). Scéna je deterministická (seed + pevné
+# dekorační karty), takže opakovaný běh nedělá v gitu šum.
+capture: build
+	@npm run preview -- --host 127.0.0.1 --port $(PREVIEW_PORT) > /tmp/flek-preview.log 2>&1 & \
+	  PREVIEW_PID=$$!; \
+	  trap "kill $$PREVIEW_PID 2>/dev/null" EXIT; \
+	  for i in 1 2 3 4 5 6 7 8 9 10; do \
+	    curl -sf http://127.0.0.1:$(PREVIEW_PORT)/ > /dev/null && break || sleep 1; \
+	  done; \
+	  npm run capture -- 'http://127.0.0.1:$(PREVIEW_PORT)/?seed=1993&lang=en'
 
 all: verify build smoke
 
