@@ -1305,7 +1305,7 @@ dvě z nich odhalily, že oprava byla jen poloviční.
 zkratka `font: 600 18px/24px inherit` je **neplatná** — `inherit` nesmí ve zkratce stát jako
 rodina písma, takže prohlížeč zahodil celou deklaraci včetně velikosti. Týkalo se to i lišty,
 selectů a badge. Všechny přepsané na samostatné vlastnosti; herní tlačítka mají
-`clamp(15px, 2.75cqh, 32px)`.
+`clamp(14px, 2.3cqh, 28px)` — velikost doladěná na dva pokusy (13 px bylo málo, 20 px moc).
 
 Negativní kontrolou ověřeno: účtování vysoutěženého závazku, archivní kontrakt v savu,
 obnova konta po reloadu a rotace rozdávajícího při přepnutí varianty.
