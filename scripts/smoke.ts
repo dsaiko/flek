@@ -9,7 +9,7 @@
 
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { chromium } from 'playwright';
+import { chromium, webkit } from 'playwright';
 import { TALK_TABLES } from '../src/lib/ui/tableTalk';
 
 // Pevný seed: smoke musí být reprodukovatelný. Se seedem 10 vede odhoz, který
@@ -128,10 +128,72 @@ if (injected) {
 // blokovaná injektáž se zaloguje jako CSP porušení — to je tady ŽÁDOUCÍ
 cspViolations.length = 0;
 
+/**
+ * Jazyk je od té doby, co se vlajky schovaly do dropdownu, dvoukrokový:
+ * otevřít trigger a teprve pak kliknout na vlajku. Playwright na skrytý
+ * prvek nekliká, takže tenhle helper zároveň hlídá, že dropdown funguje.
+ */
+async function setLang(code: string): Promise<void> {
+  await page.click('#btn-lang');
+  await page.waitForSelector('#lang-list:not([hidden])', { timeout: 2000 });
+  await page.click(`.langpill button[data-lang="${code}"]`);
+  await page.waitForTimeout(120);
+  if ((await page.locator('#lang-list:not([hidden])').count()) > 0) {
+    console.error('CHYBA: výběr vlajky nezavřel dropdown jazyků');
+    await browser.close();
+    process.exit(1);
+  }
+}
+
+/*
+ * Nastavení: Esc ho musí zavřít. Panel je modální (překrývá stůl), takže
+ * kdyby Esc nefungoval a křížek se někdy ztratil, hráč uvízne.
+ */
+await page.click('#btn-settings');
+await page.waitForSelector('#settings-float:not([hidden])', { timeout: 2000 });
+await page.keyboard.press('Escape');
+await page.waitForTimeout(150);
+if ((await page.locator('#settings-float:not([hidden])').count()) > 0) {
+  console.error('CHYBA: Esc nezavřel panel nastavení');
+  await browser.close();
+  process.exit(1);
+}
+
 // Rozdat — tenhle klik je zároveň gesto, které odemyká zvuk
 await page.click('#actions .action-btn.primary');
 await page.waitForTimeout(400);
 await page.screenshot({ path: join(outDir, 'smoke-1-deal.png'), clip: await tableClip() });
+
+/*
+ * IQ za běhu: přepnutí obtížnosti v nastavení nesmí shodit rozehraný zápas.
+ * Rozlišující pozorování je RUKA a stav stolu — dřív UI založilo nový zápas
+ * a spadlo na úvodní obrazovku, takže hráč o rozehranou hru přišel.
+ */
+await page.waitForSelector('#table.animating', { state: 'detached', timeout: 5000 });
+{
+  const handBefore = await page.locator('#hand .card-btn img').evaluateAll(
+    (els) => els.map((e) => (e as HTMLImageElement).src).join('|'),
+  );
+  await page.click('#btn-settings');
+  await page.waitForSelector('#settings-float:not([hidden])', { timeout: 2000 });
+  await page.selectOption('#set-difficulty', 'hard');
+  await page.waitForTimeout(300);
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(200);
+  if ((await page.locator('#table.idle').count()) > 0) {
+    console.error('CHYBA: přepnutí IQ shodilo rozehranou hru na úvodní obrazovku');
+    await browser.close();
+    process.exit(1);
+  }
+  const handAfter = await page.locator('#hand .card-btn img').evaluateAll(
+    (els) => els.map((e) => (e as HTMLImageElement).src).join('|'),
+  );
+  if (handAfter !== handBefore || handAfter.length === 0) {
+    console.error('CHYBA: přepnutí IQ změnilo ruku hráče (zápas se přerozdal)');
+    await browser.close();
+    process.exit(1);
+  }
+}
 
 /*
  * i3: přepnutí jazyka hned po rozdání (historie má délku 1) nesmí znovu
@@ -141,15 +203,13 @@ await page.screenshot({ path: join(outDir, 'smoke-1-deal.png'), clip: await tabl
 // Počkej, až animace rozdávání SKUTEČNĚ skončí (porovnávat s „baseline" nejde:
 // když animace ještě běží, je 1 před i po a kontrola by tiše nic nehlídala).
 await page.waitForSelector('#table.animating', { state: 'detached', timeout: 5000 });
-await page.click('.langpill button[data-lang="de"]');
-await page.waitForTimeout(200);
+await setLang('de');
 if ((await page.locator('#table.animating').count()) > 0) {
   console.error('CHYBA: přepnutí jazyka po rozdání znovu spustilo animaci rozdávání');
   await browser.close();
   process.exit(1);
 }
-await page.click('.langpill button[data-lang="cs"]');
-await page.waitForTimeout(200);
+await setLang('cs');
 
 // hraj: klikej na primární tlačítka a hratelné karty, dokud se hra hýbe
 let shots = 2;
@@ -157,6 +217,7 @@ let reachedSettlement = false;
 let confirmedWarnings = 0;
 let marriageChoices = 0;
 let popupSurvivedLang = false;
+let trickShot = false;
 /** Texty bublin viděné během hry — hlášky (§5.8) musí být opravdu vidět. */
 const bubblesSeen = new Set<string>();
 /** Všechny folklórní hlášky — pro kontrolu, že dva soupeři neřeknou totéž. */
@@ -208,6 +269,14 @@ for (let i = 0; i < 400; i += 1) {
   }
 
   const status = await page.textContent('#status');
+  /*
+   * Rozehraný štych je jediný okamžik, kdy se odhozené karty a ruka perou
+   * o místo — bez snímku se posun vrstev nedá posoudit jinak než ručně.
+   */
+  if (!trickShot && (await page.locator('#trick .played').count()) >= 2) {
+    await page.screenshot({ path: join(outDir, 'smoke-trick.png'), clip: await tableClip() });
+    trickShot = true;
+  }
   const phaseShot = async (name: string) => {
     if (shots <= 4) {
       await page.screenshot({ path: join(outDir, `smoke-${shots}-${name}.png`), clip: await tableClip() });
@@ -226,16 +295,14 @@ for (let i = 0; i < 400; i += 1) {
      * Ověř to na prvním popupu, který v běhu nastane.
      */
     if (!popupSurvivedLang) {
-      await page.click('.langpill button[data-lang="en"]');
-      await page.waitForTimeout(250);
+      await setLang('en');
       const stillThere = await page.locator('#center-float .felt-panel.warn').count();
       if (stillThere === 0) {
         console.error('CHYBA: přepnutí jazyka zahodilo otevřený popup i s čekající volbou');
         await browser.close();
         process.exit(1);
       }
-      await page.click('.langpill button[data-lang="cs"]');
-      await page.waitForTimeout(250);
+      await setLang('cs');
       if ((await page.locator('#center-float .felt-panel.warn').count()) === 0) {
         console.error('CHYBA: popup nepřežil přepnutí jazyka zpět');
         await browser.close();
@@ -450,6 +517,63 @@ await browser.close();
 if (!reachedSettlement) {
   console.error('CHYBA: hra nedošla k zúčtování (smyčka vyčerpána)');
   process.exit(1);
+}
+
+/*
+ * Úvodní obrazovka ve WebKitu (= Safari). Dvě věci, které Chromium NEODHALÍ:
+ *
+ *  1. `max-height: 100 %` na obrázku ve flex položce Safari přetáhne přes
+ *     kartu a figura se ořízne. Kontrola je na geometrii, ne na CSS.
+ *  2. Poměry z mockupu musí platit i ve fullscreenu — sazba stolu se proto
+ *     počítá z výšky sukna (cqh), ne z šířky okna.
+ */
+{
+  const wk = await webkit.launch();
+  const wkPage = await wk.newPage({ viewport: { width: 1440, height: 1000 } });
+  await wkPage.goto(url);
+  await wkPage.waitForSelector('.variant-card .variant-figure img', { timeout: 5000 });
+  await wkPage.waitForTimeout(400);
+
+  const proportions = async (label: string): Promise<number> => {
+    const felt = await wkPage.locator('#table').boundingBox();
+    const card = await wkPage.locator('.variant-card').first().boundingBox();
+    const img = await wkPage.locator('.variant-card .variant-figure img').first().boundingBox();
+    if (!felt || !card || !img) {
+      console.error(`CHYBA: úvodní obrazovka (${label}) se ve WebKitu nevykreslila`);
+      await wk.close();
+      await browser.close();
+      process.exit(1);
+    }
+    const overflow = Math.max(
+      img.y + img.height - (card.y + card.height),
+      card.y - img.y,
+      img.x + img.width - (card.x + card.width),
+    );
+    if (overflow > 1) {
+      console.error(`CHYBA: figura varianty přetéká kartu o ${Math.round(overflow)} px (${label})`);
+      await wk.close();
+      await browser.close();
+      process.exit(1);
+    }
+    return (100 * card.height) / felt.height;
+  };
+
+  const windowed = await proportions('okno');
+  await wkPage.evaluate(() => document.querySelector('.game-section')?.classList.add('fs-fallback'));
+  await wkPage.waitForTimeout(400);
+  const full = await proportions('fullscreen');
+  if (Math.abs(windowed - full) > 2) {
+    console.error(
+      `CHYBA: fullscreen rozhodil poměry úvodní obrazovky (karta varianty ${windowed.toFixed(1)} % → ${full.toFixed(1)} % výšky sukna)`,
+    );
+    await wk.close();
+    await browser.close();
+    process.exit(1);
+  }
+  console.log(
+    `WebKit: úvodní obrazovka drží poměry (karta varianty ${windowed.toFixed(1)} % / ${full.toFixed(1)} % výšky sukna)`,
+  );
+  await wk.close();
 }
 
 async function tableClip(): Promise<{ x: number; y: number; width: number; height: number }> {

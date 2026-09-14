@@ -543,6 +543,48 @@ Pasti, na které se při tom naráží (všechny stály jeden screenshot navíc)
   smoke ho proto bral za konec hry a hru vůbec neodehrál (`count()` nevidí viditelnost).
   Selektory v smoke jsou nově omezené na `#center-float`.
 
+### 5.5.1.1 Sazba stolu: poměry z mockupu v okně i ve fullscreenu
+
+Stůl je **height-constrained** — soupeři, štych a ruka se musí vejít pod sebe. Rozměry se
+proto neodvozují od šířky okna (`vw`), ale od **výšky sukna**: `#table` je `container-type:
+size` a všechno uvnitř měří v `cqh`. Karty, tlačítka, titulek i bloky výběru varianty tak
+drží poměry z mockupu v okně, ve fullscreenu i na jiném poměru stran; fullscreen už
+nepotřebuje vlastní `--card-w`.
+
+Klíčové poměry (mockup 1400×900, sukno = 100 cqh): karta v ruce 14,25 cqh, blok varianty
+39,6 cqh, titulek 7,6 cqh, „Rozdat" 2,77 cqh textu. Všechny mají `clamp()` s pixelovým dnem
+i stropem, aby se v extrémně malém okně layout nerozsypal.
+
+**Odhozené karty se nepočítají od středu `#trick`.** `.me-row` je absolutní, takže `#trick`
+sahá až pod ruku a jeho „střed" leží ZA vějířem. Odhozené karty proto mají posun nahoru
+(`-137 %` / `-114 %`), aby skončily celou výškou nad horní hranou ruky.
+
+**Past Safari:** `max-height: 100 %` na obrázku ve flex/grid položce WebKit přetáhne přes
+rodiče (Chromium ne) — figura varianty se ořízla. Obrázek se proto vkládá absolutně přes
+`inset: 0` + `object-fit: contain`, což je definitivní containing block. Hlídá to smoke
+**ve WebKitu**, měřením geometrie, ne CSS: figura nesmí přetéct kartu a poměr bloku varianty
+k výšce sukna se v okně a ve fullscreenu nesmí lišit o víc než 2 procentní body.
+
+### 5.5.1.2 Jazyky, nastavení a IQ za běhu
+
+- **Čtvrtý jazyk: francouzština** (`fr`) — všechny texty, hlášky (664 kontrolovaných textů),
+  vlastní sada karet `cards/modern-fr/` s indexy V/D/R/A. Název hry se překládá
+  (Mariáš / Marriage / Mariage), názvy variant **FLEK!/RE! zůstávají** — jsou to jména
+  původních her, ne pojmy.
+- **Vlajky jsou dropdown** za ikonou nastavení: sbalený stav ukazuje jen aktuální jazyk,
+  aby lišta nezabírala místo čtyřmi vlajkami. Zavírá ho výběr, klik mimo i Esc.
+- **Esc zavírá panel nastavení.** Panel je modální přes celé sukno; bez klávesy by hráč
+  uvízl, kdyby se křížek někdy ztratil.
+- **Přepnutí IQ nezahazuje rozehraný zápas.** Dřív UI zakládalo nový zápas, takže hráč
+  spadl na úvodní obrazovku a o hru přišel. Nově `MatchController.setDifficulty()` mění
+  obtížnost i rozpočet za běhu a platí od příštího požadavku na AI. Hlídá to verify
+  (payload requestu) i smoke (ruka a stav stolu se přepnutím nesmí změnit).
+- **Hlavička a patička stránky jsou pryč** — stůl je celý obsah; text se přesune do
+  dokumentových stránek (§5.6). **Pozor: s patičkou zmizela i atribuce licence karet —
+  musí se objevit v plánovaném dialogu „O aplikaci".**
+- Analytika běží na `https://flek.goatcounter.com` (CSP povoluje jen tento konkrétní
+  subdomain, ne zástupné `*.goatcounter.com`).
+
 ### 5.5.2 Ukončení rozehrané hry (house rule)
 
 Tlačítko v liště má dva významy: na úvodní obrazovce a po zúčtování je to
@@ -1097,7 +1139,7 @@ nikdy nekreslí — ani v `catch`, ani po dokončení animace.
 |---|---|---|---|
 | i6 | high | `choose-trump` čte `state.unseen[0]` bez kontroly. `suitOf(undefined)` je 0, takže poškozený sav tiše nastaví **trumf červené**; legalita „z lidu" přitom nevyžadovala neprázdný balíček | `PlayerView.unseenCount` (veřejná informace), legalita „z lidu" jen když je z čeho brát, a reducer navíc vyhodí `InvariantError` |
 | i11 | medium | `script-src 'unsafe-inline'` dělá ze `script-src` **prázdné gesto** — a přitom je to jediná pojistka pro případ, že by někde chybělo `esc()` nad obnoveným savem | post-build krok `scripts/csp.ts` vymění `'unsafe-inline'` za **sha256 hashe** skutečných inline bloků; ověřeno v prohlížeči: injektovaný `<script>` se **neprovede** („Executing inline script violates … 'script-src'") |
-| i12 | low | `*.goatcounter.com` — goatcounter je self-service, zástupný host povoluje i domény cizích lidí (hotový exfiltrační kanál) | jen `https://saiko-flek.goatcounter.com` |
+| i12 | low | `*.goatcounter.com` — goatcounter je self-service, zástupný host povoluje i domény cizích lidí (hotový exfiltrační kanál) | jen `https://flek.goatcounter.com` |
 | i13 | low | `worker-src 'self' blob:` je zbytečná cesta ke spuštění cizího kódu (build vytváří worker z reálné URL) | `worker-src 'self'` |
 | i4 | medium | v převzetí je mód závazku vždy konkrétní, ale validace brala i `null`; `resolveTakeover` ho přetypuje na `'betl'\|'durch'` a hra se pak hraje v přirozeném pořadí a **zúčtuje jako durch** | mód v převzetí musí být neprázdný, `takeover` navíc vyžaduje kontrakt |
 | i5 | medium | `trump: 0.5` prošlo rozsahem, ale žádná barva se mu nerovná — `legalPlays` přestane vynucovat trumfy a bitové operace z něj udělají jinou barvu | `inRange` (celé číslo) pro trumf i `revealedTrump` |
