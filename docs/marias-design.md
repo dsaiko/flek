@@ -1309,3 +1309,36 @@ selectů a badge. Všechny přepsané na samostatné vlastnosti; herní tlačít
 
 Negativní kontrolou ověřeno: účtování vysoutěženého závazku, archivní kontrakt v savu,
 obnova konta po reloadu a rotace rozdávajícího při přepnutí varianty.
+
+## 24. Odložený trumf na stole (2026-09-14)
+
+Uživatelovo hlášení: *„vyberu trumfy – žaludy. vybírám dvě karty do talonu – nevidím nikde,
+jaké jsou trumfy, je to jen napsané nahoře, ale v kartách to vidět není."* K tomu otázka,
+jestli je legální odhodit si do talonu trumfy.
+
+**Pravidla:** ano, legální to je. Talon nesmí obsahovat **esa a desítky** (Obecná pravidla,
+čl. o talonu); trumfová barva omezená není. House-rule přepínač `talonForbidsTrump` existuje
+(`sazby.ts`), ale jeho default je `false`, tedy podle ČSM.
+
+**UI:** originál nechával zvolenou trumfovou kartu ležet na stole (`docs/original-notes.md`,
+ř. 10) a přesně to tady chybělo — pilulka nad stolem to říká textem, jenže hráč se při
+odhazování dívá do karet. `#trump-aside` leží u levého okraje sukna v polovině výšky, kde
+nekoliduje ani s rubovými kartami soupeřů nad sebou, ani se jménem hráče pod sebou, a zůstává
+tam celou sehrávku.
+
+Dvě podoby, protože se liší informace, která je veřejná:
+
+| varianta | co se ukazuje | proč |
+|---|---|---|
+| **volený** | konkrétní karta (`revealedTrump`) | forhont ji vynáší, a to i při volbě „z lidu" — je veřejná |
+| **licitovaný** | destička se symbolem barvy | žádná karta se nevynáší; kreslit kartu by předstíralo, že něco padlo |
+
+Betl a durch trumf nemají, ve fázích `idle` a `scored` se nehraje — v obou případech je box
+skrytý. Překresluje se jen při změně klíče (`c<karta>` / `s<barva>`), jinak by se `<img>`
+při každém renderu nahrazoval a v Chromu problikával.
+
+**Test** (`scripts/smoke.ts`): kdykoli trumf existuje — při **odhazování do talonu** (smlouva
+ještě není, badge aktéra je prázdný, trumf hlásí jen pilulka) i u **barevné hry** (ikona barvy
+v badge) — musí být `#trump-aside` viditelný a neprázdný; po zúčtování naopak zmizet. Běh, kde
+žádná z těch situací nenastane, je chyba testu, ne úspěch. Negativní kontrolou (vyřazení
+`renderTrumpAside()` z `renderNow()`) ověřeno, že test spadne.

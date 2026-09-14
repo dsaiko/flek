@@ -273,6 +273,7 @@ let confirmedWarnings = 0;
 let marriageChoices = 0;
 let popupSurvivedLang = false;
 let trickShot = false;
+let trumpAsideSeen = false;
 let concedeSurvivedAi = false;
 /** Texty bublin viděné během hry — hlášky (§5.8) musí být opravdu vidět. */
 const bubblesSeen = new Set<string>();
@@ -325,6 +326,34 @@ for (let i = 0; i < 400; i += 1) {
   }
 
   const status = await page.textContent('#status');
+
+  /*
+   * Odložený trumf musí ležet stranou na stole všude, kde trumf existuje.
+   * Dvě rozlišující pozorování, protože jedno samo nestačí:
+   *
+   *  a) ODHAZOVÁNÍ DO TALONU — smlouva ještě není, badge aktéra je prázdný,
+   *     ale trumf už zvolený je (pilulka to říká textem). Přesně tady si hráč
+   *     stěžoval, že kouká do karet a text nad stolem nevnímá.
+   *  b) BAREVNÁ HRA — ikona barvy v badge aktéra; betl a durch jsou jen slovo
+   *     a trumf nemají, takže u nich `#trump-aside` naopak být nesmí.
+   */
+  const discardingWithTrump =
+    (await page.locator('#discard-confirm').count()) > 0 && /Trumfy:/.test(status ?? '');
+  const colourGame = (await page.locator('#contract-me svg, .seat-contract svg').count()) > 0;
+  if (discardingWithTrump || colourGame) {
+    if ((await page.locator('#trump-aside:not([hidden])').count()) === 0) {
+      console.error('CHYBA: trumf je zvolený, ale neleží stranou na stole');
+      await browser.close();
+      process.exit(1);
+    }
+    // prázdný `div` by prošel jako „viditelný" — musí v něm být karta nebo destička
+    if ((await page.locator('#trump-aside img, #trump-aside .suit-plate').count()) === 0) {
+      console.error('CHYBA: odložený trumf je prázdný (bez karty i bez destičky)');
+      await browser.close();
+      process.exit(1);
+    }
+    trumpAsideSeen = true;
+  }
   /*
    * Rozehraný štych je jediný okamžik, kdy se odhozené karty a ruka perou
    * o místo — bez snímku se posun vrstev nedá posoudit jinak než ručně.
@@ -403,6 +432,12 @@ for (let i = 0; i < 400; i += 1) {
         await browser.close();
         process.exit(1);
       }
+    }
+    // po zúčtování už se nehraje — trumf stranou nesmí zůstat viset přes výsledek
+    if ((await page.locator('#trump-aside:not([hidden])').count()) > 0) {
+      console.error('CHYBA: odložený trumf zůstal na stole i po zúčtování');
+      await browser.close();
+      process.exit(1);
     }
     reachedSettlement = true;
     console.log('OK: dohráno až k zúčtování');
@@ -740,6 +775,13 @@ await browser.close();
 // vyčerpání smyčky NENÍ úspěch — jinak by test procházel, i když hra uvízne
 if (!reachedSettlement) {
   console.error('CHYBA: hra nedošla k zúčtování (smyčka vyčerpána)');
+  process.exit(1);
+}
+
+// kdyby se v celém běhu barevná hra nehrála, kontrola trumfu stranou by tiše
+// neproběhla a test by procházel i s rozbitým `#trump-aside`
+if (!trumpAsideSeen) {
+  console.error('CHYBA: v běhu nenastala situace s trumfem — trumf stranou nebyl ověřen');
   process.exit(1);
 }
 

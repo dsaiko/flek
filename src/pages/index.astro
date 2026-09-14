@@ -46,6 +46,9 @@ import Layout from '../layouts/Layout.astro';
           </div>
         </div>
 
+        <!-- odložená trumfová karta (jako v originále: leží stranou na stole) -->
+        <div id="trump-aside" hidden></div>
+
         <div id="trick"></div>
 
         <!-- úvodní obrazovka: karty u okrajů + titulek a výběr varianty -->
@@ -503,6 +506,38 @@ import Layout from '../layouts/Layout.astro';
   #trick .played.pos-left  { transform: translate(calc(-50% - var(--card-w) * 1.15), -137%) rotate(-6deg); }
   #trick .played.pos-right { transform: translate(calc(-50% + var(--card-w) * 1.15), -137%) rotate(6deg); }
   #trick .played.pos-me    { transform: translate(-50%, -114%); }
+
+  /*
+   * Trumf odložený stranou. Pilulka nahoře ho sice hlásí textem, ale při
+   * odhazování do talonu hráč kouká do karet a text nad stolem nevnímá —
+   * originál proto trumfovou kartu položil na stůl a nechal ji tam ležet.
+   * Levý okraj uprostřed je jediné místo, které nekoliduje s ničím jiným:
+   * nad ním jsou rubové karty soupeře, pod ním jméno hráče.
+   */
+  #trump-aside {
+    position: absolute; left: calc(var(--card-w) * .22); top: 46%;
+    transform: translateY(-50%) rotate(-7deg);
+    display: flex; flex-direction: column; align-items: center; gap: .6cqh;
+    z-index: 2; pointer-events: none;
+  }
+  #trump-aside[hidden] { display: none; }
+  #trump-aside img {
+    width: calc(var(--card-w) * .86); border-radius: 6px; display: block;
+    box-shadow: 0 6px 18px rgba(0,0,0,.45);
+  }
+  /* licitovaný trumfovou KARTU neukazuje (žádná se nevynáší) — jen barvu */
+  #trump-aside .suit-plate {
+    display: grid; place-items: center;
+    width: calc(var(--card-w) * .86); aspect-ratio: 62 / 106;
+    border-radius: 6px; background: #fffdf2;
+    box-shadow: 0 6px 18px rgba(0,0,0,.45);
+  }
+  #trump-aside .suit-plate svg { width: 62%; height: auto; background: none; box-shadow: none; padding: 0; }
+  #trump-aside .trump-label {
+    font-size: clamp(9px, 1.35cqh, 16px); font-weight: 600;
+    letter-spacing: .08em; text-transform: uppercase; color: var(--on-frame-dim);
+    text-shadow: 0 1px 3px rgba(0,0,0,.6);
+  }
 
   /*
    * Spodní řada je ukotvená k hraně sukna (mockup ji má na `bottom:-40px`):

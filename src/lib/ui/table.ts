@@ -288,6 +288,7 @@ export class TableUI {
     if (phase.name !== 'scored') this.resultView = 'summary';
     this.renderPiles(v);
     this.renderMelds(state, v);
+    this.renderTrumpAside(v);
     this.renderActions(v, legal);
     this.renderStatus(v, legal);
     this.renderIntro(v);
@@ -465,6 +466,51 @@ export class TableUI {
         el.appendChild(wrap);
       }
     }
+  }
+
+  /**
+   * Trumf odložený stranou na stole (jako v originále).
+   *
+   * Ve VOLENÉM se vynáší konkrétní karta (`revealedTrump` — veřejná i u volby
+   * „z lidu"), takže leží na stole přesně ta. V LICITOVANÉM se žádná karta
+   * neukazuje, trumf je jen barva z deklarace — pak leží destička se symbolem
+   * barvy, aby se nepředstíralo, že padla karta, která nepadla.
+   *
+   * Proč vůbec: text v pilulce nahoře hráč při odhazování do talonu nevnímá,
+   * kouká do karet. Tohle je v jeho zorném poli a zůstává tam celou hru.
+   */
+  private renderTrumpAside(v: PlayerView): void {
+    const box = $(this.root, '#trump-aside');
+    const inPlay = v.phase.name !== 'idle' && v.phase.name !== 'scored';
+    const trump = v.contract?.trump
+      ?? (v.phase.name === 'discard-talon' || v.phase.name === 'declare' ? v.phase.standing.trump : null);
+    // betl a durch trumf nemají; před volbou taky není co ukazovat
+    if (!inPlay || (trump === null && v.revealedTrump === null)) {
+      box.hidden = true;
+      box.innerHTML = '';
+      return;
+    }
+    const card = v.revealedTrump;
+    const key = card !== null ? `c${card}` : `s${trump}`;
+    // překresluje se jen při ZMĚNĚ — jinak by se karta při každém renderu
+    // nahrazovala novým <img> a v Chromu problikávala (viz setSrc/syncChildren)
+    if (box.dataset.key !== key) {
+      box.dataset.key = key;
+      box.innerHTML = card !== null
+        ? `<img alt="">`
+        : `<div class="suit-plate">${trump !== null ? suitIcon(trump, 64) : ''}</div>`;
+      const label = document.createElement('div');
+      label.className = 'trump-label';
+      box.appendChild(label);
+    }
+    const img = box.querySelector('img');
+    if (img !== null && card !== null) {
+      setSrc(img, cardSrc(card, this.opts.pattern()));
+      img.alt = cardName(card);
+    }
+    const label = box.querySelector('.trump-label');
+    if (label !== null) label.textContent = t('trump');
+    box.hidden = false;
   }
 
   // ── pakle vybraných štychů ──────────────────────────────────────────────────
