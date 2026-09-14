@@ -274,6 +274,8 @@ let marriageChoices = 0;
 let popupSurvivedLang = false;
 let trickShot = false;
 let trumpAsideSeen = false;
+let trumpBackInHand = false;
+let asideCardAlt: string | null = null;
 let concedeSurvivedAi = false;
 /** Texty bublin viděné během hry — hlášky (§5.8) musí být opravdu vidět. */
 const bubblesSeen = new Set<string>();
@@ -328,31 +330,60 @@ for (let i = 0; i < 400; i += 1) {
   const status = await page.textContent('#status');
 
   /*
-   * Odložený trumf musí ležet stranou na stole všude, kde trumf existuje.
-   * Dvě rozlišující pozorování, protože jedno samo nestačí:
+   * Zvolený trumf leží stranou na stole (ČSM Čl. VII/1) a ve VĚJÍŘI v tu dobu
+   * není — přesně proto, že hráč při odhazování do talonu kouká do karet
+   * a text nad stolem nevnímá. Na začátku sehrávky si ho aktér bere zpět.
    *
-   *  a) ODHAZOVÁNÍ DO TALONU — smlouva ještě není, badge aktéra je prázdný,
-   *     ale trumf už zvolený je (pilulka to říká textem). Přesně tady si hráč
-   *     stěžoval, že kouká do karet a text nad stolem nevnímá.
-   *  b) BAREVNÁ HRA — ikona barvy v badge aktéra; betl a durch jsou jen slovo
-   *     a trumf nemají, takže u nich `#trump-aside` naopak být nesmí.
+   * Kontrola sedí na odhazování: smlouva ještě není, badge aktéra je prázdný,
+   * trumf hlásí jen pilulka. Ruka má v tu chvíli 12 karet, takže vějíř musí
+   * ukazovat 11 — a ta dvanáctá musí ležet stranou.
    */
-  const discardingWithTrump =
-    (await page.locator('#discard-confirm').count()) > 0 && /Trumfy:/.test(status ?? '');
-  const colourGame = (await page.locator('#contract-me svg, .seat-contract svg').count()) > 0;
-  if (discardingWithTrump || colourGame) {
-    if ((await page.locator('#trump-aside:not([hidden])').count()) === 0) {
+  if ((await page.locator('#discard-confirm').count()) > 0 && /Trumfy:/.test(status ?? '')) {
+    const asideImg = page.locator('#trump-aside:not([hidden]) img');
+    if ((await asideImg.count()) === 0) {
       console.error('CHYBA: trumf je zvolený, ale neleží stranou na stole');
       await browser.close();
       process.exit(1);
     }
-    // prázdný `div` by prošel jako „viditelný" — musí v něm být karta nebo destička
-    if ((await page.locator('#trump-aside img, #trump-aside .suit-plate').count()) === 0) {
-      console.error('CHYBA: odložený trumf je prázdný (bez karty i bez destičky)');
+    asideCardAlt = await asideImg.getAttribute('alt');
+    if (asideCardAlt === null || asideCardAlt === '') {
+      console.error('CHYBA: vlastní odložený trumf leží lícem dolů (má ležet lícem nahoru)');
+      await browser.close();
+      process.exit(1);
+    }
+    const handAlts = await page.locator('#hand .card-btn img').evaluateAll(
+      (els) => els.map((e) => (e as HTMLImageElement).alt),
+    );
+    if (handAlts.length !== 11) {
+      console.error(`CHYBA: při odhazování má vějíř ukazovat 11 karet (dvanáctá leží stranou), ukazuje ${handAlts.length}`);
+      await browser.close();
+      process.exit(1);
+    }
+    if (handAlts.includes(asideCardAlt)) {
+      console.error(`CHYBA: „${asideCardAlt}" leží stranou a zároveň je ve vějíři`);
       await browser.close();
       process.exit(1);
     }
     trumpAsideSeen = true;
+  }
+
+  /*
+   * Sehrávka: stranou už neleží nic a karta je zpátky v ruce. Rozlišující
+   * okamžik je první překreslení, kdy je box skrytý a ruka má plných 10 karet.
+   */
+  if (asideCardAlt !== null && !trumpBackInHand
+      && (await page.locator('#trump-aside:not([hidden])').count()) === 0) {
+    const handAlts = await page.locator('#hand .card-btn img').evaluateAll(
+      (els) => els.map((e) => (e as HTMLImageElement).alt),
+    );
+    if (handAlts.length === 10) {
+      if (!handAlts.includes(asideCardAlt)) {
+        console.error(`CHYBA: „${asideCardAlt}" se po odložení nevrátil do ruky — karta se ztratila`);
+        await browser.close();
+        process.exit(1);
+      }
+      trumpBackInHand = true;
+    }
   }
   /*
    * Rozehraný štych je jediný okamžik, kdy se odhozené karty a ruka perou
@@ -570,6 +601,35 @@ for (let attempt = 0; attempt < 3 && (await fromPeople.count()) === 0; attempt +
 if ((await fromPeople.count()) > 0) {
   await fromPeople.first().click();
   await page.waitForTimeout(150); // odhalení „z lidu" právě běží (1,8 s)
+
+  /*
+   * Otočená karta nesmí ležet přes akční lištu. Kontrola je na GEOMETRII, ne
+   * na CSS: karta i tlačítka se škálují z výšky sukna, takže „o kousek výš"
+   * je při jiném poměru okna zase málo. Tohle nahlásil uživatel.
+   */
+  {
+    const flip = await page.locator('#trick .played').first().boundingBox();
+    if (flip === null) {
+      console.error('CHYBA: „z lidu" neukázalo otočenou kartu');
+      await browser.close();
+      process.exit(1);
+    }
+    await page.screenshot({ path: join(outDir, 'smoke-frompeople.png'), clip: await tableClip() });
+    for (const btn of await page.locator('#actions .action-btn').all()) {
+      const b = await btn.boundingBox();
+      if (b === null) continue;
+      const overlapX = Math.min(flip.x + flip.width, b.x + b.width) - Math.max(flip.x, b.x);
+      const overlapY = Math.min(flip.y + flip.height, b.y + b.height) - Math.max(flip.y, b.y);
+      if (overlapX > 0 && overlapY > 0) {
+        console.error(
+          `CHYBA: otočená karta „z lidu" překrývá tlačítko „${(await btn.innerText()).trim()}"` +
+            ` (${Math.round(overlapX)}×${Math.round(overlapY)} px)`,
+        );
+        await browser.close();
+        process.exit(1);
+      }
+    }
+  }
   await newGame();
   await page.waitForSelector('#table.animating', { state: 'detached', timeout: 6000 });
   const afterNewMatch = await handFingerprint();
@@ -781,7 +841,11 @@ if (!reachedSettlement) {
 // kdyby se v celém běhu barevná hra nehrála, kontrola trumfu stranou by tiše
 // neproběhla a test by procházel i s rozbitým `#trump-aside`
 if (!trumpAsideSeen) {
-  console.error('CHYBA: v běhu nenastala situace s trumfem — trumf stranou nebyl ověřen');
+  console.error('CHYBA: v běhu jsem neodhazoval do talonu — trumf stranou nebyl ověřen');
+  process.exit(1);
+}
+if (!trumpBackInHand) {
+  console.error('CHYBA: návrat odložené karty do ruky nebyl ověřen');
   process.exit(1);
 }
 

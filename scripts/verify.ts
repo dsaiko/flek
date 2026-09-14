@@ -885,7 +885,9 @@ const KULE = 2 as const;
       await nap(3);
       if (cA.actor() === 0) {
         const acts = cA.humanLegal();
-        if (acts.length > 1) cA.dispatch(acts[0]);
+        // jedinou akci `good` si bere `autoGood` sám; jediný VYNUCENÝ výnos ale
+        // musí zahrát test, jinak hra uvízne a kontrola tiše neproběhne
+        if (acts.length > 1 || (acts.length === 1 && acts[0].type !== 'good')) cA.dispatch(acts[0]);
       }
     }
     assert.equal(cA.state.handResults.length, 1, 'hra se s nelegálními tahy AI musí dotáhnout přes fallback');
@@ -899,7 +901,9 @@ const KULE = 2 as const;
       await nap(3);
       if (cB.actor() === 0) {
         const acts = cB.humanLegal();
-        if (acts.length > 1) cB.dispatch(acts[0]);
+        // jedinou akci `good` si bere `autoGood` sám; jediný VYNUCENÝ výnos ale
+        // musí zahrát test, jinak hra uvízne a kontrola tiše neproběhne
+        if (acts.length > 1 || (acts.length === 1 && acts[0].type !== 'good')) cB.dispatch(acts[0]);
       }
     }
     assert.equal(cB.state.handResults.length, 1, 'hra se po pádu driveru musí dotáhnout přes fallback');
@@ -1100,7 +1104,8 @@ const KULE = 2 as const;
     const mkView = (sedmaSeat: 0 | 1 | 2 | null) => ({
       seat: 1 as const, config: cfg, dealer: 2 as const,
       hand: [mk3(CE3, K3), mk3(CE3, SV3)], handCounts: [2, 2, 2],
-      revealedTrump: trumpCard, unseenCount: 0, talonKnown: [], talon: null,
+      // obránce ukázanou kartu NEVIDÍ (leží lícem dolů) — view() mu pošle null
+      revealedTrump: null, unseenCount: 0, talonKnown: [], talon: null,
       contract: { mode: 'hra' as const, trump: 2 as const, declarer: 0 as const, sedma: sedmaSeat, kilo: null, dveSedmy: false },
       phase: { name: 'tricks' as const, trickNo: 0, leader: 0 as const, toAct: 1 as const,
         trick: [], played: [], won: [[], [], []] as [number[], number[], number[]], marriages: [] },
@@ -1108,35 +1113,26 @@ const KULE = 2 as const;
       handResults: [], ledger: [0, 0, 0] as [number, number, number], handNo: 1,
     });
 
-    // ukázaná trumfová karta smí být jen u volícího (sedadlo 0), nebo v talonu
+    /*
+     * Zvolená karta leží stranou LÍCEM DOLŮ (ČSM, Obecná pravidla Čl. VII/1),
+     * takže ji obránce nezná a AI si na ni nesmí vyrobit omezení. Dřív tu
+     * omezení bylo — a znamenalo, že AI přesně ví, kterou kartu forhont drží.
+     */
     const c1 = deriveConstraints(mkView(null) as never);
-    const allowTrump = c1.allowed.get(trumpCard);
-    assert.ok(allowTrump, 'ukázaná trumfová karta musí být omezená');
-    assert.deepEqual([...(allowTrump as Set<number>)].sort((a, b) => a - b), [TALON_SLOT, 0]);
+    assert.equal(c1.allowed.get(trumpCard), undefined, 'AI nesmí znát kartu ležící lícem dolů');
 
     // sedma hlášená OBRÁNCEM (sedadlo 2) → drží trumfovou sedmu jistě
     const c2 = deriveConstraints(mkView(2) as never);
     assert.ok(c2.mustHave[2].has(mk3(2, S73)), 'sedma proti ⇒ obránce drží trumfovou sedmu');
 
-    /*
-     * Po převzetí betlem už aktér NENÍ ten, kdo trumfovou kartu ukázal — omezení
-     * musí ukazovat na forhonta (dealer 2 ⇒ forhont 0), ne na aktéra (2).
-     */
+    // totéž po převzetí betlem, ať už přebírající talon bere nebo ne
     const betlContract = { mode: 'betl' as const, trump: null, declarer: 2 as const, sedma: null, kilo: null, dveSedmy: false };
-    // house rule 'keep': přebírající talon nebere, karta zůstává u forhonta
-    const keepTakeover = deriveConstraints({
-      ...mkView(null), config: { ...cfg, talonOnTakeover: 'keep' }, contract: betlContract,
-    } as never);
-    assert.deepEqual(
-      [...(keepTakeover.allowed.get(trumpCard) as Set<number>)].sort((a, b) => a - b),
-      [TALON_SLOT, 0], 'při „keep" drží ukázanou kartu forhont, i když hru přebral někdo jiný',
-    );
-    // výchozí 'retake': přebírající zvedl forhontův talon, karta může být i u něj
-    const retakeTakeover = deriveConstraints({ ...mkView(null), contract: betlContract } as never);
-    assert.deepEqual(
-      [...(retakeTakeover.allowed.get(trumpCard) as Set<number>)].sort((a, b) => a - b),
-      [TALON_SLOT, 0, 2], 'při „retake" mohl ukázanou kartu zvednout nový aktér',
-    );
+    for (const takeover of ['keep', 'retake'] as const) {
+      const c = deriveConstraints({
+        ...mkView(null), config: { ...cfg, talonOnTakeover: takeover }, contract: betlContract,
+      } as never);
+      assert.equal(c.allowed.get(trumpCard), undefined, `„${takeover}" — karta lícem dolů zůstává neznámá`);
+    }
 
     // sedma hlášená AKTÉREM → deklarace je až PO odhozu, takže je JISTĚ v ruce
     const c3 = deriveConstraints(mkView(0) as never);
@@ -1446,7 +1442,8 @@ const KULE = 2 as const;
 
     const v = {
       seat: 1 as const, config: defaultConfig('voleny'), dealer: 2 as const,
-      hand: myHand, handCounts: [3, 3, 3], revealedTrump: trumpCard, unseenCount: 0, talonKnown: [], talon: null,
+      // obránce zvolenou kartu nevidí (leží lícem dolů) — view() mu pošle null
+      hand: myHand, handCounts: [3, 3, 3], revealedTrump: null, unseenCount: 0, talonKnown: [], talon: null,
       contract: { mode: 'hra' as const, trump: 2 as const, declarer: 0 as const, sedma: 0 as const, kilo: null, dveSedmy: false },
       phase: {
         name: 'tricks' as const, trickNo: 7, leader: 0 as const, toAct: 1 as const,
@@ -1456,6 +1453,7 @@ const KULE = 2 as const;
       handResults: [], ledger: [0, 0, 0] as [number, number, number], handNo: 1,
     };
 
+    let trumpAtDefender = 0;
     for (let seed = 1; seed <= 60; seed += 1) {
       const d = determinize(v as never, new Random(seed));
       // konzervace karet
@@ -1468,11 +1466,14 @@ const KULE = 2 as const;
       // hlášená sedma aktéra: v jeho ruce, nikdy jinde
       assert.ok(d.hands[0].includes(seven), `seed ${seed}: hlášená sedma patří aktérovi`);
       assert.equal(d.talon.includes(seven), false, `seed ${seed}: sedma nesmí do talonu`);
-      // ukázaný trumf: jen u volícího (forhont = sedadlo 0), nebo v talonu
-      assert.equal(d.hands[2].includes(trumpCard), false, `seed ${seed}: ukázaný trumf nesmí u obránce`);
-      assert.ok(d.hands[0].includes(trumpCard) || d.talon.includes(trumpCard),
-        `seed ${seed}: ukázaný trumf patří volícímu, nebo do talonu`);
+      if (d.hands[2].includes(trumpCard)) trumpAtDefender += 1;
     }
+    /*
+     * Zvolená karta leží lícem dolů, takže ji AI nezná a musí ji vzorkovat
+     * volně — kdyby ji pořád umísťovala k volícímu, byla by to stará znalost
+     * cizí karty. Přes 60 seedů musí aspoň jednou padnout i obránci.
+     */
+    assert.ok(trumpAtDefender > 0, 'karta lícem dolů se musí vzorkovat volně, ne vždy k volícímu');
     void S96;
     console.log('PASS regrese i47 — determinizace umísťuje ukázaný trumf i hlášenou sedmu');
   }
@@ -1890,7 +1891,7 @@ const KULE = 2 as const;
     return [];
   };
 
-  // ── i27: revealedTrump opravdu putuje z reduceru do pohledu ─────────────
+  // ── i27: revealedTrump putuje z reduceru do pohledu — a JEN k volícímu ──
   {
     let st: St8 = initialState(defaultConfig('voleny'), 2);
     st = apply(st, { type: 'deal', seed: 4 });
@@ -1899,24 +1900,31 @@ const KULE = 2 as const;
       assert.equal(view(st, seat).revealedTrump, null, 'pohled kopíruje null');
     }
 
-    // volba konkrétní karty → je veřejná, vidí ji VŠICHNI (i ostatní sedadla)
+    /*
+     * „Zvolenou kartu odloží stranou LÍCEM DOLŮ" (ČSM, Obecná pravidla
+     * Čl. VII/1): stav si ji drží, ale pohled ji dá jen tomu, kdo volil —
+     * to je vždy forhont (rozdával 2 ⇒ forhont 0). Obránci dostanou null,
+     * jinak by AI znala forhontovu přesnou kartu.
+     */
     const pick = acts8(st).find((a) => a.type === 'choose-trump' && a.card !== 'from-people');
     assert.ok(pick, 'scénář i27 čeká volbu trumfu');
     const chosen = (pick as { card: number }).card;
     const afterPick = apply(st, pick as Act8);
     assert.equal(afterPick.revealedTrump, chosen, 'reducer musí ukázanou kartu zapsat do stavu');
-    for (const seat of [0, 1, 2] as const) {
-      assert.equal(view(afterPick, seat).revealedTrump, chosen, `sedadlo ${seat} musí ukázanou kartu vidět`);
+    assert.equal(view(afterPick, 0).revealedTrump, chosen, 'volící svou kartu vidí');
+    for (const seat of [1, 2] as const) {
+      assert.equal(view(afterPick, seat).revealedTrump, null, `sedadlo ${seat} kartu vidět nesmí`);
     }
 
-    // „z lidu": karta je otočená, takže taky veřejná
+    // „z lidu": karta je otočená naslepo, ale leží stejně lícem dolů
     const fromPeople = acts8(st).find((a) => a.type === 'choose-trump' && a.card === 'from-people');
     assert.ok(fromPeople, 'scénář i27 čeká i volbu „z lidu"');
     const flipped = st.unseen[0];
     const afterPeople = apply(st, fromPeople as Act8);
-    assert.equal(afterPeople.revealedTrump, flipped, 'otočená karta „z lidu" je veřejná');
-    assert.equal(view(afterPeople, 1).revealedTrump, flipped, 'vidí ji i obránce');
-    console.log('PASS regrese i27 — revealedTrump: reducer → stav → pohled všech sedadel');
+    assert.equal(afterPeople.revealedTrump, flipped, 'stav si „z lidu" kartu drží');
+    assert.equal(view(afterPeople, 0).revealedTrump, flipped, 'volící ji vidí');
+    assert.equal(view(afterPeople, 1).revealedTrump, null, 'obránce ji vidět nesmí');
+    console.log('PASS regrese i27 — revealedTrump: stav ano, pohled jen volícímu (Čl. VII/1)');
   }
 
   // ── i8: kdo v licitaci pasoval, už se nevrací ──────────────────────────
@@ -2548,6 +2556,74 @@ const KULE = 2 as const;
     st = apply(st, actsA(st).find((a) => a.type === 'discard' && a.cards.every((c) => ptsA(c) === 0)) as ActA);
     assert.equal(seatOnTurn(view(st, 0)), 0, 'deklaruje aktér');
     console.log('PASS regrese i33 — „na tahu" zná i fázi volby trumfu');
+  }
+
+  // ── odložený trumf: co leží na stole, není v ruce (a do talonu nesmí) ───
+  {
+    const { trumpAsideOf, handAside } = await import('../src/lib/ui/table');
+    let st: StA = initialState(defaultConfig('voleny'), 2); // forhont = 0
+    st = apply(st, { type: 'deal', seed: 4 });
+    assert.equal(trumpAsideOf(view(st, 0)), null, 'před volbou stranou nic neleží');
+
+    const pick = actsA(st).find((a) => a.type === 'choose-trump' && a.card !== 'from-people') as ActA;
+    const chosen = (pick as { card: number }).card;
+    st = apply(st, pick);
+
+    // volící: vlastní karta lícem NAHORU a zmizí mu z vějíře
+    const mine = trumpAsideOf(view(st, 0));
+    assert.ok(mine, 'volícímu leží zvolená karta stranou');
+    assert.equal(mine?.card, chosen);
+    assert.equal(mine?.faceDown, false, 'svou kartu volící vidí');
+    assert.equal(view(st, 0).hand.includes(chosen), true, 'v ruce ji stav pořád má');
+    assert.equal(handAside(view(st, 0)).includes(chosen), false, 've vějíři už být nesmí');
+    assert.equal(handAside(view(st, 0)).length, view(st, 0).hand.length - 1, 'ubyla právě jedna');
+
+    // obránce: leží tam rub, konkrétní kartu nezná (ČSM Čl. VII/1)
+    const theirs = trumpAsideOf(view(st, 1));
+    assert.ok(theirs, 'obránce vidí, že karta stranou leží');
+    assert.equal(theirs?.card, null, 'ale kterou, neví');
+    assert.equal(theirs?.faceDown, true, 'leží lícem dolů');
+
+    /*
+     * Do talonu zvolená karta nesmí (ČSM volený, B/7: dvě karty „odděleně od
+     * zvolené karty"). Kdyby směla, hráč by ji odhodil a UI by mu ji ukazovalo
+     * ležet na stole, i když je pryč.
+     */
+    const discards = actsA(st).filter((a) => a.type === 'discard');
+    assert.ok(discards.length > 0, 'scénář čeká odhoz do talonu');
+    assert.equal(
+      discards.some((a) => (a as { cards: number[] }).cards.includes(chosen)), false,
+      'zvolená karta se do talonu nesmí nabídnout',
+    );
+    assert.throws(
+      () => apply(st, { type: 'discard', seat: 0, cards: [chosen, view(st, 0).hand.find((c) => c !== chosen)] } as ActA),
+      /nelegální/, 'reducer odhoz zvolené karty odmítne, i kdyby akce přišla ručně',
+    );
+
+    // sehrávka: karta se vrací do ruky, stranou už neleží nic
+    st = apply(st, actsA(st).find((a) => a.type === 'discard' && a.cards.every((c) => ptsA(c) === 0)) as ActA);
+    assert.ok(trumpAsideOf(view(st, 0)), 'při deklaraci pořád leží');
+    st = apply(st, actsA(st).find((a) => a.type === 'declare') as ActA);
+    /*
+     * Schvalovat, ne přebírat (převzetí betlem by hru poslalo jinam). Jeden
+     * flek je ale nutný: schválená holá hra se podle pravidel nehraje a stav
+     * by skočil rovnou na `scored` — a tím by kontrola sehrávky tiše zmizela.
+     */
+    let fleked = false;
+    while (st.phase.name !== 'tricks' && st.phase.name !== 'scored') {
+      const acts = actsA(st);
+      const flek = fleked ? undefined : acts.find((a) => a.type === 'flek');
+      if (flek !== undefined) fleked = true;
+      const pass = acts.find((a) => a.type === 'good')
+        ?? acts.find((a) => a.type === 'takeover' && a.claim === 'good');
+      st = apply(st, (flek ?? pass ?? acts[0]) as ActA);
+    }
+    assert.equal(st.phase.name, 'tricks', 'scénář čeká sehrávku');
+    for (const seat of [0, 1, 2] as const) {
+      assert.equal(trumpAsideOf(view(st, seat)), null, `sedadlo ${seat}: při sehrávce stranou nic neleží`);
+    }
+    assert.deepEqual(handAside(view(st, 0)), view(st, 0).hand, 've hře je vějíř zase celá ruka');
+    console.log('PASS odložený trumf — stranou místo ruky, lícem dolů u soupeře, do talonu nesmí');
   }
 
   // ── i2: seed musí být celé číslo v rozsahu 32 bitů ─────────────────────

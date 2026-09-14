@@ -124,8 +124,7 @@ import Layout from '../layouts/Layout.astro';
           <div id="hand"></div>
           <div class="me-meta">
             <span class="avatar me"></span>
-            <span class="seat-id"><span class="seat-name" id="name-me"></span><span class="seat-sub" id="ledger-me"></span></span>
-            <span class="seat-contract" id="contract-me"></span>
+            <span class="seat-id"><span class="seat-name" id="name-me"></span><span class="seat-sub" id="ledger-me"></span><span class="seat-contract" id="contract-me"></span></span>
           </div>
           <div class="pile" id="pile-me"></div>
           <div class="melds" id="melds-me"></div>
@@ -350,7 +349,7 @@ import Layout from '../layouts/Layout.astro';
     margin-bottom: 4px; max-width: 100%;
   }
   .seat-contract svg { flex: none; display: block; }
-  #contract-me:not(:empty) { margin: 0 8px 0 0; }
+  #contract-me:not(:empty) { align-self: flex-start; margin: 5px 0 0; }
 
   /*
    * Úvodní obrazovka: karty rozhozené u okrajů stolu (podle mockupu z Claude
@@ -506,17 +505,23 @@ import Layout from '../layouts/Layout.astro';
   #trick .played.pos-left  { transform: translate(calc(-50% - var(--card-w) * 1.15), -137%) rotate(-6deg); }
   #trick .played.pos-right { transform: translate(calc(-50% + var(--card-w) * 1.15), -137%) rotate(6deg); }
   #trick .played.pos-me    { transform: translate(-50%, -114%); }
+  /*
+   * Otočení „z lidu": uprostřed sukna, výš než odhozené karty — pod ním je
+   * akční lišta s tlačítkem „Z lidu" a karta ji nesmí překrýt.
+   */
+  #trick .played.flip { width: calc(var(--card-w) * 1.15); transform: translate(-50%, -162%); }
 
   /*
    * Trumf odložený stranou. Pilulka nahoře ho sice hlásí textem, ale při
    * odhazování do talonu hráč kouká do karet a text nad stolem nevnímá —
    * originál proto trumfovou kartu položil na stůl a nechal ji tam ležet.
-   * Levý okraj uprostřed je jediné místo, které nekoliduje s ničím jiným:
-   * nad ním jsou rubové karty soupeře, pod ním jméno hráče.
+   * Pravý okraj uprostřed: nad ním jsou rubové karty soupeře, pod ním nic,
+   * a odhozené karty štychu jsou v tu dobu ještě na stole (leží tu jen do
+   * začátku sehrávky — pak si aktér kartu bere zpět do ruky).
    */
   #trump-aside {
-    position: absolute; left: calc(var(--card-w) * .22); top: 46%;
-    transform: translateY(-50%) rotate(-7deg);
+    position: absolute; right: calc(var(--card-w) * .22); top: 46%;
+    transform: translateY(-50%) rotate(7deg);
     display: flex; flex-direction: column; align-items: center; gap: .6cqh;
     z-index: 2; pointer-events: none;
   }

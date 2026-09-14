@@ -105,6 +105,13 @@ export function legalActions(v: PlayerView): PlayerAction[] {
           : ([0, 1, 2, 3] as Suit[]).filter((s) => s !== CERVENE);
 
       const discardOk = (pair: readonly [Card, Card]): boolean => {
+        /*
+         * Zvolená karta do talonu nesmí: aktér odkládá dvě karty „na sebe
+         * a ODDĚLENĚ OD ZVOLENÉ KARTY" (ČSM volený, B/7) — ta po celou dobu
+         * leží stranou lícem dolů (Obecná pravidla, Čl. VII/1) a do ruky se
+         * vrací až na sehrávku. Platí to při všech hrách, i u betlu a durchu.
+         */
+        if (v.revealedTrump !== null && pair.includes(v.revealedTrump)) return false;
         if (!colourCommitment) return true;
         if (pair.some(isValuable)) return false;
         const rest = v.hand.filter((c) => c !== pair[0] && c !== pair[1]);

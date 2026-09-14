@@ -1310,35 +1310,64 @@ selectů a badge. Všechny přepsané na samostatné vlastnosti; herní tlačít
 Negativní kontrolou ověřeno: účtování vysoutěženého závazku, archivní kontrakt v savu,
 obnova konta po reloadu a rotace rozdávajícího při přepnutí varianty.
 
-## 24. Odložený trumf na stole (2026-09-14)
+## 24. Odložená trumfová karta (2026-09-14)
 
 Uživatelovo hlášení: *„vyberu trumfy – žaludy. vybírám dvě karty do talonu – nevidím nikde,
-jaké jsou trumfy, je to jen napsané nahoře, ale v kartách to vidět není."* K tomu otázka,
-jestli je legální odhodit si do talonu trumfy.
+jaké jsou trumfy, je to jen napsané nahoře, ale v kartách to vidět není."* Plus dvě otázky:
+je legální odhodit si do talonu trumfy, a **mám vidět soupeřovu zvolenou kartu?**
 
-**Pravidla:** ano, legální to je. Talon nesmí obsahovat **esa a desítky** (Obecná pravidla,
-čl. o talonu); trumfová barva omezená není. House-rule přepínač `talonForbidsTrump` existuje
-(`sazby.ts`), ale jeho default je `false`, tedy podle ČSM.
+### Co říkají pravidla
 
-**UI:** originál nechával zvolenou trumfovou kartu ležet na stole (`docs/original-notes.md`,
-ř. 10) a přesně to tady chybělo — pilulka nad stolem to říká textem, jenže hráč se při
-odhazování dívá do karet. `#trump-aside` leží u levého okraje sukna v polovině výšky, kde
-nekoliduje ani s rubovými kartami soupeřů nad sebou, ani se jménem hráče pod sebou, a zůstává
-tam celou sehrávku.
+| | |
+|---|---|
+| **Obecná pravidla, Čl. VII/1** | „Trumfovou barvu volí vždy forhont … **Zvolenou kartu odloží stranou lícem dolů.** Talon odkládá až po zařazení druhé pětice karet do listu." |
+| **Volený, B/7** | „Aktér je povinen při všech hrách odložit jasným způsobem (na sebe a **odděleně od zvolené karty**) dvě karty do talonu." |
+| **Volený, C/13** | renonc je „eso nebo desítka v talonu (vyjma betla a durcha)" — o trumfech nic |
 
-Dvě podoby, protože se liší informace, která je veřejná:
+Z toho plyne všechno ostatní: zvolená karta **leží po celou dobu licitování stranou lícem
+dolů**, do talonu jít **nesmí**, soupeř ji **nevidí**, a na sehrávku si ji aktér bere zpět do
+ruky (deset karet musí mít každý). Odhodit si do talonu *jiné* trumfy legální je —
+`talonForbidsTrump` je house-rule přepínač s defaultem `false`, tedy dle ČSM.
 
-| varianta | co se ukazuje | proč |
-|---|---|---|
-| **volený** | konkrétní karta (`revealedTrump`) | forhont ji vynáší, a to i při volbě „z lidu" — je veřejná |
-| **licitovaný** | destička se symbolem barvy | žádná karta se nevynáší; kreslit kartu by předstíralo, že něco padlo |
+### Co se opravilo
 
-Betl a durch trumf nemají, ve fázích `idle` a `scored` se nehraje — v obou případech je box
-skrytý. Překresluje se jen při změně klíče (`c<karta>` / `s<barva>`), jinak by se `<img>`
-při každém renderu nahrazoval a v Chromu problikával.
+**1. Únik informace (vážné).** `view()` posílal `revealedTrump` **všem** sedadlům s komentářem
+„ukázaná karta je veřejná". Není: leží lícem dolů. Obránecká AI tak znala forhontovu přesnou
+kartu a `determinize.ts` z ní stavěla omezení — přesně to „koukání do karet", které je
+v README slíbené, že se nedělá. Nově pohled kartu dá jen tomu, kdo volil; omezení
+v determinizaci zmizelo (bez znalosti nemá co omezovat). Barva trumfů veřejná zůstává, nese ji
+`phase.standing` / `contract`.
 
-**Test** (`scripts/smoke.ts`): kdykoli trumf existuje — při **odhazování do talonu** (smlouva
-ještě není, badge aktéra je prázdný, trumf hlásí jen pilulka) i u **barevné hry** (ikona barvy
-v badge) — musí být `#trump-aside` viditelný a neprázdný; po zúčtování naopak zmizet. Běh, kde
-žádná z těch situací nenastane, je chyba testu, ne úspěch. Negativní kontrolou (vyřazení
-`renderTrumpAside()` z `renderNow()`) ověřeno, že test spadne.
+**2. Zvolená karta do talonu.** `legalActions` nabízel odhoz i té karty, co leží stranou
+(B/7). Nově se dvojice s ní nenabídne a `apply` ji odmítne i ručně poslanou.
+
+**3. UI.** `#trump-aside` u pravého okraje sukna (uživatel si vyžádal vpravo), od volby do
+začátku sehrávky. Vlastní karta lícem nahoru a **zmizí z vějíře** — leží na stole, ne v ruce;
+`handAside()` je jediné místo, které to rozhoduje, takže se vějíř a výběr do talonu nemůžou
+rozejít. Soupeřova karta leží rubem. V **licitovaném** se žádná karta nevynáší, trumf je jen
+barva ze závazku — místo karty leží destička se symbolem, aby se nepředstíralo, že něco padlo.
+Betl a durch trumf nemají: při jejich deklaraci karta mizí ze stolu a vrací se do ruky.
+
+**4. „Z lidu".** Otočená karta se ukazovala **všem** a ležela nad rukou přes akční lištu,
+takže překrývala tlačítko „Z lidu" (84×36 px, změřeno). Nově ji vidí jen ten, kdo volil
+(u soupeře se otočí rub a status řekne jen „Z lidu"), a leží výš, mimo lištu.
+
+**5. Badge aktéra u vlastního sedadla** se přesunul pod jméno (u soupeřů zůstal vedle).
+
+### Testy
+
+`scripts/verify.ts` — pohled dá kartu jen volícímu (i u „z lidu"), determinizace si na ni
+nesmí udělat omezení a přes 60 seedů ji musí vzorkovat i k obráncům, odhoz zvolené karty se
+nenabídne ani neprojde reducerem, `handAside()` ubere z vějíře právě jednu kartu a po začátku
+sehrávky ji vrátí.
+
+`scripts/smoke.ts` — při odhazování do talonu leží karta stranou lícem nahoru, vějíř ukazuje
+**11** z dvanácti karet a odloženou mezi nimi nemá; na začátku sehrávky je box pryč a karta
+zpátky v ruce; po zúčtování nic nevisí. Běh, ve kterém se do talonu neodhazuje, je chyba testu.
+
+Překryv „z lidu" se hlídá **geometricky** (průnik obdélníků karty a tlačítek), ne přes CSS:
+obojí se škáluje z výšky sukna, takže „o kousek výš" je při jiném poměru okna zase málo.
+
+Negativními kontrolami ověřeno: vrácení redakce ve `view()` shodí test i27, nefiltrovaná ruka
+shodí kontrolu „11 karet", box, který se neschová, shodí kontrolu po zúčtování, a původní
+pozice otočené karty (`pos-me`) shodí kontrolu překryvu.

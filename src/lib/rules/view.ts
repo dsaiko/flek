@@ -6,7 +6,7 @@
  * později posílal server vzdálenému klientovi.
  */
 
-import type { GameState, PlayerAction, PlayerView, PublicAction, Seat } from './types';
+import { forhont, type GameState, type PlayerAction, type PlayerView, type PublicAction, type Seat } from './types';
 
 /** Redakce jedné akce do veřejné podoby. */
 export function redact(action: PlayerAction): PublicAction {
@@ -27,7 +27,13 @@ export function view(state: GameState, seat: Seat): PlayerView {
     dealer: state.dealer,
     hand: state.hands[seat].slice(),
     handCounts: [state.hands[0].length, state.hands[1].length, state.hands[2].length],
-    revealedTrump: state.revealedTrump,
+    /*
+     * Zvolená trumfová karta leží stranou LÍCEM DOLŮ (ČSM, Obecná pravidla
+     * Čl. VII/1) — vidí ji jen ten, kdo ji volil. Dřív byla ve view veřejná
+     * a AI tak znala forhontovu přesnou kartu; barva trumfů je veřejná sama
+     * o sobě (nese ji `phase.standing` / `contract`), konkrétní karta ne.
+     */
+    revealedTrump: forhont(state.dealer) === seat ? state.revealedTrump : null,
     unseenCount: state.unseen.length,
     talonKnown: state.talonKnowledge[seat].slice(),
     talon: state.talonOwner === seat ? state.talon.slice() : null,

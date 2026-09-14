@@ -12,6 +12,9 @@ overeni FLEK! v DOSBoxu → preset SAZBY_FLEK
 Zvuky, hlasky, francouzstina a vzdani hry hotove. Tri kola fixpoint review-pr
 uzavrena (docs/marias-design.md §21–§23).
 
-~~vybrany trumf stranou~~ ✅ lezi na stole vlevo (docs/marias-design.md §24).
-Odhodit trumfy do talonu legalni je — talon nesmi mit jen esa a desitky (ČSM);
-`talonForbidsTrump` je house-rule prepinac s defaultem false.
+~~vybrany trumf stranou~~ ✅ lezi vpravo na stole do zacatku sehravky, pak zpet
+do ruky; soupercova karta rubem (CSM Cl. VII/1). Do talonu nesmi (B/7). Jine
+trumfy do talonu legalni jsou. Pri tom se naslo, ze view() posilal zvolenou
+kartu vsem — AI znala forhontovu kartu. Opraveno. (docs/marias-design.md §24)
+
+overeni funkcnosti podle pravidel + overeni nekoukani do karet

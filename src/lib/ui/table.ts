@@ -6,7 +6,7 @@
  * karty. Žádný přístup ke GameState mimo humanView + veřejné části.
  */
 
-import { suitOf, card as mkCard, KRAL, SVRSEK, type Card } from '../cards';
+import { suitOf, card as mkCard, KRAL, SVRSEK, type Card, type Suit } from '../cards';
 import { legalActions } from '../rules/legal';
 import { trickWinner } from '../rules/tricks';
 import type { GameState, PlayerAction, PlayerView, Seat } from '../rules/types';
@@ -230,19 +230,27 @@ export class TableUI {
       return gen === this.gen; // opuštěný zápas nechá překreslit ten nový
     }
 
-    // „z lidu": otočená karta se ukazuje všem — chvíli ji vystav uprostřed
+    /*
+     * „Z lidu": volí se naslepo z druhé pětice, ať je ta chvíle vidět. Kartu
+     * ale ukazujeme JEN tomu, kdo volil — leží lícem dolů (ČSM, Obecná
+     * pravidla Čl. VII/1). U soupeře se otočí rub a status řekne jen to, že
+     * bral z lidu; dřív se odhalovala i cizí karta.
+     */
     if (a?.type === 'choose-trump' && a.card === 'from-people' && prev !== null && prev.unseen.length > 0) {
       const flipped = prev.unseen[0];
+      const mine = a.seat === this.opts.humanSeat;
       const trickEl = $(this.root, '#trick');
       this.root.classList.add('animating');
       trickEl.innerHTML = '';
       const img = document.createElement('img');
-      img.src = cardSrc(flipped, this.opts.pattern());
-      img.alt = cardName(flipped);
-      img.className = 'played pos-me win';
+      img.src = mine ? cardSrc(flipped, this.opts.pattern()) : backSrc();
+      img.alt = mine ? cardName(flipped) : '';
+      // vlastní třída, ne `pos-me`: ta míří nad ruku, kde je v tu chvíli
+      // akční lišta s tlačítkem „Z lidu" — karta ho překrývala
+      img.className = 'played flip win';
       trickEl.appendChild(img);
       const statusEl = $(this.root, '#status');
-      statusEl.textContent = `${t('fromPeople')}: ${cardName(flipped)}`;
+      statusEl.textContent = mine ? `${t('fromPeople')}: ${cardName(flipped)}` : t('fromPeople');
       await this.sleep(this.reducedMotion() ? 900 : 1800);
       // po vyměněném zápasu ať se o překreslení postará ten nový
       return gen !== this.gen;
@@ -471,42 +479,37 @@ export class TableUI {
   /**
    * Trumf odložený stranou na stole (jako v originále).
    *
-   * Ve VOLENÉM se vynáší konkrétní karta (`revealedTrump` — veřejná i u volby
-   * „z lidu"), takže leží na stole přesně ta. V LICITOVANÉM se žádná karta
-   * neukazuje, trumf je jen barva z deklarace — pak leží destička se symbolem
-   * barvy, aby se nepředstíralo, že padla karta, která nepadla.
-   *
-   * Proč vůbec: text v pilulce nahoře hráč při odhazování do talonu nevnímá,
-   * kouká do karet. Tohle je v jeho zorném poli a zůstává tam celou hru.
+   * Ve VOLENÉM leží konkrétní ukázaná karta (`revealedTrump` — veřejná i u volby
+   * „z lidu"). V LICITOVANÉM se žádná karta neukazuje, trumf je jen barva
+   * z deklarace — pak leží destička se symbolem barvy, aby se nepředstíralo,
+   * že padla karta, která nepadla.
    */
   private renderTrumpAside(v: PlayerView): void {
     const box = $(this.root, '#trump-aside');
-    const inPlay = v.phase.name !== 'idle' && v.phase.name !== 'scored';
-    const trump = v.contract?.trump
-      ?? (v.phase.name === 'discard-talon' || v.phase.name === 'declare' ? v.phase.standing.trump : null);
-    // betl a durch trumf nemají; před volbou taky není co ukazovat
-    if (!inPlay || (trump === null && v.revealedTrump === null)) {
+    const aside = trumpAsideOf(v);
+    if (aside === null) {
       box.hidden = true;
       box.innerHTML = '';
+      delete box.dataset.key;
       return;
     }
-    const card = v.revealedTrump;
-    const key = card !== null ? `c${card}` : `s${trump}`;
+    const { card, suit: trump, faceDown } = aside;
+    const key = faceDown ? 'down' : card !== null ? `c${card}` : `s${trump}`;
     // překresluje se jen při ZMĚNĚ — jinak by se karta při každém renderu
     // nahrazovala novým <img> a v Chromu problikávala (viz setSrc/syncChildren)
     if (box.dataset.key !== key) {
       box.dataset.key = key;
-      box.innerHTML = card !== null
+      box.innerHTML = faceDown || card !== null
         ? `<img alt="">`
-        : `<div class="suit-plate">${trump !== null ? suitIcon(trump, 64) : ''}</div>`;
+        : `<div class="suit-plate">${suitIcon(trump, 64)}</div>`;
       const label = document.createElement('div');
       label.className = 'trump-label';
       box.appendChild(label);
     }
     const img = box.querySelector('img');
-    if (img !== null && card !== null) {
-      setSrc(img, cardSrc(card, this.opts.pattern()));
-      img.alt = cardName(card);
+    if (img !== null) {
+      setSrc(img, card !== null ? cardSrc(card, this.opts.pattern()) : backSrc());
+      img.alt = card !== null ? cardName(card) : '';
     }
     const label = box.querySelector('.trump-label');
     if (label !== null) label.textContent = t('trump');
@@ -832,6 +835,8 @@ export class TableUI {
   private renderHand(v: PlayerView, legal: PlayerAction[], reveal = false, unseenCount = 0): void {
     const handEl = $(this.root, '#hand');
     const phase = v.phase;
+    // zvolený trumf leží stranou na stole, ne ve vějíři (viz trumpAsideOf)
+    const hand = handAside(v);
 
     const playable = new Set<Card>();
     if (phase.name === 'tricks') {
@@ -847,7 +852,7 @@ export class TableUI {
 
     const myUnseen =
       v.phase.name === 'choose-trump' && v.seat === forhont(v.dealer) ? unseenCount : 0;
-    const n = v.hand.length + myUnseen;
+    const n = hand.length + myUnseen;
     const animate = reveal && !this.reducedMotion();
 
     // klik je delegovaný na kontejner, aby šlo tlačítka recyklovat bez
@@ -872,8 +877,8 @@ export class TableUI {
 
     buttons.forEach((btn, i) => {
       const img = btn.firstElementChild as HTMLImageElement;
-      const fromHand = i < v.hand.length;
-      const c = fromHand ? v.hand[i] : null;
+      const fromHand = i < hand.length;
+      const c = fromHand ? hand[i] : null;
       btn.disabled = c === null || !playable.has(c);
       btn.classList.toggle('selected', c !== null && this.selected.has(c));
       if (c === null) delete btn.dataset.card;
@@ -915,7 +920,7 @@ export class TableUI {
   private rerenderSelection(v: PlayerView): void {
     const handEl = $(this.root, '#hand');
     const buttons = handEl.querySelectorAll<HTMLButtonElement>('.card-btn');
-    v.hand.forEach((c, i) => {
+    handAside(v).forEach((c, i) => {
       buttons[i]?.classList.toggle('selected', this.selected.has(c));
     });
     // stav tlačítka i případné hlášení o nedovoleném odhozu řeší renderActions
@@ -1347,6 +1352,58 @@ function flekSummary(state: GameState): string {
     ([tg, lvl]) => `${flekWord(lvl - 1)} ${t('na')} ${targetLabel(tg)}`,
   );
   return parts.join(', ');
+}
+
+/**
+ * Co leží stranou na stole jako trumf — a tím pádem NENÍ v ruce.
+ *
+ * Pravidla (ČSM volený, B/7): aktér odkládá dvě karty do talonu „odděleně od
+ * zvolené karty", takže zvolená karta po celou dobu licitování leží zvlášť na
+ * stole a do talonu jít nesmí. Na sehrávku si ji aktér bere zpět do ruky —
+ * proto od fáze `tricks` dál tu nic neleží a kartu ukazuje zase vějíř.
+ *
+ * Vrací `card` (volený: ukázaná karta) nebo jen `suit` (licitovaný: žádná karta
+ * se neukazuje, leží destička s barvou), `null` = nic se neodkládá.
+ *
+ * Exportováno, aby to šlo testovat bez DOM — tahle funkce rozhoduje zároveň
+ * o obsahu ruky, takže její chyba kartu hráči *ztratí*.
+ */
+export function trumpAsideOf(
+  v: PlayerView,
+): { card: Card | null; suit: Suit; faceDown: boolean } | null {
+  const p = v.phase;
+  if (p.name !== 'discard-talon' && p.name !== 'declare' && p.name !== 'takeover' && p.name !== 'fleks') {
+    return null;
+  }
+  const st = p.name === 'fleks' ? null : p.standing;
+  const mode = v.contract?.mode ?? st?.mode ?? null;
+  // betl a durch trumf nemají — zvolená karta se vrací do ruky hned při deklaraci
+  if (mode === 'betl' || mode === 'durch') return null;
+  const suit = v.contract?.trump ?? st?.trump ?? null;
+  if (suit === null) return null;
+  /*
+   * Volí vždy forhont. Po převzetí hraje někdo jiný a zvolená karta je zpátky
+   * v cizí ruce — ležet na stole už nemá co.
+   */
+  const declarer = v.contract?.declarer ?? st?.declarer ?? null;
+  if (v.config.variant === 'voleny') {
+    if (declarer !== forhont(v.dealer)) return null;
+    /*
+     * „Zvolenou kartu odloží stranou lícem dolů" (Čl. VII/1): svou vidím,
+     * soupeřovu ne — `view()` mi ji ani nepošle, přijde `null`.
+     */
+    const mine = v.revealedTrump !== null;
+    return { card: mine ? v.revealedTrump : null, suit, faceDown: !mine };
+  }
+  // licitovaný: žádná karta se nevynáší, trumf je jen barva ze závazku
+  return { card: null, suit, faceDown: false };
+}
+
+/** Ruka tak, jak ji vidí hráč: bez karty, která leží stranou na stole. */
+export function handAside(v: PlayerView): readonly Card[] {
+  const aside = trumpAsideOf(v);
+  if (aside === null || aside.card === null) return v.hand;
+  return v.hand.filter((c) => c !== aside.card);
 }
 
 /**

@@ -12,7 +12,6 @@
 import { ESO, R10, rankOf, suitOf, type Card, type Suit } from '../cards';
 import { Random } from '../random';
 import type { GameState, PlayerView, Seat, TrickPlay } from '../rules/types';
-import { forhont } from '../rules/types';
 
 /** Kam smí karta padnout: sedadlo 0–2, nebo talon (-1). */
 export const TALON_SLOT = -1;
@@ -71,23 +70,11 @@ export function deriveConstraints(v: PlayerView): Constraints {
   }
 
   /*
-   * Veřejně ukázaná trumfová karta (i „z lidu") skončila v ruce toho, kdo
-   * volil — nebo v jeho odhozu do talonu.
+   * Zvolená trumfová karta se NEmodeluje: leží stranou lícem dolů (ČSM,
+   * Obecná pravidla Čl. VII/1), takže ji `view()` pošle jen tomu, kdo volil —
+   * a v jeho vlastní ruce není co vzorkovat. Dřív tu byla veřejná a AI z ní
+   * přesně věděla, kterou kartu forhont drží.
    */
-  if (v.revealedTrump !== null && !played.has(v.revealedTrump)) {
-    const seats = new Set<number>([forhont(v.dealer), TALON_SLOT]);
-    /*
-     * Při převzetí betlem/durchem s house rule 'retake' zvedne nový aktér
-     * forhontův talon — ukázaná karta tak může skončit i v JEHO ruce.
-     */
-    if (
-      contract !== null && contract.declarer !== forhont(v.dealer) &&
-      v.config.talonOnTakeover === 'retake'
-    ) {
-      seats.add(contract.declarer);
-    }
-    allowed.set(v.revealedTrump, seats);
-  }
 
   /*
    * Hlášená sedma: držitel ji prokazatelně MÁ V RUCE — deklarace se podává až
