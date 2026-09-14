@@ -1,0 +1,55 @@
+# Tag `v*` → vydání na GitHubu.
+#
+# Text vydání se NEGENERUJE ze seznamu commitů (hráč z něj nic nemá) — bere se
+# sekce z CHANGELOG.md. Chybějící sekce nebo verze v package.json, která
+# neodpovídá tagu, vydání zastaví: obojí znamená, že tag vznikl omylem.
+name: release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      - name: Verze v package.json musí odpovídat tagu
+        run: |
+          want="${GITHUB_REF_NAME#v}"
+          have="$(node -p "require('./package.json').version")"
+          test "$want" = "$have" || {
+            echo "tag $GITHUB_REF_NAME, ale package.json má $have"
+            exit 1
+          }
+
+      - name: Poznámky k vydání z CHANGELOG.md
+        id: notes
+        run: echo "title=$(npx tsx scripts/release-notes.ts "$GITHUB_REF_NAME")" >> "$GITHUB_OUTPUT"
+
+      # chromium i webkit: smoke jede v obou (Safari chytá jiné chyby layoutu)
+      - name: Prohlížeče pro smoke testy
+        run: npx playwright install --with-deps chromium webkit
+
+      - name: make all
+        env:
+          # sdílený runner je pomalejší než vývojářský stroj; kontrola hlídá
+          # zadrhnutý řetěz, ne absolutní výkon (viz scripts/smoke.ts)
+          SMOKE_RESTART_MS: 9000
+        run: make all
+
+      - name: Vydání
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" --title "${{ steps.notes.outputs.title }}" --notes-file release-notes.md

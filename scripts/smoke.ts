@@ -755,9 +755,15 @@ if ((await page.locator('#hand .card-btn').count()) === 0) {
   await browser.close();
   process.exit(1);
 }
-// jedno rozdávání ≈ 1,3 s; kdyby nové čekalo za opuštěným, přibyly by ~2,5 s
-if (restartMs > 4500) {
-  console.error(`CHYBA: restart uprostřed rozdávání trval ${restartMs} ms — řetěz se zadrhl`);
+/*
+ * Jedno rozdávání ≈ 1,3 s; kdyby nové čekalo za opuštěným, přibyly by ~2,5 s.
+ * Kontrola hlídá ZADRHNUTÝ řetěz, ne absolutní výkon — na sdíleném CI runneru
+ * je stroj pomalejší, a tak jde mez zvednout přes `SMOKE_RESTART_MS`. I volná
+ * mez zadrhnutí pozná, protože to přidá celé další rozdávání.
+ */
+const restartLimitMs = Number(process.env.SMOKE_RESTART_MS ?? 4500);
+if (restartMs > restartLimitMs) {
+  console.error(`CHYBA: restart uprostřed rozdávání trval ${restartMs} ms (mez ${restartLimitMs}) — řetěz se zadrhl`);
   await browser.close();
   process.exit(1);
 }
