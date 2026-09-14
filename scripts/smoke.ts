@@ -26,15 +26,37 @@ page.on('dialog', (d) => void d.dismiss());
 // CSP porušení hlásí prohlížeč jako console error — blokovaný worker by jinak
 // jen tiše spadl do fallbacku na hlavním vlákně a test by prošel
 const cspViolations: string[] = [];
+/*
+ * Výjimky uvnitř aplikace. Řetěz překreslování je chytá vlastním `catch`
+ * a jen je vypíše, takže se do `pageerror` nedostanou — francouzské
+ * vyúčtování takhle padalo a smoke prošel. Cokoli, co vypadá jako výjimka,
+ * je proto chyba testu; CSP hlášky jsou jediná povolená výjimka (test si
+ * injektáž skriptu vyvolává sám).
+ */
+const appErrors: string[] = [];
+const isCspNoise = (t: string): boolean =>
+  /content security policy|refused to (load|execute|connect|create)/i.test(t);
 page.on('console', (msg) => {
   if (msg.type() !== 'error') return;
   const text = msg.text();
   console.log('CONSOLE ERROR:', text);
-  if (/content security policy|refused to (load|execute|connect|create)/i.test(text)) {
+  if (isCspNoise(text)) {
     cspViolations.push(text);
+    return;
+  }
+  if (/\b(Error|TypeError|RangeError|ReferenceError|SyntaxError)\b|is not a function|undefined is not|cannot read/i.test(text)) {
+    appErrors.push(text);
   }
 });
-page.on('pageerror', (e) => console.log('PAGE ERROR:', e.message));
+/*
+ * Výjimka na stránce je CHYBA testu, ne poznámka do logu. Francouzské
+ * vyúčtování padalo na `compLabel` a smoke to jen vypsal a prošel.
+ */
+const pageErrors: string[] = [];
+page.on('pageerror', (e) => {
+  console.log('PAGE ERROR:', e.message);
+  pageErrors.push(e.message);
+});
 
 /*
  * Zvuky (§5.7): obalíme AudioContext ještě před načtením stránky a počítáme,
@@ -203,6 +225,7 @@ await page.waitForSelector('#table.animating', { state: 'detached', timeout: 500
 // Počkej, až animace rozdávání SKUTEČNĚ skončí (porovnávat s „baseline" nejde:
 // když animace ještě běží, je 1 před i po a kontrola by tiše nic nehlídala).
 await page.waitForSelector('#table.animating', { state: 'detached', timeout: 5000 });
+await setLang('fr');
 await setLang('de');
 if ((await page.locator('#table.animating').count()) > 0) {
   console.error('CHYBA: přepnutí jazyka po rozdání znovu spustilo animaci rozdávání');
@@ -218,6 +241,7 @@ let confirmedWarnings = 0;
 let marriageChoices = 0;
 let popupSurvivedLang = false;
 let trickShot = false;
+let concedeSurvivedAi = false;
 /** Texty bublin viděné během hry — hlášky (§5.8) musí být opravdu vidět. */
 const bubblesSeen = new Set<string>();
 /** Všechny folklórní hlášky — pro kontrolu, že dva soupeři neřeknou totéž. */
@@ -325,6 +349,29 @@ for (let i = 0; i < 400; i += 1) {
   // výsledková obrazovka (panel na stole) → konec smoke testu
   if ((await page.locator('#center-float .felt-panel:not(.warn)').count()) > 0) {
     await page.screenshot({ path: join(outDir, 'smoke-5-result.png'), clip: await tableClip() });
+    /*
+     * Vyúčtování ve VŠECH jazycích: popisky komponent se skládají per jazyk
+     * a chybějící jazyk shodí celý panel (a s ním hru). Kontroluje se, že
+     * panel pořád existuje a má text — a `pageErrors` na konci hlídá výjimku.
+     */
+    for (const lang of ['en', 'de', 'fr', 'cs'] as const) {
+      await setLang(lang);
+      const panel = page.locator('#center-float .felt-panel:not(.warn)');
+      if ((await panel.count()) === 0) {
+        console.error(`CHYBA: vyúčtování zmizelo po přepnutí na ${lang}`);
+        await browser.close();
+        process.exit(1);
+      }
+      const text = ((await panel.first().innerText()) ?? '').trim();
+      // nadpis v daném jazyce: kdyby render uprostřed spadl, zůstane tu
+      // text předchozího jazyka a panel by „existoval" dál
+      const heading = { cs: 'Vyúčtování', en: 'Settlement', de: 'Abrechnung', fr: 'Décompte' }[lang];
+      if (!text.includes(heading)) {
+        console.error(`CHYBA: vyúčtování se nepřekreslilo do jazyka ${lang} (chybí „${heading}")`);
+        await browser.close();
+        process.exit(1);
+      }
+    }
     reachedSettlement = true;
     console.log('OK: dohráno až k zúčtování');
     break;
@@ -350,6 +397,33 @@ for (let i = 0; i < 400; i += 1) {
   }
   if ((await actionBtn.count()) > 0) {
     await actionBtn.click();
+    continue;
+  }
+
+  /*
+   * Sem se dostaneme jen když člověk nemá co dělat = táhne AI. Přesně tady
+   * dřív mizel dotaz „opravdu ukončit hru?": překreslení jiným stavem ho
+   * zahodilo a hráč klikl do prázdna. Dotaz se otevře a musí přežít tah AI.
+   */
+  if (!concedeSurvivedAi && (await page.locator('#table.idle').count()) === 0) {
+    const before = await page.locator('#status').innerText();
+    await page.click('#btn-new');
+    await page.waitForSelector('#center-float .felt-panel.warn', { timeout: 2000 });
+    let moved = false;
+    for (let k = 0; k < 20 && !moved; k += 1) {
+      await page.waitForTimeout(200);
+      moved = (await page.locator('#status').innerText()) !== before;
+    }
+    if (moved) {
+      if ((await page.locator('#center-float .felt-panel.warn').count()) === 0) {
+        console.error('CHYBA: dotaz na ukončení hry zmizel, když mezitím táhla AI');
+        await browser.close();
+        process.exit(1);
+      }
+      concedeSurvivedAi = true;
+    }
+    const cancel = page.locator('[data-act="cancel"]');
+    if ((await cancel.count()) > 0) await cancel.click();
     continue;
   }
   void status;
@@ -500,8 +574,20 @@ if (heard.length === 0) {
 }
 console.log(`Hlášky u stolu: ${heard.length} různých (${heard.slice(0, 3).join(' · ')}…)`);
 
+if (!concedeSurvivedAi) {
+  console.error('CHYBA: nepodařilo se ověřit, že dotaz na ukončení hry přežije tah AI');
+  process.exit(1);
+}
+
 if (!fromPeopleCancelled) {
   console.error('CHYBA: nenašlo se tlačítko „z lidu" — kontrola zrušení odhalení neproběhla');
+  process.exit(1);
+}
+
+const thrown = [...pageErrors, ...appErrors];
+if (thrown.length > 0) {
+  console.error(`CHYBA: stránka vyhodila ${thrown.length} výjimek:`);
+  for (const e of thrown) console.error(`  ${e.split('\n')[0]}`);
   process.exit(1);
 }
 
@@ -544,10 +630,12 @@ if (!reachedSettlement) {
       await browser.close();
       process.exit(1);
     }
+    // všechny čtyři hrany: ořez zprava i zleva vypadá stejně špatně
     const overflow = Math.max(
       img.y + img.height - (card.y + card.height),
       card.y - img.y,
       img.x + img.width - (card.x + card.width),
+      card.x - img.x,
     );
     if (overflow > 1) {
       console.error(`CHYBA: figura varianty přetéká kartu o ${Math.round(overflow)} px (${label})`);

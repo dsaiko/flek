@@ -210,7 +210,17 @@ document.addEventListener('keydown', (ev) => {
 });
 $('settings-reset').addEventListener('click', () => {
   openSettings(false);
-  newMatchIdle(); // konto je součást stavu hry — nový zápas ho vynuluje
+  // konto je součást stavu hry, takže ho nuluje až nový zápas — a ten by
+  // zahodil rozehranou hru. Bez dotazu by o ni hráč přišel jedním kliknutím.
+  if (!inPlay()) {
+    newMatchIdle();
+    updateNewButton();
+    return;
+  }
+  table.confirm(t('resetMoneyWarn'), t('resetMoney'), () => {
+    newMatchIdle();
+    updateNewButton();
+  }, true);
 });
 
 for (const [i, input] of [opp1Input, opp2Input].entries()) {
@@ -272,13 +282,16 @@ newBtn.addEventListener('click', () => {
     updateNewButton();
     return;
   }
+  // sticky: dotaz není o stavu hry, takže ho tah AI nesmí sundat pod rukama
   table.confirm(t('endGameWarn'), t('endGame'), () => {
+    // hra mohla mezitím sama doběhnout — pak není co vzdávat
+    if (!inPlay()) { updateNewButton(); return; }
     try {
       controller.dispatch({ type: 'concede', seat: 0 });
     } catch (e) {
       console.error(e);
     }
-  });
+  }, true);
 });
 
 // fullscreen (iOS Safari neumí requestFullscreen na divu → CSS fallback)

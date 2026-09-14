@@ -452,7 +452,10 @@ import Layout from '../layouts/Layout.astro';
   .intro-variants { display: flex; gap: 3.7cqh; flex-wrap: wrap; justify-content: center; }
   .variant-card {
     /* poměr 220×300 z mockupu — bloky mají být obdélníkové, ne čtvercové */
-    height: clamp(230px, 39.6cqh, 480px); width: auto; aspect-ratio: 220 / 300;
+    /* Výška je hlavní rozměr (poměr 220×300 z mockupu), ale na úzkém stole
+       by se dva bloky vedle sebe nevešly — proto je omezená i šířkou sukna
+       (40 cqw × 300/220 = 54,5 cqw), ať se nic neořízne ani nezalomí. */
+    height: clamp(150px, min(39.6cqh, 54.5cqw), 480px); width: auto; aspect-ratio: 220 / 300;
     border: 0; font: inherit; text-align: left; cursor: pointer;
     border-radius: 1.85cqh; background: #f3ead6; padding: 2.4cqh;
     display: flex; flex-direction: column; gap: 1.3cqh;

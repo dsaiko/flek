@@ -43,15 +43,16 @@ interface SuitDef {
   nameCs: string;
   nameEn: string;
   nameDe: string;
+  nameFr: string;
   color: string;   // hlavní barva (indexy, oděv figur, tinty)
   index: string;   // barva textu indexu (tmavší kvůli čitelnosti)
 }
 
 const SUITS: SuitDef[] = [
-  { code: 'H', nameCs: 'červené', nameEn: 'hearts', nameDe: 'Herz', color: '#c62828', index: '#c62828' },
-  { code: 'L', nameCs: 'zelené', nameEn: 'leaves', nameDe: 'Grün', color: '#2e7d32', index: '#2e7d32' },
-  { code: 'B', nameCs: 'kule', nameEn: 'bells', nameDe: 'Schellen', color: '#c8890a', index: '#a06d00' },
-  { code: 'A', nameCs: 'žaludy', nameEn: 'acorns', nameDe: 'Eichel', color: '#7a4f2b', index: '#6d4c2b' },
+  { code: 'H', nameCs: 'červené', nameEn: 'hearts', nameDe: 'Herz', nameFr: 'cœur', color: '#c62828', index: '#c62828' },
+  { code: 'L', nameCs: 'zelené', nameEn: 'leaves', nameDe: 'Grün', nameFr: 'feuille', color: '#2e7d32', index: '#2e7d32' },
+  { code: 'B', nameCs: 'kule', nameEn: 'bells', nameDe: 'Schellen', nameFr: 'grelot', color: '#c8890a', index: '#a06d00' },
+  { code: 'A', nameCs: 'žaludy', nameEn: 'acorns', nameDe: 'Eichel', nameFr: 'gland', color: '#7a4f2b', index: '#6d4c2b' },
 ];
 
 // ── symboly barev ────────────────────────────────────────────────────────────
@@ -125,17 +126,18 @@ interface RankDef {
   nameCs: string;
   nameEn: string;
   nameDe: string;
+  nameFr: string;
 }
 
 const RANKS: RankDef[] = [
-  { code: '7', labelCs: '7', labelEn: '7', labelDe: '7', labelFr: '7', nameCs: 'sedma', nameEn: 'seven', nameDe: 'Sieben' },
-  { code: '8', labelCs: '8', labelEn: '8', labelDe: '8', labelFr: '8', nameCs: 'osma', nameEn: 'eight', nameDe: 'Acht' },
-  { code: '9', labelCs: '9', labelEn: '9', labelDe: '9', labelFr: '9', nameCs: 'devítka', nameEn: 'nine', nameDe: 'Neun' },
-  { code: 'T', labelCs: '10', labelEn: '10', labelDe: '10', labelFr: '10', nameCs: 'desítka', nameEn: 'ten', nameDe: 'Zehn' },
-  { code: 'U', labelCs: 'S', labelEn: 'J', labelDe: 'U', labelFr: 'V', nameCs: 'spodek', nameEn: 'unter (jack)', nameDe: 'Unter' },
-  { code: 'O', labelCs: 'V', labelEn: 'Q', labelDe: 'O', labelFr: 'D', nameCs: 'svršek', nameEn: 'ober (queen)', nameDe: 'Ober' },
-  { code: 'K', labelCs: 'K', labelEn: 'K', labelDe: 'K', labelFr: 'R', nameCs: 'král', nameEn: 'king', nameDe: 'König' },
-  { code: 'D', labelCs: 'A', labelEn: 'A', labelDe: 'A', labelFr: 'A', nameCs: 'eso', nameEn: 'ace', nameDe: 'Ass' },
+  { code: '7', labelCs: '7', labelEn: '7', labelDe: '7', labelFr: '7', nameCs: 'sedma', nameEn: 'seven', nameDe: 'Sieben', nameFr: 'sept' },
+  { code: '8', labelCs: '8', labelEn: '8', labelDe: '8', labelFr: '8', nameCs: 'osma', nameEn: 'eight', nameDe: 'Acht', nameFr: 'huit' },
+  { code: '9', labelCs: '9', labelEn: '9', labelDe: '9', labelFr: '9', nameCs: 'devítka', nameEn: 'nine', nameDe: 'Neun', nameFr: 'neuf' },
+  { code: 'T', labelCs: '10', labelEn: '10', labelDe: '10', labelFr: '10', nameCs: 'desítka', nameEn: 'ten', nameDe: 'Zehn', nameFr: 'dix' },
+  { code: 'U', labelCs: 'S', labelEn: 'J', labelDe: 'U', labelFr: 'V', nameCs: 'spodek', nameEn: 'unter (jack)', nameDe: 'Unter', nameFr: 'valet' },
+  { code: 'O', labelCs: 'V', labelEn: 'Q', labelDe: 'O', labelFr: 'D', nameCs: 'svršek', nameEn: 'ober (queen)', nameDe: 'Ober', nameFr: 'dame' },
+  { code: 'K', labelCs: 'K', labelEn: 'K', labelDe: 'K', labelFr: 'R', nameCs: 'král', nameEn: 'king', nameDe: 'König', nameFr: 'roi' },
+  { code: 'D', labelCs: 'A', labelEn: 'A', labelDe: 'A', labelFr: 'A', nameCs: 'eso', nameEn: 'ace', nameDe: 'Ass', nameFr: 'as' },
 ];
 
 const rankLabel = (r: RankDef) =>
@@ -238,7 +240,7 @@ function cardSvg(suit: SuitDef, rank: RankDef): string {
 
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">
 ${LICENSE_COMMENT}
-<title>${LANG === 'en' ? `${rank.nameEn} of ${suit.nameEn}` : LANG === 'de' ? `${suit.nameDe} ${rank.nameDe}` : `${rank.nameCs} ${suit.nameCs}`}</title>
+<title>${cardTitle(suit, rank)}</title>
 <rect x="1" y="1" width="${W - 2}" height="${H - 2}" rx="14" fill="#ffffff" stroke="#d9d9e0" stroke-width="2"/>
   ${cornerIndex(suit, rank)}
   ${body}
@@ -247,6 +249,14 @@ ${LICENSE_COMMENT}
 }
 
 // ── rub: čisté zelené šrafování ──────────────────────────────────────────────
+/** Popisek karty v jazyce sady — francouzská sada nesmí mít české <title>. */
+function cardTitle(suit: SuitDef, rank: RankDef): string {
+  if (LANG === 'en') return `${rank.nameEn} of ${suit.nameEn}`;
+  if (LANG === 'de') return `${suit.nameDe} ${rank.nameDe}`;
+  if (LANG === 'fr') return `${rank.nameFr} de ${suit.nameFr}`;
+  return `${rank.nameCs} ${suit.nameCs}`;
+}
+
 function backSvg(): string {
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">
 ${LICENSE_COMMENT}
