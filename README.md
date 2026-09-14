@@ -4,7 +4,7 @@
 
 A modern browser tribute to **FLEK!** (1991–92) and **RE!** (1993), two DOS card
 games written in Turbo Pascal by **Ing. Jaroslav Pivoňka** (Pivoňka Software).
-They played *mariáš*, the Czech trick-taking game for three players that is
+They played _mariáš_, the Czech trick-taking game for three players that is
 still the standard card game of Czech pubs.
 
 The engine is a pure reducer in TypeScript, the two opponents are a heuristic
@@ -15,7 +15,7 @@ Live site: **[flek.saiko.cz](https://flek.saiko.cz)**
 
 ![The opening screen: pick between the chosen and the auction variant](docs/screenshot-intro.jpg)
 
-This project is dedicated to my father, **Josef Saiko**, who taught me the game.
+This project is dedicated to my father, **Josef Saiko**, who loved mathematics.
 
 ## The game
 
@@ -29,15 +29,15 @@ first card of the pair.
 
 Two variants ship, both playable from the opening screen:
 
-| Variant | Original | How the contract is decided |
-|---|---|---|
-| **Chosen** (volený) | FLEK! | Forehand picks the trump from their first seven cards and announces the game. Opponents may only take over with betl or durch. |
-| **Auction** (licitovaný) | RE! | Players bid for the contract; a higher commitment beats a lower one, and the winner takes the talon. |
+| Variant                  | Original | How the contract is decided                                                                                                    |
+| ------------------------ | -------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| **Chosen** (volený)      | FLEK!    | Forehand picks the trump from their first seven cards and announces the game. Opponents may only take over with betl or durch. |
+| **Auction** (licitovaný) | RE!      | Players bid for the contract; a higher commitment beats a lower one, and the winner takes the talon.                           |
 
 Beyond the plain game, players commit to **seven** (winning the last trick with
 the trump seven), **hundred** (scoring 100 points or more), **betl** (losing
 every trick) and **durch** (winning every one). Each component is doubled
-independently through the *flek* ladder — flek, re, tutti, boty, kalhoty — and a
+independently through the _flek_ ladder — flek, re, tutti, boty, kalhoty — and a
 red trump doubles the colour contracts again.
 
 The UI speaks Czech, English, German and French, and the money is kept across
@@ -172,7 +172,7 @@ mariáš pro tři hráče — volený i licitovaný — podle **oficiálních pr
 dílo). Engine je čistý reducer v TypeScriptu, protihráči jsou heuristika plus
 ISMCTS ve Web Workeru a celé je to statická stránka bez backendu.
 
-Věnováno mému otci, **Josefu Saikovi**, který mě mariáš naučil.
+Věnováno mému otci, **Josefu Saikovi**, který miloval matematiku.
 
 Živý web: **[flek.saiko.cz](https://flek.saiko.cz)**
 
