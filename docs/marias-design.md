@@ -1283,3 +1283,29 @@ frontu překreslování" (okno zavírá CSS: `#table.animating .action-btn { poi
 
 Negativní kontrolou ověřeno všech pět nových kontrol (účtování převzetí, vlastní flek
 komponenty, dotaz u nulování konta, přenos konta a řádku „Minule").
+
+## 23. Fixpoint review PR — třetí kolo (2026-09-14, po 95ac2a4)
+
+30 nálezů, 18 zamítnutých. Sedm high, z toho čtyři míří na **opravy z druhého kola** —
+dvě z nich odhalily, že oprava byla jen poloviční.
+
+| # | závažnost | nález | oprava |
+|---|---|---|---|
+| i1/i4 | high | vzdání četlo `standing` jen ve fázi převzetí. Mezi koncem licitace a deklarací je `contract` pořád `null`, ale závazek už drží `standing.bid` — **vysoutěžený durch se dal vzdát za sazbu holé hry** | `contractToSettle()` bere `standing` ve všech fázích, které ho nesou (`discard-talon`, `declare`, `takeover`), a odvodí z příhozu i sedmu, kilo a dvě sedmy. Ve fázi `bidding` se schválně platí základní hra: licitace neskončila, nejvyšší příhoz může kdokoli přebít |
+| i9 | high | oprava z 2. kola (`trump: null` u vzdání před deklarací) vyrobila kontrakt, který **`isContract` odmítá** — jediné takové vzdání by udělalo z každého dalšího savu nenačitatelný, protože `handResults` si ten záznam nese dál | `isContract(x, archived)`: archiv smí mít „hru bez trumfu" (legitimní záznam „vzdáno, než se komentovalo"), **živý kontrakt pořád ne** — tam by `legalPlays` přestal vynucovat trumf |
+| i5/i23 | high | konto zapsané kvůli přenosu přes „Novou hru" **nikdy nikdo nečetl**: obnova idle stavy odmítá, takže refresh na úvodní obrazovce konto stejně smazal | idle sav s odehranými hrami se přebírá potichu (není co dohrávat, jen konto a „Minule") |
+| i15 | high | vynucený scénář převzetí ověřoval jen betl | běží pro betl **i durch** |
+| i20 | high | větev, kde `standing` odpovídá deklaraci (vedlejší závazky se mají zachovat), neměla test | fixtura se seedem 1 vynutí deklaraci **se sedmou** a ověří, že vzdání platí i ji |
+| i6 | medium | přepnutí varianty na úvodní obrazovce posunulo rozdávajícího **podruhé** | rotuje se jen po odehrané hře (`prev.phase.name === 'idle' ? … : nextSeat(…)`) |
+| i8 | medium | `#melds-me` bylo v souboru dvakrát; pozdější (starší) pravidlo přebíjelo nové umístění hlášek | staré pravidlo smazáno |
+| i3 | low | `scripts/_probe.mts` — ladicí skript zapomenutý v commitu | smazán |
+| i19/i24 | — | vzdání obránce a `concede` v historii savu bez pokrytí | doplněno |
+
+**Navíc (mimo review, nahlášeno uživatelem):** text na tlačítkách byl **13 px**, protože
+zkratka `font: 600 18px/24px inherit` je **neplatná** — `inherit` nesmí ve zkratce stát jako
+rodina písma, takže prohlížeč zahodil celou deklaraci včetně velikosti. Týkalo se to i lišty,
+selectů a badge. Všechny přepsané na samostatné vlastnosti; herní tlačítka mají
+`clamp(15px, 2.75cqh, 32px)`.
+
+Negativní kontrolou ověřeno: účtování vysoutěženého závazku, archivní kontrakt v savu,
+obnova konta po reloadu a rotace rozdávajícího při přepnutí varianty.

@@ -3354,17 +3354,17 @@ console.log('PASS karty — názvy barev a hodnot ve všech čtyřech jazycích'
    * sazbu holé hry. Scénář je vynucený (nárok `betl` je legální vždy), takže
    * nemůže tiše vypadnout.
    */
-  {
+  for (const claim of ['betl', 'durch'] as const) {
     const cfgV = defaultConfig('voleny');
     let tst: S = ap(init(cfgV, 2), { type: 'deal', seed: 4 });
     let claimed: number | null = null;
     for (let steps = 0; steps < 200 && tst.phase.name !== 'tricks' && tst.phase.name !== 'scored'; steps += 1) {
       if (tst.phase.name === 'takeover' && claimed === null) {
         const actor = tst.phase.toAct;
-        const claim = legal(viewOf(tst, actor)).find((a) => a.type === 'takeover' && a.claim === 'betl');
-        assert.ok(claim, 'převzetí betlem musí být ve fázi takeover vždy legální');
+        const act = legal(viewOf(tst, actor)).find((a) => a.type === 'takeover' && a.claim === claim);
+        assert.ok(act, `převzetí (${claim}) musí být ve fázi takeover legální`);
         claimed = actor;
-        tst = ap(tst, claim);
+        tst = ap(tst, act);
         break; // vzdáváme ROVNOU ve fázi převzetí, dokud je contract překonaný
       }
       for (const seat of [0, 1, 2] as const) {
@@ -3378,21 +3378,104 @@ console.log('PASS karty — názvy barev a hodnot ve všech čtyřech jazycích'
         break;
       }
     }
-    assert.notEqual(claimed, null, 'scénář s převzetím betlem vůbec nenastal — test by nic neověřil');
+    assert.notEqual(claimed, null, `scénář s převzetím (${claim}) vůbec nenastal — test by nic neověřil`);
     assert.equal(tst.phase.name, 'takeover', 'po převzetí se má pokračovat ve fázi takeover');
-    // rozlišující bod: starý kontrakt je pořád hra, nárok je betl
+    // rozlišující bod: starý kontrakt je pořád hra, nárok je betl/durch
     assert.notEqual(tst.contract, null, 'fixtura předpokládá už deklarovanou hru');
     assert.equal(tst.contract!.mode, 'hra', 'fixtura předpokládá překonanou hru v contractu');
 
+    const rate = claim === 'betl' ? cfgV.sazby.betl : cfgV.sazby.durch;
     const out = ap(tst, { type: 'concede', seat: claimed as 0 | 1 | 2 });
     const r = out.phase.name === 'scored' ? out.phase.result : null;
     assert.ok(r);
-    assert.deepEqual(r.components.map((c) => c.target), ['betl'], 'vzdání po převzetí se účtuje jako betl');
-    assert.equal(r.components[0]!.baseRate, cfgV.sazby.betl, 'účtuje se sazba betlu, ne hry');
-    assert.equal(r.components[0]!.extraMultiplier, 1, 'betl nemá červený násobek');
+    assert.deepEqual(r.components.map((c) => c.target), [claim], `vzdání po převzetí se účtuje jako ${claim}`);
+    assert.equal(r.components[0]!.baseRate, rate, `účtuje se sazba ${claim}, ne hry`);
+    assert.equal(r.components[0]!.extraMultiplier, 1, `${claim} nemá červený násobek`);
     assert.equal(r.contract.declarer, claimed, 'do výsledku patří ten, kdo hru drží po převzetí');
-    assert.equal(-r.delta[claimed as 0 | 1 | 2], 2 * cfgV.sazby.betl, 'vzdávající platí betl oběma');
-    assert.notEqual(cfgV.sazby.betl, cfgV.sazby.hra, 'sazby betlu a hry se musí lišit, jinak test nic nerozliší');
+    assert.equal(-r.delta[claimed as 0 | 1 | 2], 2 * rate, `vzdávající platí ${claim} oběma`);
+    assert.notEqual(rate, cfgV.sazby.hra, `sazby ${claim} a hry se musí lišit, jinak test nic nerozliší`);
+  }
+
+  /*
+   * Opačná větev téhož: dokud NIKDO nepřebral, je nárok ve `standing` totožný
+   * s deklarací — a vzdání musí zaplatit i vedlejší závazky (sedmu/kilo),
+   * které zná jen `contract`. Kdyby se kontrakt přepočítával ze `standing`
+   * vždycky, tyhle komponenty by se ztratily.
+   */
+  {
+    const cfgV = defaultConfig('voleny');
+    // seed 1: aktér drží trumfovou sedmu, takže jde deklarovat hru SE SEDMOU
+    let tst: S = ap(init(cfgV, 2), { type: 'deal', seed: 1 });
+    for (let steps = 0; steps < 200 && tst.phase.name !== 'takeover' && tst.phase.name !== 'scored'; steps += 1) {
+      for (const seat of [0, 1, 2] as const) {
+        const v = viewOf(tst, seat);
+        const acts = legal(v);
+        if (acts.length === 0) continue;
+        // vynuť deklaraci se sedmou, ať je co ztratit
+        const withSedma = acts.find((a) => a.type === 'declare' && a.mode === 'hra' && a.sedma);
+        tst = ap(tst, withSedma ?? thinkC({
+          view: v, difficulty: 'easy', seed: Rnd.derive(1, steps * 3 + seat), budgetMs: 0, iterations: 0,
+        }).action);
+        break;
+      }
+    }
+    assert.equal(tst.phase.name, 'takeover', 'fixtura předpokládá fázi převzetí');
+    assert.notEqual(tst.contract, null);
+    assert.notEqual(tst.contract!.sedma, null, 'fixtura předpokládá ohlášenou sedmu — jinak nic nerozliší');
+
+    const out = ap(tst, { type: 'concede', seat: tst.contract!.declarer });
+    const r = out.phase.name === 'scored' ? out.phase.result : null;
+    assert.ok(r);
+    assert.deepEqual(
+      r.components.map((c) => c.target).sort(), ['hra', 'sedma'],
+      'dokud nikdo nepřebral, platí se i vedlejší závazky z deklarace',
+    );
+  }
+
+  /*
+   * Vysoutěžený závazek v licitovaném: mezi koncem licitace a deklarací je
+   * `contract` pořád `null`, ale závazek už drží `phase.standing.bid`.
+   * Vzdání v téhle mezeře se nesmí účtovat jako holá hra.
+   */
+  {
+    let bst: S = ap(init(cfg, 2), { type: 'deal', seed: 4 });
+    for (let steps = 0; steps < 200 && bst.phase.name !== 'discard-talon' && bst.phase.name !== 'scored'; steps += 1) {
+      for (const seat of [0, 1, 2] as const) {
+        const v = viewOf(bst, seat);
+        const acts = legal(v);
+        if (acts.length === 0) continue;
+        // vynuť co nejvyšší závazek, ať se rozdíl proti holé hře pozná
+        const durch = acts.find((a) => a.type === 'bid' && a.bid !== 'pass' && a.bid.kind === 'durch');
+        bst = ap(bst, durch ?? thinkC({
+          view: v, difficulty: 'easy', seed: Rnd.derive(77, steps * 3 + seat), budgetMs: 0, iterations: 0,
+        }).action);
+        break;
+      }
+    }
+    assert.equal(bst.phase.name, 'discard-talon', 'fixtura předpokládá fázi po skončené licitaci');
+    assert.equal(bst.contract, null, 'v discard-talonu ještě kontrakt neexistuje — to je jádro nálezu');
+    const st = bst.phase.name === 'discard-talon' ? bst.phase.standing : null;
+    assert.ok(st?.bid, 'fixtura předpokládá vysoutěžený závazek');
+    assert.equal(st.bid.kind, 'durch', 'fixtura předpokládá vysoutěžený durch');
+
+    const out = ap(bst, { type: 'concede', seat: st.declarer });
+    const r = out.phase.name === 'scored' ? out.phase.result : null;
+    assert.ok(r);
+    assert.deepEqual(r.components.map((c) => c.target), ['durch'], 'vzdání se účtuje podle vysoutěženého závazku');
+    assert.equal(-r.delta[st.declarer], 2 * cfg.sazby.durch, 'platí se sazba durchu, ne hry');
+  }
+
+  /*
+   * Vzdát může i OBRÁNCE — pak platí on, ne aktér, a strany se nemění.
+   */
+  {
+    const defender = ([0, 1, 2] as const).find((x) => x !== contract.declarer) as 0 | 1 | 2;
+    const out = ap(st, { type: 'concede', seat: defender });
+    const r = out.phase.name === 'scored' ? out.phase.result : null;
+    assert.ok(r);
+    assert.equal(r.delta[defender], -2 * expected, 'vzdávající obránce platí oběma');
+    assert.equal(r.delta[contract.declarer], expected, 'aktér při vzdání obránce inkasuje');
+    assert.equal(r.components[0]!.wonBy, 'declarer', 'vzdá-li obránce, vyhrál aktér');
   }
 
   // vzdání ještě před deklarací: základní sazba hry a ŽÁDNÁ vymyšlená barva
@@ -3408,5 +3491,48 @@ console.log('PASS karty — názvy barev a hodnot ve všech čtyřech jazycích'
   }
 }
 console.log('PASS vzdání — platí se celý stojící závazek, mimo legalActions, replay sedí');
+
+
+// ── sav po vzdání ────────────────────────────────────────────────────────────
+/*
+ * Vzdání před deklarací zapisuje do archivu „hru bez trumfu" — a `isContract`
+ * takový kontrakt u ŽIVÉHO stavu (správně) odmítá. Kdyby platila stejná
+ * přísnost i na archiv, jediné takové vzdání by udělalo z každého dalšího
+ * savu nenačitatelný: `handResults` si ten záznam nese pořád dál.
+ */
+{
+  const store = new Map<string, string>();
+  (globalThis as { localStorage?: unknown }).localStorage = {
+    getItem: (k: string) => store.get(k) ?? null,
+    setItem: (k: string, val: string) => void store.set(k, val),
+    removeItem: (k: string) => void store.delete(k),
+  };
+  const { saveMatch: save, loadMatch: load } = await import('../src/lib/match/persist');
+  const { initialState: init2, apply: ap2 } = await import('../src/lib/rules/engine');
+  const { defaultConfig: cfg2 } = await import('../src/lib/rules/sazby');
+
+  const c = cfg2('voleny');
+  const conceded = ap2(ap2(init2(c, 2), { type: 'deal', seed: 4 }), { type: 'concede', seat: 0 });
+  assert.equal(conceded.phase.name, 'scored');
+  save(conceded);
+  assert.notEqual(load(), null, 'sav s vzdáním před deklarací se musí dát načíst');
+  assert.deepEqual(load(), JSON.parse(JSON.stringify(conceded)), 'sav po vzdání musí projít beze změny');
+
+  // a ještě jedna hra navrch: archiv se nese dál, takže by otrávil i další savy
+  const next = ap2(conceded, { type: 'deal', seed: 5 });
+  save(next);
+  assert.notEqual(load(), null, 'archiv vzdané hry nesmí zneplatnit pozdější savy');
+  assert.ok(
+    load()!.history.some((a) => a.type === 'concede'),
+    'akce concede musí projít whitelistem historie',
+  );
+
+  // ŽIVÝ kontrakt bez trumfu ale zůstává nepřípustný (legalPlays by přestal vynucovat trumf)
+  const raw = JSON.parse(store.get('flek.match.v1') as string) as { v: number; state: Record<string, unknown> };
+  raw.state.contract = { mode: 'hra', trump: null, declarer: 0, sedma: null, kilo: null, dveSedmy: false };
+  store.set('flek.match.v1', JSON.stringify(raw));
+  assert.equal(load(), null, 'živá „hra bez trumfu" se pořád musí odmítnout');
+}
+console.log('PASS sav — vzdaná hra v archivu projde, živý kontrakt bez trumfu ne');
 
 console.log('OK: vše prošlo');

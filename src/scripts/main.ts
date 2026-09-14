@@ -157,7 +157,12 @@ function newMatchIdle(keepBank = true): void {
   const carry =
     keepBank && prev !== null && prev.handResults.length > 0
       ? {
-          ...initialState(defaultConfig(settings.variant), nextSeat(prev.dealer)),
+          // rozdávající se posouvá jen po ODEHRANÉ hře; přepnutí varianty na
+          // úvodní obrazovce (stav už je idle) ho posunout nesmí podruhé
+          ...initialState(
+            defaultConfig(settings.variant),
+            prev.phase.name === 'idle' ? prev.dealer : nextSeat(prev.dealer),
+          ),
           ledger: prev.ledger,
           handResults: prev.handResults,
           handNo: prev.handNo,
@@ -179,7 +184,18 @@ function newMatch(): void {
 
 // resume rozehraného zápasu
 const saved = loadMatch();
-if (saved && saved.config.variant === settings.variant && saved.phase.name !== 'idle') {
+/*
+ * Uložený stav na ÚVODNÍ obrazovce nese jen konto a odehrané hry — není co
+ * dohrávat, takže se přebírá potichu. Bez téhle větve by save, který
+ * `newMatchIdle()` píše kvůli bance, nikdy nikdo nepřečetl (podmínka níž
+ * idle stavy odmítá) a konto by refresh stejně smazal.
+ */
+if (saved && saved.config.variant === settings.variant
+    && saved.phase.name === 'idle' && saved.handResults.length > 0) {
+  seeds.resumeAfter(saved.handNo);
+  controller = makeController(saved);
+  table.render(controller.state);
+} else if (saved && saved.config.variant === settings.variant && saved.phase.name !== 'idle') {
   if (window.confirm(t('resume'))) {
     seeds.resumeAfter(saved.handNo);
     controller = makeController(saved);
