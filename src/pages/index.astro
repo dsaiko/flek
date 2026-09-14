@@ -472,8 +472,11 @@ import Layout from '../layouts/Layout.astro';
    */
   .variant-figure { position: relative; flex: 1 1 auto; min-height: 0; }
   .variant-figure img {
-    position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain;
-    border-radius: 6px; filter: drop-shadow(0 4px 12px rgba(0,0,0,.3));
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    /* `cover`: figura vyplní blok a ořízne se, jak to má mockup — `contain`
+       nechává kolem sebe prázdné pruhy a karta vypadá poloprázdná. */
+    object-fit: cover; object-position: 50% 12%;
+    border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,.3);
   }
   .variant-name { font-size: clamp(14px, 2.4cqh, 30px); font-weight: 600; color: #1c2127; }
   .variant-desc { font-size: clamp(10px, 1.6cqh, 20px); line-height: 1.4; color: #5f6b7c; }
