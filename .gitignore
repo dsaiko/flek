@@ -35,3 +35,6 @@ npm-debug.log*
 
 # výstup smoke testu
 docs/smoke-*.png
+
+# poznámky k vydání, které si CI vytáhne z CHANGELOG.md
+release-notes.md
