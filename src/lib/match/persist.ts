@@ -172,7 +172,16 @@ const isBidEntry = (x: unknown): boolean => {
 };
 
 /** Kontrakt řídí pravidla i zúčtování — musí být kompletní a v rozsahu. */
-function isContract(x: unknown): boolean {
+/**
+ * @param archived Kontrakt v ARCHIVU odehrané hry (`HandResult`), ne živý stav.
+ *
+ * Archiv smí být volnější v jediném bodě: vzdaná hra může skončit dřív, než
+ * padla deklarace, takže „hra bez trumfu" je legitimní záznam („vzdáno, než
+ * se komentovalo"). U ŽIVÉHO kontraktu to legitimní není — `legalPlays` by
+ * přestal vynucovat trumf i přebití. Bez tohohle rozlišení by jediné vzdání
+ * před deklarací udělalo z každého dalšího savu nenačitatelný.
+ */
+function isContract(x: unknown, archived = false): boolean {
   if (x === null || typeof x !== 'object') return false;
   const c = x as Record<string, unknown>;
   /*
@@ -184,7 +193,7 @@ function isContract(x: unknown): boolean {
    */
   const trumpless = c.mode === 'betl' || c.mode === 'durch';
   if (trumpless && (c.trump !== null || c.sedma !== null || c.kilo !== null)) return false;
-  if (c.mode === 'hra' && c.trump === null) return false;
+  if (c.mode === 'hra' && c.trump === null && !archived) return false;
   return (
     (c.mode === 'hra' || c.mode === 'betl' || c.mode === 'durch') &&
     // celé číslo: `trump: 0.5` by prošlo rozsahem, ale žádná barva se mu nerovná
@@ -211,7 +220,7 @@ function isHandResult(x: unknown): boolean {
   };
   return (
     isNum(r.handNo) &&
-    isContract(r.contract) &&
+    isContract(r.contract, true) &&
     side(r.cardPoints) && side(r.marriagePoints) &&
     isTriple(r.delta, isNum) &&
     // konto je hra s nulovým součtem — nesedící archiv je podvržený

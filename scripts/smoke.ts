@@ -601,7 +601,56 @@ await page.waitForSelector('#intro-panel', { state: 'visible', timeout: 4000 });
     await browser.close();
     process.exit(1);
   }
+
+  /*
+   * A totéž musí přežít RELOAD. Uložený idle stav nese jen konto a odehrané
+   * hry, takže se přebírá bez ptaní — kdyby ho obnova odmítala (jako každý
+   * jiný idle sav), byl by zápis kvůli bance mrtvý kód a refresh na úvodní
+   * obrazovce by konto smazal.
+   */
+  await page.reload();
+  await page.waitForSelector('#intro-panel', { state: 'visible', timeout: 5000 });
+  const moneyAfterReload = ((await page.locator('#seat-me .seat-meta, .me-meta').first().innerText()) ?? '').trim();
+  if (/^0[,.]00/.test(moneyAfterReload) || !/[1-9]/.test(moneyAfterReload)) {
+    console.error(`CHYBA: reload úvodní obrazovky smazal konto (u hráče stojí „${moneyAfterReload}")`);
+    await browser.close();
+    process.exit(1);
+  }
+  const lastAfterReload = ((await page.locator('#intro-last').innerText()) ?? '').trim();
+  if (lastAfterReload.length === 0) {
+    console.error('CHYBA: reload smazal shrnutí minulé hry');
+    await browser.close();
+    process.exit(1);
+  }
 }
+
+/*
+ * Přepínání varianty na úvodní obrazovce zakládá idle zápas znovu — a nesmí
+ * u toho POSUNOUT rozdávajícího. Ten se posouvá po odehrané hře, ne po
+ * každém kliknutí do výběru; jinak by pár přepnutí přeskočilo celé kolo.
+ */
+{
+  const dealerRow = async (): Promise<string> =>
+    (await page.locator('.seat-meta, .me-meta').allTextContents()).join('|');
+  const before = await dealerRow();
+  const cards = page.locator('.variant-card');
+  if ((await cards.count()) < 2) {
+    console.error('CHYBA: úvodní obrazovka nenabízí obě varianty');
+    await browser.close();
+    process.exit(1);
+  }
+  await cards.nth(1).click();
+  await page.waitForTimeout(250);
+  await cards.nth(0).click();
+  await page.waitForTimeout(250);
+  const after = await dealerRow();
+  if (after !== before) {
+    console.error(`CHYBA: přepnutí varianty posunulo rozdávajícího\n  před: ${before}\n  po:   ${after}`);
+    await browser.close();
+    process.exit(1);
+  }
+}
+
 
 await page.click('#actions .action-btn.primary');
 await page.waitForSelector('#table.animating', { state: 'detached', timeout: 6000 });

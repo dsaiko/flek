@@ -546,26 +546,43 @@ function settlePlainHra(state: GameState, contract: Contract): GameState {
 /**
  * Závazek, který se u vzdání platí.
  *
- * Ve fázi převzetí žije nárok v `phase.standing`, zatímco `state.contract`
- * pořád drží PŘEKONANOU deklaraci. Bez tohohle přepočtu by se vzdání proti
- * převzatému betlu účtovalo jako holá hra (sazba 1 místo 15) a do výsledku
- * by se zapsal aktér, který už hru nedrží.
+ * Dokud nepadne `declare`, je `state.contract` `null` — a ve fázi převzetí
+ * dokonce drží PŘEKONANOU deklaraci. Skutečný závazek přitom už existuje:
+ * ve `phase.standing` (vysoutěžený závazek v licitovaném, zvolený trumf ve
+ * voleném, nárok na betl/durch při převzetí). Bez tohohle přepočtu by se dal
+ * vysoutěžený durch nebo převzatý betl vzdát za sazbu holé hry.
+ *
+ * Ve fázi `bidding` se schválně účtuje základní hra: licitace ještě neskončila,
+ * nejvyšší příhoz může kdokoli přebít, takže žádný hráč závazek nedrží.
  */
 function contractToSettle(state: GameState): Contract | null {
   const phase = state.phase;
-  if (phase.name !== 'takeover') return state.contract;
-  const st = phase.standing;
-  const same = state.contract !== null
-    && state.contract.declarer === st.declarer
-    && state.contract.mode === st.mode;
+  const st =
+    phase.name === 'takeover' || phase.name === 'discard-talon' || phase.name === 'declare'
+      ? phase.standing
+      : null;
+  if (st === null) return state.contract;
+
+  // deklarace už padla a nárok jí odpovídá → `contract` je přesnější (zná
+  // trumf i skutečně hlášenou sedmu/kilo)
+  const c = state.contract;
+  if (c !== null && c.declarer === st.declarer && (st.mode === null || c.mode === st.mode)) return c;
+
+  const kind = st.bid?.kind ?? null;
+  const mode = st.mode ?? (kind === 'betl' || kind === 'durch' ? kind : 'hra');
+  const colour = mode === 'hra';
+  // vysoutěžený závazek musí deklarace pokrýt (legal.ts), takže sedma/kilo
+  // z příhozu jsou pro vzdávajícího závazné stejně jako by byly ohlášené
+  const withSedma = kind === 'sedma' || kind === 'sto-sedma' || kind === 'dve-sedmy' || kind === 'dve-sedmy-sto';
+  const withKilo = kind === 'sto' || kind === 'sto-sedma' || kind === 'dve-sedmy-sto';
+  const withDveSedmy = kind === 'dve-sedmy' || kind === 'dve-sedmy-sto';
   return {
-    mode: st.mode ?? 'hra',
-    trump: st.trump,
+    mode,
+    trump: colour ? st.trump : null,
     declarer: st.declarer,
-    // sedma/kilo patřily k překonané deklaraci; převzetí betlem je ruší
-    sedma: same ? state.contract!.sedma : null,
-    kilo: same ? state.contract!.kilo : null,
-    dveSedmy: same ? state.contract!.dveSedmy : false,
+    sedma: colour && withSedma ? st.declarer : null,
+    kilo: colour && withKilo ? st.declarer : null,
+    dveSedmy: colour && withDveSedmy,
   };
 }
 
