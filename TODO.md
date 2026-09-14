@@ -18,3 +18,5 @@ trumfy do talonu legalni jsou. Pri tom se naslo, ze view() posilal zvolenou
 kartu vsem — AI znala forhontovu kartu. Opraveno. (docs/marias-design.md §24)
 
 overeni funkcnosti podle pravidel + overeni nekoukani do karet
+
+"vse za mnou"
