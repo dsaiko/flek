@@ -46,8 +46,10 @@ hands in a running account.
 ### Rules
 
 The engine follows the **official rules of the Czech Mariáš Association**
-(Český svaz mariáše). This repository does not redistribute them; these links
-point to the documents at their own source:
+(Český svaz mariáše) for the part of the game it implements: three-handed
+chosen and auction mariáš, played for money. This repository does not
+redistribute the rules; these links point to the documents at their own
+source:
 
 - [Obecná pravidla hry mariáš 2009](https://www.csm1986.cz/public/CMS_Materialy/00_Spolecne_pro_vsechny_druhy_mariase/Dokumenty_CMS/Obecna_pravidla_hry_marias_2009.pdf) — the general rules, on the association's own site
 - [Pravidla dvacetihaléřového bodovaného voleného mariáše](https://www.talon.cz/pravidla/mari%C3%A1%C5%A1_pravidla_volen%C3%BD.pdf) — the chosen variant
@@ -57,11 +59,21 @@ point to the documents at their own source:
 Where the original games disagree with those rules, the association wins by
 default and the FLEK! behaviour goes behind a config switch. Every such decision
 is recorded in [`docs/marias-design.md`](docs/marias-design.md), which is the
-living design document for the whole project. One known deviation is open: the
-auction here speaks in order from forehand, while the rules have it opened by
-the dealer's neighbour with forehand only matching the bid. The privilege of
-holding a tied bid ends up in the same hands, but the order of the first word
-is simplified.
+living design document for the whole project.
+
+What the rules describe and this engine deliberately does not do:
+
+- the **two sevens** contract of the auction variant, and with it the "mistake"
+  by which a player who bid a seven they do not hold folds the hand;
+- **laydown hands**: spotting that a contract cannot be lost is solving the
+  hand rather than settling it, and the rules then split the difference among
+  the players who flekked. The 500x/750x limit is applied, that split is not;
+- **tournament machinery**: premium points, the fourth player sitting a hand
+  out, cutting and stacking the cards, and most of the renonces;
+- a player raises at most **one component per turn**, where the rules let them
+  answer every part of the contract in one breath;
+- the middle player's position in the auction is fixed rather than inherited
+  from whoever drops out first.
 
 In English, the game is usually called **Marriage**; the [pagat.com description
 of mariáš](https://www.pagat.com/marriage/marias.html) is a good introduction.
@@ -77,6 +89,10 @@ reference for the feel of the table and for default rates, and what was
 observed is written down in [`docs/original-notes.md`](docs/original-notes.md).
 One thing was deliberately not reproduced: the original AI was widely said to
 peek at the other hands. Here the opponents receive a redacted view and cannot.
+That claim is a test, not a promise: every field of every player's view is
+checked against the cards that player may not know, and the seed the search
+runs on is drawn independently of the one that shuffled the deck, so the deal
+cannot be reconstructed from it.
 
 ## Run locally
 
@@ -190,4 +206,6 @@ pozorované chování originálu [`docs/original-notes.md`](docs/original-notes.
 Kód je pod MIT. FLEK! a RE! zůstávají dílem Ing. Jaroslava Pivoňky; originální
 binárky v repu nejsou a tenhle projekt není jejich port, ale samostatná
 implementace. Na rozdíl od originálu tady AI do cizích karet nevidí — dostává
-jen redigovaný `PlayerView`.
+jen redigovaný `PlayerView`, a hlídá to test, který prochází celý pohled i seed
+hledání. Podporovaná podmnožina pravidel a vědomé odchylky jsou popsané výš
+v anglické části a v [`docs/marias-design.md`](docs/marias-design.md).

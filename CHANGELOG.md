@@ -4,6 +4,42 @@ Poznámky k vydání. Sekci pro daný tag z tohohle souboru vytáhne CI a použi
 jako text releasu na GitHubu (`.github/workflows/release.yml`) — nadpis sekce se
 stane názvem vydání. Nová verze = **přidat sekci sem** a až pak tagovat.
 
+## Nevydáno — pravidla podle ČSM (pořadí, sto, fleky, limit)
+
+Externí review prošlo engine proti pěti dokumentům ČSM. Devět nálezů bylo oprávněných; rozbor s citacemi článků je v [`docs/marias-design.md`](https://github.com/dsaiko/flek/blob/main/docs/marias-design.md) §25.
+
+### AI opravdu nevidí do karet
+
+Dvě díry, každá sama o sobě dost velká na to, aby tvrzení z README neplatilo:
+
+- zvolená trumfová karta zmizela z `revealedTrump` (v0.0.3), ale zůstala ve **veřejné historii** — soupeř i worker ji tam našli;
+- **seed AI** vznikal jako `derive(seedRozdání, číslo tahu)`. `derive` je invertibilní a druhý parametr worker zná, takže si ze svého seedu spočítal seed rozdání — a z něj celé zamíchání balíčku. Seed hledání se teď losuje nezávisle.
+
+Obojí hlídá test, který prochází **celý** pohled každého sedadla přes 60 rozdání a porovnává každé pole s kartami, které to sedadlo znát nesmí.
+
+### Pořadí „Barva?" a deklarace
+
+Ve voleném se hra hlásila **před** otázkou „Barva?", takže obrana rozhodovala o převzetí, když už znala aktérovu sedmu a sto. Nově se po odhozu talonu ptá aktér („Barva?", nebo rovnou betl/durch), obrana odpoví, a **teprve pak** se hlásí závazek — jak to popisuje Čl. VII/1.
+
+### Sto, tiché sto a limit
+
+- **Tiché sto** se počítá ze **všech hlášek** (60 + 20 + 20 je sto, dřív to bylo nedohraných 80) a neplatí se jako samostatný závazek: **zdvojnásobuje vyflekovanou hru**. Přesně za 100 tedy 2, ne 3. Nad 100 náleží navíc sazba tichého sta za každých 10 bodů.
+- **Limit** 500× (a 750×, když flekovali oba obránci) stropí výslednou sazbu za hru; ve vyúčtování se ukáže, proč se komponenty nesečtou.
+
+### Licitace a flekování
+
+- Licitaci otevírá **zadák**, ne prostřední hráč (Čl. VII/3). README tvrdil ještě něco třetího.
+- Vysoutěžený závazek je **minimum**, ne přesný předpis: po vylicitovaném betlu jde ohlásit durch, po nečerveném stu i červené.
+- **Flekuje se po kolech**: v kole se vyjádří celá strana, otevřené je jen to, co protistrana flekovala v minulém kole, a fáze končí, jakmile jedna strana schválí. Kolo 0 patří obraně — aktér ke svému závazku nemluví.
+- **Sedma/sto proti** jen ve voleném a jen v prvním kole; licitovaná pravidla je zakazují (čl. II/23).
+- **Flekovaná hra se bez „re" nehraje** (volený B/19) — aktér ji rovnou platí obraně. Přepínač, ve voleném zapnutý.
+
+### Co vědomě neděláme
+
+Nově je to napsané i v README: „dvě sedmy" a „omyl", ložené hry a jejich rozúčtování, turnajové prémiové body. Engine drží podmnožinu pravidel pro tříhráčovou hru o peníze.
+
+**Pozor:** rozehraná hra z v0.0.3 se neobnoví — sazebník má nová pole a pravidla jiné pořadí, takže se sav zahazuje.
+
 ## v0.0.3 — odložená trumfová karta (a konec koukání do karet)
 
 Zvolená trumfová karta konečně leží na stole, jak to dělal originál. Při čtení pravidel k tomu se ale našlo, že aplikace prozrazovala víc, než měla.
