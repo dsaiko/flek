@@ -15,6 +15,7 @@ import { trickWinner } from './tricks';
 import type {
   Contract,
   FlekState,
+  FlekTarget,
   GameState,
   PlayerAction,
   RulesConfig,
@@ -120,12 +121,63 @@ function speakingOrder(dealer: Seat, skip: Seat): Seat[] {
   return [start, nextSeat(start), nextSeat(nextSeat(start))].filter((s) => s !== skip);
 }
 
+/** Komponenty závazku, ke kterým se dá vyjádřit. */
+function flekTargets(contract: Contract): FlekTarget[] {
+  if (contract.mode !== 'hra') return [contract.mode];
+  return [
+    'hra',
+    ...(contract.sedma !== null ? (['sedma'] as FlekTarget[]) : []),
+    ...(contract.kilo !== null ? (['kilo'] as FlekTarget[]) : []),
+    ...(contract.dveSedmy ? (['dveSedmy'] as FlekTarget[]) : []),
+  ];
+}
+
+/** Sedadla strany, která je na tahu v tomhle kole (v pořadí mluvení). */
+function flekSideMembers(state: GameState, contract: Contract, seat: Seat): Seat[] {
+  return seat === contract.declarer
+    ? [contract.declarer]
+    : speakingOrder(state.dealer, contract.declarer);
+}
+
+/**
+ * Posun flekování po kolech (čl. V/4). Vrací `null`, když kolo skončilo bez
+ * jediného zvýšení — to je „schválení závazku některou ze stran" a konec fáze.
+ */
+function advanceFleks(state: GameState, contract: Contract, f: FlekState): FlekState | null {
+  const members = flekSideMembers(state, contract, f.toAct);
+  const next = members.find((m) => !f.spoke.includes(m));
+  if (next !== undefined) return { ...f, toAct: next };
+  if (f.raised.length === 0) return null;
+  // kolo skončilo zvýšením → slovo dostává protistrana, a jen k tomu, co padlo
+  const otherSide = flekSideMembers(
+    state, contract, f.toAct === contract.declarer ? defendersOf(contract.declarer)[0] : contract.declarer,
+  );
+  return {
+    ...f,
+    round: f.round + 1,
+    open: [...new Set(f.raised)],
+    raised: [],
+    spoke: [],
+    toAct: otherSide[0],
+  };
+}
+
 function startFleks(state: GameState, contract: Contract): GameState {
+  /*
+   * Závazek schvaluje OBRANA („Při schvalování závazku se jednotliví hráči
+   * vyjadřují v pořadí ve směru hraní", čl. V/4) — aktér ke svému závazku
+   * v prvním kole nemluví. Dřív fáze začínala u forhonta, takže aktér-forhont
+   * říkal „dobrá" ke své vlastní hře.
+   */
+  const defenders = speakingOrder(state.dealer, contract.declarer);
   const fleks: FlekState = {
     levels: {},
     lastRaiser: {},
-    toAct: forhont(state.dealer),
-    passed: [],
+    toAct: defenders[0],
+    spoke: [],
+    open: flekTargets(contract),
+    raised: [],
+    round: 0,
   };
   return { ...state, contract, phase: { name: 'fleks', fleks } };
 }
@@ -407,17 +459,18 @@ function reduce(state: GameState, action: PlayerAction): GameState {
     }
 
     case 'flek': {
-      if (phase.name !== 'fleks') throw new InvariantError('flek mimo fázi');
+      if (phase.name !== 'fleks' || !state.contract) throw new InvariantError('flek mimo fázi');
       const f = phase.fleks;
-      const levels = { ...f.levels, [action.target]: (f.levels[action.target] ?? 0) + 1 };
-      const lastRaiser = { ...f.lastRaiser, [action.target]: action.seat };
-      return {
-        ...state,
-        phase: {
-          name: 'fleks',
-          fleks: { levels, lastRaiser, passed: [], toAct: nextSeat(action.seat) },
-        },
+      const raised: FlekState = {
+        ...f,
+        levels: { ...f.levels, [action.target]: (f.levels[action.target] ?? 0) + 1 },
+        lastRaiser: { ...f.lastRaiser, [action.target]: action.seat },
+        spoke: [...f.spoke, action.seat],
+        raised: [...f.raised, action.target],
       };
+      // kolo se zvýšením nemůže skončit fází, jen předá slovo protistraně
+      const next = advanceFleks(state, state.contract, raised) as FlekState;
+      return { ...state, phase: { name: 'fleks', fleks: next } };
     }
 
     case 'announce-proti': {
@@ -427,35 +480,48 @@ function reduce(state: GameState, action: PlayerAction): GameState {
         sedma: action.sedma ? action.seat : state.contract.sedma,
         kilo: action.kilo ? action.seat : state.contract.kilo,
       };
-      return {
-        ...state,
-        contract,
-        phase: {
-          name: 'fleks',
-          fleks: { ...phase.fleks, passed: [], toAct: nextSeat(action.seat) },
-        },
+      const f = phase.fleks;
+      /*
+       * Sedma/sto proti je nový závazek obrany — aktér se k němu musí dostat
+       * v příštím kole, takže se chová jako zvýšení (otevře tu komponentu).
+       */
+      const announced: FlekState = {
+        ...f,
+        spoke: [...f.spoke, action.seat],
+        raised: [
+          ...f.raised,
+          ...(action.sedma ? (['sedma'] as FlekTarget[]) : []),
+          ...(action.kilo ? (['kilo'] as FlekTarget[]) : []),
+        ],
       };
+      const next = advanceFleks(state, contract, announced) as FlekState;
+      return { ...state, contract, phase: { name: 'fleks', fleks: next } };
     }
 
     case 'good': {
-      if (phase.name !== 'fleks') throw new InvariantError('good mimo fázi');
-      const passed = [...phase.fleks.passed, action.seat];
-      if (new Set(passed).size >= 3) {
-        // hospodské pravidlo: neflekovaná prostá hra se nehraje — platí se rovnou
-        const c = state.contract;
-        if (
-          state.config.autoSettlePlainHra &&
-          c !== null && c.mode === 'hra' && c.sedma === null && c.kilo === null &&
-          Object.keys(phase.fleks.levels).length === 0
-        ) {
-          return settlePlainHra(state, c);
-        }
-        return startTricks(state);
+      if (phase.name !== 'fleks' || !state.contract) throw new InvariantError('good mimo fázi');
+      const f = phase.fleks;
+      const spoke: FlekState = { ...f, spoke: [...f.spoke, action.seat] };
+      const next = advanceFleks(state, state.contract, spoke);
+      if (next !== null) return { ...state, phase: { name: 'fleks', fleks: next } };
+
+      // flekování skončilo schválením — hraje se, nebo se rovnou platí
+      const c = state.contract;
+      const plain = c.mode === 'hra' && c.sedma === null && c.kilo === null;
+      const onlyHra = Object.keys(spoke.levels).every((k) => k === 'hra');
+      // hospodské pravidlo: neflekovaná prostá hra se nehraje — platí se rovnou
+      if (state.config.autoSettlePlainHra && plain && Object.keys(spoke.levels).length === 0) {
+        return settlePlainHra(state, c);
       }
-      return {
-        ...state,
-        phase: { name: 'fleks', fleks: { ...phase.fleks, passed, toAct: nextSeat(action.seat) } },
-      };
+      /*
+       * „Flekovaná hra se bez »re« nehraje" (ČSM volený B/19): aktér flek
+       * nezvedl, takže se sehrávka nekoná a platí vyflekovanou hru obraně.
+       * Licitovaný sazebník tohle ustanovení nemá, proto je za přepínačem.
+       */
+      if (state.config.autoSettleFlekkedHra && plain && onlyHra && spoke.levels.hra === 1) {
+        return settlePlainHra(state, c, { wonBy: 'defenders', flekLevel: 1 });
+      }
+      return startTricks(state);
     }
 
     case 'play': {
@@ -522,24 +588,35 @@ function reduce(state: GameState, action: PlayerAction): GameState {
   }
 }
 
-/** Neflekovaná prostá hra: rovnou zúčtuj ve prospěch aktéra (nehraje se). */
-function settlePlainHra(state: GameState, contract: Contract): GameState {
+/**
+ * Prostá hra, která se nehraje. Dvě podoby téhož: schválená („dobrá hra se
+ * nehraje" — platí obrana aktérovi) a flekovaná bez re (ČSM volený B/19 —
+ * platí aktér obraně vyflekovanou sazbu).
+ */
+function settlePlainHra(
+  state: GameState,
+  contract: Contract,
+  opts: { wonBy: 'declarer' | 'defenders'; flekLevel: number } = { wonBy: 'declarer', flekLevel: 0 },
+): GameState {
   const s = state.config.sazby;
-  const cerveny = contract.trump === 0 ? s.cervenyMultiplier : 1;
-  const amount = s.hra * cerveny;
+  const cerveny = contract.trump === CERVENE ? s.cervenyMultiplier : 1;
+  const flekMultiplier = 2 ** opts.flekLevel;
+  const amount = s.hra * cerveny * flekMultiplier;
+  const sign = opts.wonBy === 'declarer' ? 1 : -1;
   const [d1, d2] = defendersOf(contract.declarer);
   const delta: [number, number, number] = [0, 0, 0];
-  delta[contract.declarer] = 2 * amount;
-  delta[d1] = -amount;
-  delta[d2] = -amount;
+  delta[contract.declarer] = sign * 2 * amount;
+  delta[d1] = -sign * amount;
+  delta[d2] = -sign * amount;
   const result: import('./types').HandResult = {
     handNo: state.handNo,
     contract,
     cardPoints: { declarer: 0, defenders: 0 },
     marriagePoints: { declarer: 0, defenders: 0 },
     components: [{
-      target: 'hra', wonBy: 'declarer', baseRate: s.hra, flekMultiplier: 1,
-      extraMultiplier: cerveny, amount, silent: false, note: 'dobrá — nehrálo se',
+      target: 'hra', wonBy: opts.wonBy, baseRate: s.hra, flekMultiplier,
+      extraMultiplier: cerveny, amount, silent: false,
+      note: opts.wonBy === 'declarer' ? 'dobrá — nehrálo se' : 'flek bez re — nehrálo se',
     }],
     delta,
   };

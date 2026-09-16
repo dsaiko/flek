@@ -566,9 +566,10 @@ const KULE = 2 as const;
     autoGood: true,
   });
 
-  // odehraj 2 kompletní hry: člověk = heuristika volaná synchronně přes dispatch
+  // odehraj kompletní hry: člověk = heuristika volaná synchronně přes dispatch
+  const HANDS = 2;
   const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-  for (let hand = 0; hand < 2; hand += 1) {
+  for (let hand = 0; hand < HANDS; hand += 1) {
     mc.dealNext();
     let guard = 0;
     while (mc.state.phase.name !== 'scored') {
@@ -578,10 +579,12 @@ const KULE = 2 as const;
       if (actor === 0) {
         const v = mc.humanView();
         const legalHuman = mc.humanLegal();
+        // tytéž tři podoby „dobré", jaké zná `maybeAutoGood`
         const forced =
           legalHuman.length === 1 &&
           (legalHuman[0].type === 'good' ||
-            (legalHuman[0].type === 'bid' && legalHuman[0].bid === 'pass'));
+            (legalHuman[0].type === 'bid' && legalHuman[0].bid === 'pass') ||
+            (legalHuman[0].type === 'takeover' && legalHuman[0].claim === 'good'));
         if (forced) {
           // NEdispatchovat ručně — vynucenou „dobrou" musí potvrdit maybeAutoGood
           const before = mc.state.history.length;
@@ -598,16 +601,18 @@ const KULE = 2 as const;
       }
     }
   }
-  assert.equal(mc.state.handResults.length, 2);
+  assert.equal(mc.state.handResults.length, HANDS);
   // každé apply → přesně jeden autosave (žádné magické číslo závislé na pravidlech)
   assert.equal(saves, mc.state.history.length, 'autosave neodpovídá počtu akcí');
-  // i28: lidských „dobrá"/pasů je v historii víc, než kolik jich poslal test →
-  // rozdíl potvrdila auto-dobrá (počítáme MNOŽSTVÍ, akce jsou hodnotově identické)
-  const isForcedish = (a: { type: string; seat?: number; bid?: unknown }): boolean =>
-    a.seat === 0 && (a.type === 'good' || (a.type === 'bid' && a.bid === 'pass'));
-  const inHistory = mc.state.history.filter(isForcedish).length;
-  const fromTest = dispatchedByTest.filter((j) => isForcedish(JSON.parse(j))).length;
-  assert.ok(inHistory > fromTest, `maybeAutoGood se nikdy neuplatnil (${inHistory} vs ${fromTest})`);
+  /*
+   * Historie musí sedět na to, co poslal test: controller si žádnou akci
+   * nepřimyslí. (Auto-dobrá sem po opravě pořadí komentování nespadá —
+   * aktér už ke svému závazku v prvním kole nemluví, takže vynucená jediná
+   * akce v náhodných rozdáních prakticky nepadne. Měří ji deterministicky
+   * regrese i12 níž, a to počtem akcí v historii.)
+   */
+  const humanActions = mc.state.history.filter((a) => a.type !== 'deal' && a.seat === 0).length;
+  assert.ok(humanActions >= dispatchedByTest.length, 'v historii chybí akce, které test poslal');
   assert.equal(mc.state.ledger[0] + mc.state.ledger[1] + mc.state.ledger[2], 0);
   mc.stop();
   console.log('PASS match controller — 2 hry: člověk (dispatch) + 2 AI (async driver), autosave');
@@ -677,9 +682,16 @@ const KULE = 2 as const;
     assert.deepEqual(settled.ledger, r.delta);
   }
 
-  // flek vynutí sehrávku (jinak by se flek „zdarma" pohltil základní sazbou)
+  /*
+   * Flek A RE vynutí sehrávku (jinak by se flek „zdarma" pohltil základní
+   * sazbou). `playToDecision` bere flek pokaždé, když ho může vzít, takže po
+   * fleku obrany přijde re aktéra — a to už se hraje.
+   */
   const flekked = playToDecision(cfgOn, 3, true);
-  assert.equal(flekked.phase.name, 'tricks', 'flekovaná hra se musí hrát');
+  assert.equal(flekked.phase.name, 'tricks', 'flekovaná hra s re se musí hrát');
+  const lvl: Record<string, number> = {};
+  for (const a of flekked.history) if (a.type === 'flek') lvl[a.target] = (lvl[a.target] ?? 0) + 1;
+  assert.ok((lvl.hra ?? 0) >= 2, 'scénář počítá s flekem i re — jinak by platilo B/19');
 
   // přepínač vypnutý → hraje se vždy
   const offSettled = playToDecision({ ...cfgOn, autoSettlePlainHra: false }, 3);
@@ -2199,7 +2211,10 @@ const KULE = 2 as const;
     // (i28) platné kontejnery s NEplatnými prvky
     const fleksState = () => {
       const c = JSON.parse(JSON.stringify(beforePlay)) as Record<string, unknown>;
-      c.phase = { name: 'fleks', fleks: { levels: {}, lastRaiser: {}, toAct: 0, passed: [] } };
+      c.phase = {
+        name: 'fleks',
+        fleks: { levels: {}, lastRaiser: {}, toAct: 0, spoke: [], open: ['hra'], raised: [], round: 0 },
+      };
       return c;
     };
     const setPhase = (mutate: (f: Record<string, unknown>) => void): void => {
@@ -2209,8 +2224,12 @@ const KULE = 2 as const;
     };
     setPhase((f) => { (f.lastRaiser as Record<string, unknown>).hra = 7; });
     assert.equal(loadMatch(), null, 'lastRaiser se sedadlem 7 musí být odmítnut');
-    setPhase((f) => { f.passed = ['x']; });
-    assert.equal(loadMatch(), null, 'passed s řetězcem musí být odmítnut');
+    setPhase((f) => { f.spoke = ['x']; });
+    assert.equal(loadMatch(), null, 'spoke s řetězcem musí být odmítnut');
+    setPhase((f) => { f.open = ['vymyslena-komponenta']; });
+    assert.equal(loadMatch(), null, 'otevřená komponenta mimo závazek musí být odmítnuta');
+    setPhase((f) => { f.round = -1; });
+    assert.equal(loadMatch(), null, 'záporné kolo flekování musí být odmítnuto');
     setPhase((f) => { (f.levels as Record<string, unknown>).hra = 2; });
     assert.ok(loadMatch(), 'platná fáze fleků musí projít');
 
@@ -2721,15 +2740,16 @@ const KULE = 2 as const;
     assert.ok(trumpAsideOf(view(st, 0)), 'při deklaraci pořád leží');
     st = apply(st, actsA(st).find((a) => a.type === 'declare') as ActA);
     /*
-     * Schvalovat, ne přebírat (převzetí betlem by hru poslalo jinam). Jeden
-     * flek je ale nutný: schválená holá hra se podle pravidel nehraje a stav
-     * by skočil rovnou na `scored` — a tím by kontrola sehrávky tiše zmizela.
+     * Schvalovat, ne přebírat (převzetí betlem by hru poslalo jinam). Flek A RE
+     * jsou ale nutné: schválená holá hra se nehraje a flekovaná bez re taky ne
+     * (ČSM volený B/19) — v obou případech by stav skočil rovnou na `scored`
+     * a kontrola sehrávky by tiše zmizela.
      */
-    let fleked = false;
+    let raises = 0;
     while (st.phase.name !== 'tricks' && st.phase.name !== 'scored') {
       const acts = actsA(st);
-      const flek = fleked ? undefined : acts.find((a) => a.type === 'flek');
-      if (flek !== undefined) fleked = true;
+      const flek = raises < 2 ? acts.find((a) => a.type === 'flek') : undefined;
+      if (flek !== undefined) raises += 1;
       const pass = acts.find((a) => a.type === 'good')
         ?? acts.find((a) => a.type === 'takeover' && a.claim === 'good');
       st = apply(st, (flek ?? pass ?? acts[0]) as ActA);
@@ -3439,8 +3459,11 @@ console.log('PASS karty — názvy barev a hodnot ve všech čtyřech jazycích'
    * Rozpis je tam schválně: kdyby měly všechny komponenty STEJNOU úroveň
    * fleku, test by nerozlišil „každá komponenta má svůj flek" od „všechny
    * berou flek hry". Proto se flekuje hra dvakrát a sedma jednou.
+   *
+   * Pořadí odpovídá kolům (čl. V/4): v prvním kole flekuje obrana (jeden hráč
+   * hru, druhý sedmu), ve druhém aktér zvedne hru na re.
    */
-  const driveToTricks = (seed: number, want: string[] = ['hra', 'hra', 'sedma']): S => {
+  const driveToTricks = (seed: number, want: string[] = ['hra', 'sedma', 'hra']): S => {
     let st: S = ap(init(cfg, 2), { type: 'deal', seed });
     const queue = [...want];
     for (let steps = 0; steps < 400 && st.phase.name !== 'tricks' && st.phase.name !== 'scored'; steps += 1) {
@@ -4029,6 +4052,165 @@ console.log('PASS sav — vzdaná hra v archivu projde, živý kontrakt bez trum
     // bez licitace (všichni pasovali) smí forhont holou hru
     assert.ok(kindsOf(null).includes('hra'), 'bez příhozu je holá hra v pořádku');
     console.log('PASS deklarace — vysoutěžený stupeň je MINIMUM, ne přesný předpis (čl. VII/3)');
+  }
+}
+
+// ── flekování po kolech, proti jen ve voleném, hra bez re ───────────────────
+{
+  const { initialState: initF, apply: apF } = await import('../src/lib/rules/engine');
+  const { legalActions: legalF } = await import('../src/lib/rules/legal');
+  const { view: viewF } = await import('../src/lib/rules/view');
+  const { defaultConfig: cfgF } = await import('../src/lib/rules/sazby');
+  const { card: mkF, R7: S7F, CERVENE: CEF } = await import('../src/lib/cards');
+  type StF = ReturnType<typeof initF>;
+  type ActF = ReturnType<typeof legalF>[number];
+  const actsF = (st: StF): ActF[] => {
+    for (const seat of [0, 1, 2] as const) {
+      const a = legalF(viewF(st, seat));
+      if (a.length > 0) return a;
+    }
+    return [];
+  };
+
+  /*
+   * „Sedmu ani sto proti nelze hlásit" (licitovaný čl. II/23). Ve voleném
+   * naopak lze — ale jen „v PRVNÍM KOLE komentování ohlášeného trumfového
+   * závazku" (Obecná pravidla čl. VII/1).
+   */
+  {
+    const mkFleks = (variant: 'voleny' | 'licitovany', round: number, open: string[]) => ({
+      seat: 1 as const, config: cfgF(variant), dealer: 2 as const,
+      // obránce drží trumfovou sedmu, takže sedma proti není blokovaná kartami
+      hand: [mkF(2, S7F), mkF(2, 1), mkF(3, 1), mkF(3, 2)], handCounts: [4, 4, 4] as [number, number, number],
+      revealedTrump: null, unseenCount: 0, talonKnown: [], talon: null,
+      contract: { mode: 'hra' as const, trump: 2 as const, declarer: 0 as const, sedma: null, kilo: null, dveSedmy: false },
+      phase: {
+        name: 'fleks' as const,
+        fleks: { levels: {}, lastRaiser: {}, toAct: 1 as const, spoke: [], open, raised: [], round },
+      },
+      publicHistory: [], handResults: [], ledger: [0, 0, 0] as [number, number, number], handNo: 1,
+    });
+    const protiCount = (v: unknown): number =>
+      legalF(v as never).filter((a) => a.type === 'announce-proti').length;
+
+    assert.ok(protiCount(mkFleks('voleny', 0, ['hra'])) > 0, 'volený: sedma/sto proti v prvním kole ANO');
+    assert.equal(protiCount(mkFleks('voleny', 1, ['hra'])), 0, 'volený: v dalších kolech už ne (čl. VII/1)');
+    assert.equal(protiCount(mkFleks('licitovany', 0, ['hra'])), 0, 'licitovaný: proti nelze vůbec (čl. II/23)');
+
+    // a co se nenabízí, to nesmí projít ani ručně poslané reducerem
+    const stL: StF = apF(initF(cfgF('licitovany'), 2), { type: 'deal', seed: 5 });
+    assert.throws(
+      () => apF({ ...stL, contract: { mode: 'hra', trump: 2, declarer: 0, sedma: null, kilo: null, dveSedmy: false },
+        phase: { name: 'fleks', fleks: { levels: {}, lastRaiser: {}, toAct: 1, spoke: [], open: ['hra'], raised: [], round: 0 } } } as StF,
+        { type: 'announce-proti', seat: 1, sedma: false, kilo: true }),
+      /nelegální/, 'reducer musí sto proti v licitovaném odmítnout',
+    );
+    console.log('PASS proti — jen volený a jen v prvním kole (čl. VII/1, II/23)');
+  }
+
+  /*
+   * „V daném kole schvalování se lze vyjadřovat již jen k tomu závazku, který
+   * v předchozím kole protistrana flekovala" (čl. V/4), a fáze končí, jakmile
+   * celá jedna strana schválí — ne až po třech pasech.
+   */
+  {
+    const cfg = cfgF('voleny');
+    // dotáhni k fleků s hrou I sedmou, ať je co uzavírat
+    let st: StF | null = null;
+    for (let seed = 1; seed <= 60 && st === null; seed += 1) {
+      let s2: StF = apF(initF(cfg, 2), { type: 'deal', seed });
+      let guard = 0;
+      while (s2.phase.name !== 'fleks' && s2.phase.name !== 'scored' && (guard += 1) < 60) {
+        const acts = actsF(s2);
+        s2 = apF(s2,
+          acts.find((a) => a.type === 'declare' && a.mode === 'hra' && a.sedma) ??
+          acts.find((a) => a.type === 'takeover' && a.claim === 'good') ??
+          acts.find((a) => a.type === 'discard' && a.cards.every((c) => pointsOf(c) === 0)) ??
+          acts.find((a) => a.type === 'choose-trump' && a.card !== 'from-people') ?? acts[0]);
+      }
+      if (s2.phase.name === 'fleks' && s2.contract?.sedma !== null) st = s2;
+    }
+    assert.ok(st, 'nenašlo se rozdání s hrou i sedmou — test by nic neověřil');
+    const fleks0 = st.phase.name === 'fleks' ? st.phase.fleks : null;
+    assert.ok(fleks0);
+    assert.equal(fleks0.round, 0);
+    assert.notEqual(fleks0.toAct, st.contract?.declarer, 'závazek schvaluje obrana, aktér v prvním kole nemluví');
+    assert.deepEqual(
+      [...fleks0.open].sort(), ['hra', 'sedma'],
+      'v prvním kole se komentuje celý závazek',
+    );
+
+    // obránce flekne hru → v dalším kole je otevřená JEN hra
+    const flekHra = legalF(viewF(st, fleks0.toAct)).find((a) => a.type === 'flek' && a.target === 'hra');
+    assert.ok(flekHra, 'flek na hru musí být v prvním kole legální');
+    let st2 = apF(st, flekHra);
+    // druhý obránce dořekne kolo
+    st2 = apF(st2, actsF(st2).find((a) => a.type === 'good') as ActF);
+    const f1 = st2.phase.name === 'fleks' ? st2.phase.fleks : null;
+    assert.ok(f1);
+    assert.equal(f1.round, 1, 'po vyjádření celé obrany začíná kolo aktéra');
+    assert.equal(f1.toAct, st2.contract?.declarer, 've druhém kole odpovídá aktér');
+    assert.deepEqual(f1.open, ['hra'], 'otevřená zůstává jen flekovaná komponenta (čl. V/4)');
+    assert.equal(
+      legalF(viewF(st2, f1.toAct)).some((a) => a.type === 'flek' && a.target === 'sedma'), false,
+      'na sedmu, kterou nikdo neflekoval, se ve druhém kole vyjadřovat nelze',
+    );
+
+    // aktér schválí → flekování končí, obrana se už neptá (čl. V/4)
+    const st3 = apF(st2, actsF(st2).find((a) => a.type === 'good') as ActF);
+    assert.notEqual(st3.phase.name, 'fleks', 'schválení jednou stranou flekování ukončí');
+    console.log('PASS fleky — kola, otevřené komponenty a konec po souhlasu strany (čl. V/4)');
+  }
+
+  /*
+   * „Flekovaná hra se bez »re« nehraje" (ČSM volený B/19).
+   */
+  {
+    const play = (cfg: ReturnType<typeof cfgF>, seed: number, re: boolean): StF => {
+      let st: StF = apF(initF(cfg, 2), { type: 'deal', seed });
+      let raises = 0;
+      let guard = 0;
+      while (st.phase.name !== 'scored' && st.phase.name !== 'tricks' && (guard += 1) < 200) {
+        const acts = actsF(st);
+        const wantFlek = raises < (re ? 2 : 1)
+          ? acts.find((a) => a.type === 'flek' && a.target === 'hra')
+          : undefined;
+        if (wantFlek) raises += 1;
+        st = apF(st,
+          wantFlek ??
+          acts.find((a) => a.type === 'declare' && a.mode === 'hra' && !a.sedma && !a.kilo) ??
+          acts.find((a) => a.type === 'takeover' && a.claim === 'good') ??
+          acts.find((a) => a.type === 'good') ??
+          acts.find((a) => a.type === 'discard' && a.cards.every((c) => pointsOf(c) === 0)) ??
+          acts.find((a) => a.type === 'choose-trump' && a.card !== 'from-people') ?? acts[0]);
+      }
+      return st;
+    };
+
+    const cfg = cfgF('voleny');
+    assert.equal(cfg.autoSettleFlekkedHra, true, 've voleném platí B/19');
+    assert.equal(cfgF('licitovany').autoSettleFlekkedHra, false, 'licitovaná pravidla B/19 neznají');
+
+    const noRe = play(cfg, 3, false);
+    assert.equal(noRe.phase.name, 'scored', 'flekovaná hra bez re se nehraje (B/19)');
+    const r = noRe.phase.name === 'scored' ? noRe.phase.result : null;
+    assert.ok(r);
+    assert.equal(r.components.length, 1);
+    assert.equal(r.components[0].wonBy, 'defenders', 'aktér flek nezvedl, takže platí');
+    assert.equal(r.components[0].flekMultiplier, 2, 'platí se vyflekovaná sazba');
+    const cerv = r.contract.trump === CEF ? cfg.sazby.cervenyMultiplier : 1;
+    assert.equal(r.components[0].amount, cfg.sazby.hra * 2 * cerv);
+    assert.equal(r.delta[r.contract.declarer], -2 * cfg.sazby.hra * 2 * cerv, 'aktér platí oběma');
+    assert.equal(r.delta[0] + r.delta[1] + r.delta[2], 0);
+
+    // s re se hraje
+    assert.equal(play(cfg, 3, true).phase.name, 'tricks', 'po re se hra sehrává');
+    // s vypnutým přepínačem se hraje i bez re
+    assert.equal(
+      play({ ...cfg, autoSettleFlekkedHra: false }, 3, false).phase.name, 'tricks',
+      's vypnutým pravidlem se flekovaná hra hraje',
+    );
+    console.log('PASS hra bez re — flekovaná a nezvednutá se nehraje (volený B/19)');
   }
 }
 

@@ -41,5 +41,7 @@ export function defaultConfig(variant: Variant): RulesConfig {
     talonOnTakeover: 'retake',
     enableDveSedmy: false, // v1 vypnuto i v licitovaném; typy a žebříček připraveny
     autoSettlePlainHra: true, // jako FLEK!: dobrá hra se nehraje, rovnou se platí
+    // B/19 je ustanovení VOLENÉHO mariáše; licitovaná pravidla ho neznají
+    autoSettleFlekkedHra: variant === 'voleny',
   };
 }

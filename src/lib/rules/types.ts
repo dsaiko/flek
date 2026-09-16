@@ -74,18 +74,26 @@ export interface BidEntry {
 export type FlekTarget = 'hra' | 'sedma' | 'kilo' | 'betl' | 'durch' | 'dveSedmy';
 
 /**
- * Sémantika: `flek{target}` zvyšuje jednu komponentu (a maže `passed`);
- * `good` = pas na VŠECHNY aktuálně otevřené komponenty. Fáze končí, když všechna
- * oprávněná sedadla pasovala od posledního zvýšení. Zvyšovat komponentu smí jen
- * strana, která na ní nezvyšovala naposled.
+ * Flekování po KOLECH (Obecná pravidla ČSM čl. V/4): v kole se vyjádří celá
+ * strana (obrana oba hráči, volící strana jeden), a „v daném kole schvalování
+ * se lze vyjadřovat již jen k tomu závazku, který v předchozím kole protistrana
+ * flekovala". Kolo 0 je úvodní komentování OBRANOU — jen v něm smí obránci
+ * hlásit sedmu/sto proti (čl. VII/1). „Flekování je ukončeno schválením
+ * (neflekováním) závazku některou ze stran": kolo bez zvýšení fázi ukončí.
  */
 export interface FlekState {
   /** 0 = bez fleku; 1 = flek, 2 = re, 3 = tutti, ... multiplikátor = 2^level */
   levels: Partial<Record<FlekTarget, number>>;
   lastRaiser: Partial<Record<FlekTarget, Seat>>;
   toAct: Seat;
-  /** Kdo od posledního zvýšení řekl „dobrá". */
-  passed: Seat[];
+  /** Kdo se v TOMTO kole už vyjádřil — pasem i zvýšením. */
+  spoke: Seat[];
+  /** Co smí strana na tahu v tomhle kole zvyšovat (co zvýšila protistrana). */
+  open: FlekTarget[];
+  /** Co se v tomhle kole zvýšilo nebo ohlásilo — otevře to příští kolo. */
+  raised: FlekTarget[];
+  /** 0 = úvodní komentování obranou. */
+  round: number;
 }
 
 // ── sazby a konfigurace ──────────────────────────────────────────────────────
@@ -124,6 +132,12 @@ export interface RulesConfig {
   enableDveSedmy: boolean; // jen licitovaný
   /** Hospodské pravidlo (i FLEK!): neflekovaná prostá hra se nehraje — platí se rovnou aktérovi. */
   autoSettlePlainHra: boolean;
+  /**
+   * „Flekovaná hra se bez »re« nehraje" (ČSM volený B/19): aktér, který flek
+   * na holou hru nezvedl, ji rovnou platí obraně. Licitovaná pravidla tohle
+   * ustanovení nemají, proto je to přepínač a ne konstanta.
+   */
+  autoSettleFlekkedHra: boolean;
 }
 
 // ── výsledek hry ─────────────────────────────────────────────────────────────
