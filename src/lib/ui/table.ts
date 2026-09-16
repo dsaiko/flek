@@ -7,7 +7,7 @@
  */
 
 import { suitOf, card as mkCard, KRAL, SVRSEK, type Card, type Suit } from '../cards';
-import { legalActions } from '../rules/legal';
+import { legalActions, passSettlesWithoutPlay } from '../rules/legal';
 import { trickWinner } from '../rules/tricks';
 import type { GameState, PlayerAction, PlayerView, Seat } from '../rules/types';
 import { forhont } from '../rules/types';
@@ -1019,7 +1019,17 @@ export class TableUI {
       case 'fleks':
         for (const a of legal) {
           if (a.type === 'good') {
-            btn(t('good'), () => this.cb.onAction(a), { primary: true });
+            /*
+             * Jediná „dobrá", která stojí peníze bez jediné odehrané karty:
+             * flek na holou hru bez re se podle B/19 nehraje a rovnou se platí.
+             * Klik do prázdna by hráče stál dvojnásobek, takže se zeptáme —
+             * stejným popupem jako u rizikového odhozu.
+             */
+            const settles = passSettlesWithoutPlay(v);
+            btn(t('good'), () => {
+              if (settles) this.showConfirmPopup([t('noReWarn')], t('good'), () => this.cb.onAction(a));
+              else this.cb.onAction(a);
+            }, { primary: true });
           } else if (a.type === 'flek') {
             const level = (v.phase.name === 'fleks' ? v.phase.fleks.levels[a.target] ?? 0 : 0) + 0;
             btn(`${flekName(level)} ${t('na')} ${targetLabel(a.target)}`, () => this.cb.onAction(a));

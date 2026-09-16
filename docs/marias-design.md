@@ -1412,6 +1412,17 @@ se ukázalo jako oprávněných (dvě z nich jen zčásti), dvě se zamítly s c
 - **Licitace prostředního hráče**: pořadí držení shodného stupně je pevné (forhont > prostřední
   > zadák), pravidla ho po odstoupení hráče přepínají (čl. VII/3). Viz §16.
 
+### Varování před „dobrou", která platí hru
+
+B/19 dělá z „dobré" jedinou akci, která stojí peníze bez jediné odehrané karty. UI se proto
+ptá stejným popupem jako u rizikového odhozu („Bez „re“ se flekovaná hra nehraje — rovnou ji
+zaplatíš."), a `maybeAutoGood` takovou „dobrou" **nikdy neodklikne za hráče**, i kdyby byla
+jedinou legální akcí.
+
+Predikát `passSettlesWithoutPlay(view)` sedí v `legal.ts`, aby UI pravidla neodvozovalo podruhé;
+test ho pro 120 pasů porovnává s tím, co doopravdy udělá reducer. Negativní kontrolou ověřeno:
+predikát, který vrátí `false`, test shodí.
+
 ### Testy
 
 Nové bloky ve `scripts/verify.ts`:
@@ -1427,6 +1438,8 @@ Nové bloky ve `scripts/verify.ts`:
 - **deklarace**: po betlu durch, po nečerveném stu i červené, nic pod vysoutěženým stupněm
 - **fleky**: kola, otevřené komponenty, konec po souhlasu strany, proti jen volený a jen v kole 0
 - **hra bez re**: flekovaná bez re se nehraje, s re ano, s vypnutým přepínačem taky
+- **varování**: předpověď „tahle dobrá zaplatí hru" se shoduje s reducerem (30 případů, kdy
+  platí, a 90, kdy ne)
 
 Negativními kontrolami ověřeno u obou úniků: vrácení redakce `choose-trump` i vrácení starého
 odvození seedu shodí nový test.

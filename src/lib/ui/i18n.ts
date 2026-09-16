@@ -94,6 +94,13 @@ const STRINGS = {
   trickWord: { cs: 'Štych', en: 'Trick', de: 'Stich', fr: 'Levée' },
   silentWord: { cs: 'tichá', en: 'silent', de: 'still', fr: 'silencieux' },
   limitWord: { cs: 'Limit', en: 'Limit', de: 'Limit', fr: 'Limite' },
+  // ČSM volený B/19: „dobrá" na flek znamená, že se hra nehraje a rovnou platí
+  noReWarn: {
+    cs: 'Bez „re“ se flekovaná hra nehraje — rovnou ji zaplatíš.',
+    en: 'A flekked game is not played without "re" — you pay it as it stands.',
+    de: 'Ein kontriertes Spiel wird ohne „Re“ nicht gespielt — du zahlst es gleich.',
+    fr: 'Une partie contrée ne se joue pas sans « re » : tu la paies telle quelle.',
+  },
   marriageWarnAdj: {
     cs: ['červený', 'zelený', 'kulový', 'žaludský'],
     en: ['hearts', 'leaves', 'bells', 'acorns'],

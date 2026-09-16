@@ -4163,6 +4163,60 @@ console.log('PASS sav — vzdaná hra v archivu projde, živý kontrakt bez trum
   }
 
   /*
+   * Předpověď UI musí sedět s reducerem: `passSettlesWithoutPlay` říká, kdy
+   * „dobrá" hru rovnou zaplatí (a UI se na to ptá popupem). Kdyby se ty dvě
+   * podmínky rozešly, hráč by buď dostal dotaz zbytečně, nebo — hůř — by
+   * dvojnásobek zaplatil bez varování.
+   */
+  {
+    const { passSettlesWithoutPlay } = await import('../src/lib/rules/legal');
+    const cfg = cfgF('voleny');
+    let checkedTrue = 0;
+    let checkedFalse = 0;
+    // scénář se musí VYNUTIT: náhodná hra skoro nikdy neskončí přesně na
+    // „holá hra, jeden flek, aktér nezvedá"
+    for (let seed = 1; seed <= 15; seed += 1) {
+      for (const maxRaises of [1, 2]) {
+        let st: StF = apF(initF(cfg, 2), { type: 'deal', seed });
+        let raises = 0;
+        let guard = 0;
+        while (st.phase.name !== 'scored' && st.phase.name !== 'tricks' && (guard += 1) < 200) {
+          const acts = actsF(st);
+          if (acts.length === 0) break;
+          const seat = ([0, 1, 2] as const).find((x) => legalF(viewF(st, x)).length > 0)!;
+          const good = acts.find((a) => a.type === 'good');
+          if (good) {
+            const predicted = passSettlesWithoutPlay(viewF(st, seat));
+            const after = apF(st, good);
+            const settledUnplayed =
+              after.phase.name === 'scored' &&
+              after.phase.result.components.some((c) => c.note === 'flek bez re — nehrálo se');
+            assert.equal(
+              predicted, settledUnplayed,
+              `seed ${seed}/${maxRaises}: předpověď (${predicted}) nesedí s reducerem (${settledUnplayed})`,
+            );
+            if (predicted) checkedTrue += 1; else checkedFalse += 1;
+          }
+          const wantFlek = raises < maxRaises
+            ? acts.find((a) => a.type === 'flek' && a.target === 'hra')
+            : undefined;
+          if (wantFlek) raises += 1;
+          st = apF(st,
+            wantFlek ??
+            acts.find((a) => a.type === 'declare' && a.mode === 'hra' && !a.sedma && !a.kilo) ??
+            acts.find((a) => a.type === 'takeover' && a.claim === 'good') ??
+            good ??
+            acts.find((a) => a.type === 'discard' && a.cards.every((c) => pointsOf(c) === 0)) ??
+            acts.find((a) => a.type === 'choose-trump' && a.card !== 'from-people') ?? acts[0]);
+        }
+      }
+    }
+    assert.ok(checkedTrue > 0, 'scénář „dobrá platí hru" vůbec nenastal — test by nic neověřil');
+    assert.ok(checkedFalse > 0, 'scénář obyčejné „dobré" vůbec nenastal');
+    console.log(`PASS varování — předpověď „dobrá platí hru" sedí s reducerem (${checkedTrue}+${checkedFalse} pasů)`);
+  }
+
+  /*
    * „Flekovaná hra se bez »re« nehraje" (ČSM volený B/19).
    */
   {

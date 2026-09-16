@@ -11,9 +11,33 @@
 import { CERVENE, R7, R10, ESO, KRAL, SVRSEK, card, rankOf, suitOf, type Card, type Suit } from '../cards';
 import { legalPlays } from './tricks';
 import type { BidLevel, FlekTarget, GameMode, PlayerAction, PlayerView, Seat } from './types';
-import { bidRank, forhont, nextSeat } from './types';
+import { bidRank, defendersOf, forhont, nextSeat } from './types';
 
 const MODE_RANK: Record<GameMode, number> = { hra: 0, betl: 1, durch: 2 };
+
+/**
+ * Znamená „dobrá" od tohohle sedadla konec flekování BEZ sehrávky?
+ *
+ * „Flekovaná hra se bez »re« nehraje" (ČSM volený B/19): kdo flek na holou hru
+ * nezvedne, rovnou ji platí obraně. Je to jediné místo, kde „dobrá" stojí
+ * peníze bez jediné odehrané karty, takže se na to UI musí zeptat — a
+ * `maybeAutoGood` to nesmí odklikat za hráče.
+ *
+ * Podmínku drží pohromadě s reducerem test: pro každý stav, kde tahle funkce
+ * řekne `true`, musí `apply(good)` skončit zúčtováním (a naopak).
+ */
+export function passSettlesWithoutPlay(v: PlayerView): boolean {
+  const c = v.contract;
+  if (v.phase.name !== 'fleks' || c === null || !v.config.autoSettleFlekkedHra) return false;
+  if (c.mode !== 'hra' || c.sedma !== null || c.kilo !== null) return false;
+  const f = v.phase.fleks;
+  // v tomhle kole už někdo zvýšil → kolo pokračuje protistraně, nekončí se
+  if (f.raised.length > 0) return false;
+  if (Object.keys(f.levels).length !== 1 || (f.levels.hra ?? 0) !== 1) return false;
+  // jsem poslední ze své strany, kdo v tomhle kole mluví?
+  const side: Seat[] = v.seat === c.declarer ? [c.declarer] : defendersOf(c.declarer);
+  return side.every((s) => s === v.seat || f.spoke.includes(s));
+}
 
 /**
  * Smí aktér po odhozu vůbec hlásit barevnou hru? Talon bez esa/desítky
