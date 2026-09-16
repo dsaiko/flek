@@ -44,6 +44,11 @@ export interface MatchOptions {
   budgetMs: number;
   /** zdroj seedů pro rozdání (UI: crypto random; testy: deterministický) */
   seedSource: () => number;
+  /**
+   * Zdroj ZÁKLADU seedů pro AI (výchozí: náhodný). Musí být nezávislý na
+   * seedu rozdání — viz `aiSeedBase`.
+   */
+  aiSeedSource?: () => number;
   /** persist celého stavu (localStorage v UI) */
   autosave?: (state: GameState) => void;
   /** pauza mezi AI tahy (ms) — ať jde hra sledovat; 0 v testech */
@@ -70,11 +75,22 @@ export class MatchController {
   private stopped = false;
   /** kolikrát po sobě selhalo použití AI tahu (ochrana proti smyčce) */
   private aiFailures = 0;
+  /**
+   * Základ seedů pro AI tahy. NESMÍ být odvozený od seedu rozdání: `derive()`
+   * je invertibilní xorshift a druhý parametr (číslo tahu + sedadlo) zná
+   * worker sám, takže z `derive(seedRozdání, n)` by si seed rozdání spočítal
+   * zpátky — a tím i celé zamíchání balíčku, tedy cizí ruce. Losuje se proto
+   * nezávisle; testy si ho můžou zafixovat přes `opts.aiSeedSource`.
+   */
+  private readonly aiSeedBase: number;
+  /** pořadové číslo AI tahu v tomto zápase (seedy jdou z něj, ne z historie) */
+  private aiMoveNo = 0;
 
   constructor(driver: AiDriver, opts: MatchOptions, resumeState?: GameState) {
     this.driver = driver;
     this.opts = opts;
     this.state = resumeState ?? initialState(opts.config, 2);
+    this.aiSeedBase = (opts.aiSeedSource ?? randomAiSeedBase)();
   }
 
   /**
@@ -182,7 +198,8 @@ export class MatchController {
     const requestId = (nextRequestId += 1);
     this.pendingRequest = requestId;
     const v = view(this.state, seat);
-    const seed = Random.derive(this.state.seed, this.state.history.length * 3 + seat);
+    // seed tahu: nezávislý základ + pořadí tahu (nikdy ne seed rozdání)
+    const seed = Random.derive(this.aiSeedBase, (this.aiMoveNo += 1));
 
     if (this.opts.aiDelayMs) await sleep(this.opts.aiDelayMs);
     if (this.pendingRequest !== requestId || this.stopped) return;
@@ -251,3 +268,10 @@ export class MatchController {
 }
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+
+/** Náhodný základ seedů pro AI (crypto, když je; jinak Math.random). */
+function randomAiSeedBase(): number {
+  const c = (globalThis as { crypto?: Crypto }).crypto;
+  if (c?.getRandomValues) return c.getRandomValues(new Uint32Array(1))[0];
+  return (Math.random() * 0x1_0000_0000) >>> 0;
+}

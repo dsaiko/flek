@@ -175,15 +175,16 @@ export type PlayerAction =
 
 /**
  * PublicAction — akce s redigovanými skrytými payloady (pro PlayerView.publicHistory):
- *   deal    → bez seedu
- *   discard → bez karet
- * Ostatní akce jsou veřejné beze změny; karta z choose-trump je veřejná
- * (z ruky ukázaná / z lidu otočená).
+ *   deal         → bez seedu
+ *   discard      → bez karet
+ *   choose-trump → bez totožnosti karty; veřejné je jen „z ruky / z lidu"
+ * Ostatní akce jsou veřejné beze změny.
  */
 export type PublicAction =
   | { type: 'deal' }
   | { type: 'discard'; seat: Seat }
-  | Exclude<PlayerAction, { type: 'deal' } | { type: 'discard' }>;
+  | { type: 'choose-trump'; seat: Seat; card: 'from-people' | 'hidden' }
+  | Exclude<PlayerAction, { type: 'deal' } | { type: 'discard' } | { type: 'choose-trump' }>;
 
 // ── stav hry ─────────────────────────────────────────────────────────────────
 

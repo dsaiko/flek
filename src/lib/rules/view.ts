@@ -15,6 +15,19 @@ export function redact(action: PlayerAction): PublicAction {
       return { type: 'deal' };
     case 'discard':
       return { type: 'discard', seat: action.seat };
+    case 'choose-trump':
+      /*
+       * Zvolená karta leží stranou LÍCEM DOLŮ (ČSM, Obecná pravidla Čl. VII/1),
+       * takže do veřejné historie její totožnost nepatří — veřejné je jen to,
+       * ZDA se volilo z ruky, nebo naslepo „z lidu". Volící ji ve svém pohledu
+       * dostane přes `revealedTrump`; kdyby zůstala tady, měl by ji i soupeř
+       * (a s ním worker) a redakce `revealedTrump` by nic neřešila.
+       */
+      return {
+        type: 'choose-trump',
+        seat: action.seat,
+        card: action.card === 'from-people' ? 'from-people' : 'hidden',
+      };
     default:
       return action;
   }
