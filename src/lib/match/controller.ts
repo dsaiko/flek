@@ -11,7 +11,7 @@ import { playPolicy } from '../ai/heuristics';
 import type { ThinkStats } from '../ai/ismcts';
 import { Random } from '../random';
 import { apply, initialState } from '../rules/engine';
-import { legalActions } from '../rules/legal';
+import { legalActions, passSettlesWithoutPlay } from '../rules/legal';
 import type { GameState, PlayerAction, PlayerView, RulesConfig, Seat } from '../rules/types';
 import { view } from '../rules/view';
 
@@ -174,6 +174,12 @@ export class MatchController {
       (a.type === 'bid' && a.bid === 'pass') ||
       (a.type === 'takeover' && a.claim === 'good');
     if (!forced) return;
+    /*
+     * Výjimka: „dobrá", která podle B/19 rovnou platí flekovanou hru, není
+     * vynucená formalita — stojí dvojnásobek. Tu musí odklepnout člověk
+     * (a UI se ho na ni ptá popupem), i kdyby jiná akce zrovna nebyla.
+     */
+    if (passSettlesWithoutPlay(this.humanView())) return;
     const historyLen = this.state.history.length;
     setTimeout(() => {
       if (this.stopped || this.state.history.length !== historyLen) return;
