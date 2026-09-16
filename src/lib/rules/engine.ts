@@ -480,6 +480,7 @@ function reduce(state: GameState, action: PlayerAction): GameState {
           flekLevels,
           tricks: played,
           marriages,
+          flekRaisers: flekRaisersFromHistory(state),
         });
         const ledger: [number, number, number] = [
           state.ledger[0] + result.delta[0],
@@ -633,7 +634,12 @@ function concede(state: GameState, seat: Seat): GameState {
     if (contract?.dveSedmy === true) push('dveSedmy', s.dveSedmy, cerveny, 'vzdáno');
   }
 
-  const amount = components.reduce((sum, c) => sum + c.amount, 0);
+  const raw = components.reduce((sum, c) => sum + c.amount, 0);
+  // limit platí i na vzdanou hru: je to výsledná sazba za tuhle hru (čl. V/8)
+  const raisers = flekRaisersFromHistory(state).filter((r) => r !== (contract?.declarer ?? seat));
+  const cap = new Set(raisers).size >= 2 ? s.limitRaised : s.limit;
+  const limited = Number.isFinite(cap) && raw > cap;
+  const amount = limited ? cap : raw;
 
   const delta: [number, number, number] = [0, 0, 0];
   for (const other of [0, 1, 2] as Seat[]) {
@@ -644,6 +650,7 @@ function concede(state: GameState, seat: Seat): GameState {
 
   const result: import('./types').HandResult = {
     handNo: state.handNo,
+    ...(limited ? { limit: cap } : {}),
     contract: contract ?? {
       // ještě se nekomentovalo: hra bez trumfu, ať vyúčtování nehlásí barvu,
       // která nikdy nepadla (a která by naznačovala červený násobek)
@@ -660,6 +667,17 @@ function concede(state: GameState, seat: Seat): GameState {
     handResults: [...state.handResults, result],
     phase: { name: 'scored', result },
   };
+}
+
+/** Kdo v aktuální hře flekoval — pro zvýšený limit (čl. V/8, B/15, II/18). */
+function flekRaisersFromHistory(state: GameState): Seat[] {
+  const out: Seat[] = [];
+  for (let i = state.history.length - 1; i >= 0; i -= 1) {
+    const a = state.history[i];
+    if (a.type === 'deal') break;
+    if (a.type === 'flek' && !out.includes(a.seat)) out.push(a.seat);
+  }
+  return out;
 }
 
 /** Finální úrovně fleků — z historie akcí aktuální hry (fleks fáze už neexistuje). */

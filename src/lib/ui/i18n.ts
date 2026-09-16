@@ -85,6 +85,7 @@ const STRINGS = {
   back: { cs: 'Zpět', en: 'Back', de: 'Zurück', fr: 'Retour' },
   trickWord: { cs: 'Štych', en: 'Trick', de: 'Stich', fr: 'Levée' },
   silentWord: { cs: 'tichá', en: 'silent', de: 'still', fr: 'silencieux' },
+  limitWord: { cs: 'Limit', en: 'Limit', de: 'Limit', fr: 'Limite' },
   marriageWarnAdj: {
     cs: ['červený', 'zelený', 'kulový', 'žaludský'],
     en: ['hearts', 'leaves', 'bells', 'acorns'],
