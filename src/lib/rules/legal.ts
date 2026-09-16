@@ -10,10 +10,51 @@
 
 import { CERVENE, R7, R10, ESO, KRAL, SVRSEK, card, rankOf, suitOf, type Card, type Suit } from '../cards';
 import { legalPlays } from './tricks';
-import type { BidLevel, FlekTarget, GameMode, PlayerAction, PlayerView, Seat } from './types';
+import type {
+  BidLevel, Contract, FlekState, FlekTarget, GameMode, PlayerAction, PlayerView, RulesConfig, Seat,
+} from './types';
 import { bidRank, defendersOf, forhont, nextSeat } from './types';
 
 const MODE_RANK: Record<GameMode, number> = { hra: 0, betl: 1, durch: 2 };
+
+/**
+ * Jak dopadne flekování, když právě teď skončí (nikdo už nezvýšil).
+ *
+ * Tři důvody, proč se sehrávka nekoná, a všechny jsou v pravidlech:
+ *  - `dobra`: neflekovaná holá hra se nehraje a platí se aktérovi (hospodské
+ *    pravidlo i FLEK!, přepínač `autoSettlePlainHra`),
+ *  - `flek-bez-re`: „Flekovaná hra se bez »re« nehraje" (ČSM volený B/19),
+ *  - `vyrovnano`: „Dojde-li k tomu, že při závazku Sedma je obranou Hra
+ *    okomentována flekem a Sedma schválena bez fleku, a volící strana
+ *    schvaluje prohranou Hru, sehrávka se nekoná, neboť závazky jsou finančně
+ *    vyrovnané a není v nich sporu o vítězi" (Obecná pravidla čl. V/11).
+ *
+ * Podmínku „finančně vyrovnané" bereme doslova: uplatní se, jen když se
+ * vyflekovaná hra a sedma v daném sazebníku opravdu rovnají (v ČSM ano, 2 = 2).
+ */
+export type FlekEnding = 'play' | 'dobra' | 'flek-bez-re' | 'vyrovnano';
+
+export function flekEnding(config: RulesConfig, contract: Contract, fleks: FlekState): FlekEnding {
+  if (contract.mode !== 'hra' || contract.kilo !== null) return 'play';
+  const levels = fleks.levels;
+  const raisedKeys = Object.keys(levels).filter((k) => (levels[k as FlekTarget] ?? 0) > 0);
+  if (raisedKeys.some((k) => k !== 'hra')) return 'play';
+  const hra = levels.hra ?? 0;
+  const cerveny = contract.trump === CERVENE ? config.sazby.cervenyMultiplier : 1;
+
+  if (contract.sedma === null) {
+    if (config.autoSettlePlainHra && hra === 0) return 'dobra';
+    if (config.autoSettleFlekkedHra && hra === 1) return 'flek-bez-re';
+    return 'play';
+  }
+  // čl. V/11 — jen sedma AKTÉRA (sedma proti je jiná situace) a jen flek bez re
+  if (contract.sedma === contract.declarer && hra === 1) {
+    const hraAmount = config.sazby.hra * 2 * cerveny;
+    const sedmaAmount = config.sazby.sedma * cerveny;
+    if (hraAmount === sedmaAmount) return 'vyrovnano';
+  }
+  return 'play';
+}
 
 /**
  * Znamená „dobrá" od tohohle sedadla konec flekování BEZ sehrávky?
@@ -26,17 +67,22 @@ const MODE_RANK: Record<GameMode, number> = { hra: 0, betl: 1, durch: 2 };
  * Podmínku drží pohromadě s reducerem test: pro každý stav, kde tahle funkce
  * řekne `true`, musí `apply(good)` skončit zúčtováním (a naopak).
  */
-export function passSettlesWithoutPlay(v: PlayerView): boolean {
+export function passSettlesWithoutPlay(v: PlayerView): 'flek-bez-re' | 'vyrovnano' | null {
   const c = v.contract;
-  if (v.phase.name !== 'fleks' || c === null || !v.config.autoSettleFlekkedHra) return false;
-  if (c.mode !== 'hra' || c.sedma !== null || c.kilo !== null) return false;
+  if (v.phase.name !== 'fleks' || c === null) return null;
   const f = v.phase.fleks;
   // v tomhle kole už někdo zvýšil → kolo pokračuje protistraně, nekončí se
-  if (f.raised.length > 0) return false;
-  if (Object.keys(f.levels).length !== 1 || (f.levels.hra ?? 0) !== 1) return false;
+  if (f.raised.length > 0) return null;
   // jsem poslední ze své strany, kdo v tomhle kole mluví?
   const side: Seat[] = v.seat === c.declarer ? [c.declarer] : defendersOf(c.declarer);
-  return side.every((s) => s === v.seat || f.spoke.includes(s));
+  if (!side.every((s) => s === v.seat || f.spoke.includes(s))) return null;
+  const ending = flekEnding(v.config, c, f);
+  /*
+   * „Dobrá" u neflekované hry se nehlásí: to je dávno zavedené chování
+   * („dobrá hra se nehraje") a hráče nic nestojí. Ptáme se jen tam, kde
+   * kliknutí buď platí flek, nebo tiše zahodí rozehranou hru.
+   */
+  return ending === 'flek-bez-re' || ending === 'vyrovnano' ? ending : null;
 }
 
 /**
@@ -138,22 +184,18 @@ export function legalActions(v: PlayerView): PlayerAction[] {
       if (me !== stDiscard.declarer || v.hand.length !== 12) break;
 
       /*
-       * Ve voleném se odhazuje PŘED ohlášením, takže se nabízí vše — kdo si
-       * odhodí eso/desítku, prostě pak smí hrát jen betl/durch (UI varuje).
-       * V licitovaném je ale mód dán závazkem: u barevného závazku by odhoz
-       * esa/desítky (nebo poslední potřebné sedmy) nechal fázi `declare` bez
-       * jediné legální akce — proto se takové odhozy nenabízejí.
+       * Odhazuje se PŘED ohlášením závazku, takže se nabízí vše. Eso ani
+       * desítka v talonu nejsou renonc „vyjma Betla či Durcha" (Obecná
+       * pravidla čl. IV/11, volený C/13) — a betl i durch jdou ohlásit vždycky:
+       * ve voleném na otázku „Barva?", v licitovaném jsou nejvyššími stupni
+       * žebříčku, takže pokryjí jakýkoli vysoutěžený barevný závazek.
+       *
+       * Kdo si tedy odhodí eso, prostě si tím zavřel barevnou hru a hraje
+       * bez trumfů; `declare` mu nikdy nezůstane bez legální akce. Dřív se
+       * takové odhozy v licitovaném vůbec nenabízely, což zakazovalo tah,
+       * který pravidla dovolují (a vylučovalo betl s esem v talonu).
+       * Riziko hlídá UI varovným popupem, ne pravidla.
        */
-      const bidD = stDiscard.bid;
-      const colourCommitment = v.config.variant === 'licitovany' && stDiscard.mode === null;
-      const needSedmaD = bidD !== null && (bidD.kind === 'sedma' || bidD.kind === 'sto-sedma'
-        || bidD.kind === 'dve-sedmy' || bidD.kind === 'dve-sedmy-sto');
-      const allowedTrumps: Suit[] = bidD?.cervena
-        ? [CERVENE]
-        : bidD === null
-          ? ([0, 1, 2, 3] as Suit[])
-          : ([0, 1, 2, 3] as Suit[]).filter((s) => s !== CERVENE);
-
       const discardOk = (pair: readonly [Card, Card]): boolean => {
         /*
          * Zvolená karta do talonu nesmí: aktér odkládá dvě karty „na sebe
@@ -161,17 +203,7 @@ export function legalActions(v: PlayerView): PlayerAction[] {
          * leží stranou lícem dolů (Obecná pravidla, Čl. VII/1) a do ruky se
          * vrací až na sehrávku. Platí to při všech hrách, i u betlu a durchu.
          */
-        if (v.revealedTrump !== null && pair.includes(v.revealedTrump)) return false;
-        if (!colourCommitment) return true;
-        if (pair.some(isValuable)) return false;
-        const rest = v.hand.filter((c) => c !== pair[0] && c !== pair[1]);
-        const sevensLeft = allowedTrumps.filter((s) => rest.includes(card(s, R7)));
-        if (needSedmaD && sevensLeft.length === 0) return false;
-        if (v.config.talonForbidsTrump) {
-          const candidates = needSedmaD ? sevensLeft : allowedTrumps;
-          if (!candidates.some((s) => !pair.some((c) => suitOf(c) === s))) return false;
-        }
-        return true;
+        return !(v.revealedTrump !== null && pair.includes(v.revealedTrump));
       };
 
       for (let i = 0; i < v.hand.length; i += 1) {

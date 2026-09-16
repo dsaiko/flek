@@ -101,6 +101,13 @@ const STRINGS = {
     de: 'Ein kontriertes Spiel wird ohne „Re“ nicht gespielt — du zahlst es gleich.',
     fr: 'Une partie contrée ne se joue pas sans « re » : tu la paies telle quelle.',
   },
+  // Obecná pravidla čl. V/11: flek na hru proti neflekované sedmě se vyrovná
+  evenOutWarn: {
+    cs: 'Prohraná hra a uhraná sedma se vyrovnají — sehrávka se nekoná.',
+    en: 'The lost game and the won seven cancel out — the hand is not played.',
+    de: 'Verlorenes Spiel und gewonnene Sieben gleichen sich aus — es wird nicht gespielt.',
+    fr: 'La partie perdue et le sept gagné s’annulent : la donne ne se joue pas.',
+  },
   marriageWarnAdj: {
     cs: ['červený', 'zelený', 'kulový', 'žaludský'],
     en: ['hearts', 'leaves', 'bells', 'acorns'],

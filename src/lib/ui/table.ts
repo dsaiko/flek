@@ -1026,8 +1026,10 @@ export class TableUI {
              * stejným popupem jako u rizikového odhozu.
              */
             const settles = passSettlesWithoutPlay(v);
+            const warn = settles === 'flek-bez-re' ? t('noReWarn')
+              : settles === 'vyrovnano' ? t('evenOutWarn') : null;
             btn(t('good'), () => {
-              if (settles) this.showConfirmPopup([t('noReWarn')], t('good'), () => this.cb.onAction(a));
+              if (warn !== null) this.showConfirmPopup([warn], t('good'), () => this.cb.onAction(a));
               else this.cb.onAction(a);
             }, { primary: true });
           } else if (a.type === 'flek') {

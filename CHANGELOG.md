@@ -28,11 +28,16 @@ Ve voleném se hra hlásila **před** otázkou „Barva?", takže obrana rozhodo
 
 ### Licitace a flekování
 
-- Licitaci otevírá **zadák**, ne prostřední hráč (Čl. VII/3). README tvrdil ještě něco třetího.
+- Licitaci otevírá **zadák**, ne prostřední hráč (Čl. VII/3). README tvrdil ještě něco třetího. Draží přitom zadák s forhontem a prostřední hráč se zapojí teprve po prvním odstoupení, jak to článek popisuje.
 - Vysoutěžený závazek je **minimum**, ne přesný předpis: po vylicitovaném betlu jde ohlásit durch, po nečerveném stu i červené.
 - **Flekuje se po kolech**: v kole se vyjádří celá strana, otevřené je jen to, co protistrana flekovala v minulém kole, a fáze končí, jakmile jedna strana schválí. Kolo 0 patří obraně — aktér ke svému závazku nemluví.
 - **Sedma/sto proti** jen ve voleném a jen v prvním kole; licitovaná pravidla je zakazují (čl. II/23).
 - **Flekovaná hra se bez „re" nehraje** (volený B/19) — aktér ji rovnou platí obraně. Přepínač, ve voleném zapnutý.
+
+### Ještě dvě pravidla, která se nehrají
+
+- **Vyrovnané závazky** (Obecná pravidla čl. V/11): při závazku sedma, kdy obrana flekne jen hru, sedmu schválí a aktér flek nezvedne, se sehrávka nekoná — prohraná vyflekovaná hra a uhraná sedma se vyrovnají na nulu. Ve vyúčtování jsou obě komponenty vidět, ať je jasné, proč je výsledek nula.
+- **Odhoz do talonu** už neomezuje vysoutěžený barevný závazek. Eso a desítka v talonu jsou renonc „vyjma betla a durcha" (čl. IV/11), a betl s durchem jdou ohlásit vždycky — kdo si eso odhodí, zavřel si barevnou hru a hraje bez trumfů. Dřív se takový odhoz v licitovaném vůbec nenabízel.
 
 ### Co vědomě neděláme
 

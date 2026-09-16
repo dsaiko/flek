@@ -71,9 +71,7 @@ What the rules describe and this engine deliberately does not do:
 - **tournament machinery**: premium points, the fourth player sitting a hand
   out, cutting and stacking the cards, and most of the renonces;
 - a player raises at most **one component per turn**, where the rules let them
-  answer every part of the contract in one breath;
-- the middle player's position in the auction is fixed rather than inherited
-  from whoever drops out first.
+  answer every part of the contract in one breath.
 
 In English, the game is usually called **Marriage**; the [pagat.com description
 of mariáš](https://www.pagat.com/marriage/marias.html) is a good introduction.
@@ -88,11 +86,16 @@ This is an independent reimplementation, not a port. The repository contains
 reference for the feel of the table and for default rates, and what was
 observed is written down in [`docs/original-notes.md`](docs/original-notes.md).
 One thing was deliberately not reproduced: the original AI was widely said to
-peek at the other hands. Here the opponents receive a redacted view and cannot.
-That claim is a test, not a promise: every field of every player's view is
-checked against the cards that player may not know, and the seed the search
-runs on is drawn independently of the one that shuffled the deck, so the deal
-cannot be reconstructed from it.
+peek at the other hands. Here the opponents receive a redacted view, and that
+is checked rather than promised: a test walks every field of every player's
+view against the cards that player may not know, and the seed the search runs
+on is drawn independently of the one that shuffled the deck, so nothing in the
+request points back to the deal.
+
+It is a redaction, not a cryptographic guarantee. The shuffle still comes from
+a 32-bit seed, so a determined search could enumerate the deals consistent with
+a known hand. Nothing here does that; the point is that the opponents are given
+no shortcut, and what they are given is all they have.
 
 ## Run locally
 

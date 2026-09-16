@@ -4188,14 +4188,18 @@ console.log('PASS sav — vzdaná hra v archivu projde, živý kontrakt bez trum
           if (good) {
             const predicted = passSettlesWithoutPlay(viewF(st, seat));
             const after = apF(st, good);
+            const note = after.phase.name === 'scored'
+              ? after.phase.result.components.find((c) => c.note?.endsWith('nehrálo se'))?.note ?? null
+              : null;
             const settledUnplayed =
-              after.phase.name === 'scored' &&
-              after.phase.result.components.some((c) => c.note === 'flek bez re — nehrálo se');
+              note === 'flek bez re — nehrálo se' ? 'flek-bez-re'
+              : note === 'vyrovnáno — nehrálo se' ? 'vyrovnano'
+              : null;
             assert.equal(
               predicted, settledUnplayed,
               `seed ${seed}/${maxRaises}: předpověď (${predicted}) nesedí s reducerem (${settledUnplayed})`,
             );
-            if (predicted) checkedTrue += 1; else checkedFalse += 1;
+            if (predicted !== null) checkedTrue += 1; else checkedFalse += 1;
           }
           const wantFlek = raises < maxRaises
             ? acts.find((a) => a.type === 'flek' && a.target === 'hra')
@@ -4214,6 +4218,72 @@ console.log('PASS sav — vzdaná hra v archivu projde, živý kontrakt bez trum
     assert.ok(checkedTrue > 0, 'scénář „dobrá platí hru" vůbec nenastal — test by nic neověřil');
     assert.ok(checkedFalse > 0, 'scénář obyčejné „dobré" vůbec nenastal');
     console.log(`PASS varování — předpověď „dobrá platí hru" sedí s reducerem (${checkedTrue}+${checkedFalse} pasů)`);
+  }
+
+  /*
+   * Obecná pravidla čl. V/11: „Dojde-li k tomu, že při závazku Sedma je obranou
+   * Hra okomentována flekem a Sedma schválena bez fleku, a volící strana
+   * schvaluje prohranou Hru, sehrávka se nekoná, neboť závazky jsou finančně
+   * vyrovnané a není v nich sporu o vítězi."
+   */
+  {
+    const cfg = cfgF('voleny');
+    let found: StF | null = null;
+    for (let seed = 1; seed <= 60 && found === null; seed += 1) {
+      let st: StF = apF(initF(cfg, 2), { type: 'deal', seed });
+      let flekked = false;
+      let guard = 0;
+      while (st.phase.name !== 'scored' && st.phase.name !== 'tricks' && (guard += 1) < 200) {
+        const acts = actsF(st);
+        // aktér hlásí hru SE SEDMOU, obrana flekne JEN hru, aktér pak schválí
+        const flek = !flekked ? acts.find((a) => a.type === 'flek' && a.target === 'hra') : undefined;
+        if (flek) flekked = true;
+        st = apF(st,
+          acts.find((a) => a.type === 'declare' && a.mode === 'hra' && a.sedma && !a.kilo) ??
+          flek ??
+          acts.find((a) => a.type === 'takeover' && a.claim === 'good') ??
+          acts.find((a) => a.type === 'good') ??
+          acts.find((a) => a.type === 'discard' && a.cards.every((c) => pointsOf(c) === 0)) ??
+          acts.find((a) => a.type === 'choose-trump' && a.card !== 'from-people') ?? acts[0]);
+      }
+      if (st.phase.name === 'scored' && st.contract?.sedma !== null && flekked) found = st;
+    }
+    assert.ok(found, 'nenašel se scénář hra+sedma s flekem jen na hru');
+    const r = found.phase.name === 'scored' ? found.phase.result : null;
+    assert.ok(r);
+    assert.deepEqual(r.delta, [0, 0, 0], 'vyrovnané závazky = nulové vyúčtování');
+    assert.deepEqual(
+      r.components.map((c) => `${c.target}/${c.wonBy}`).sort(),
+      ['hra/defenders', 'sedma/declarer'],
+      'do archivu patří obě komponenty, ať je vidět proč je nula',
+    );
+    assert.equal(r.components.find((x) => x.target === 'hra')?.amount,
+      r.components.find((x) => x.target === 'sedma')?.amount, 'částky se musí rovnat');
+    assert.equal(found.contract?.kilo, null, 'scénář je o závazku Sedma, ne o stu');
+
+    // se sedmou PROTI (drží ji obrana) se naopak hraje — není vyrovnáno
+    const { flekEnding } = await import('../src/lib/rules/legal');
+    const c0 = found.contract!;
+    const fleks1 = { levels: { hra: 1 }, lastRaiser: { hra: 1 as const }, toAct: 0 as const,
+      spoke: [], open: ['hra' as const], raised: [], round: 1 };
+    assert.equal(flekEnding(cfg, c0, fleks1), 'vyrovnano');
+    assert.equal(
+      flekEnding(cfg, { ...c0, sedma: (c0.declarer === 0 ? 1 : 0) as 0 | 1 | 2 }, fleks1), 'play',
+      'sedma proti není vyrovnaný závazek aktéra',
+    );
+    assert.equal(
+      flekEnding(cfg, c0, { ...fleks1, levels: { hra: 1, sedma: 1 } }), 'play',
+      'flekovaná sedma je ve sporu — musí se hrát',
+    );
+    assert.equal(
+      flekEnding(cfg, c0, { ...fleks1, levels: { hra: 2 } }), 'play',
+      'po re se hraje',
+    );
+    assert.equal(
+      flekEnding({ ...cfg, sazby: { ...cfg.sazby, sedma: 3 } }, c0, fleks1), 'play',
+      'v sazebníku, kde se částky nerovnají, premisa čl. V/11 neplatí',
+    );
+    console.log('PASS vyrovnané závazky — flek na hru proti uhrané sedmě se nehraje (čl. V/11)');
   }
 
   /*

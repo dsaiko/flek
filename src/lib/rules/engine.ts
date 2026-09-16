@@ -9,7 +9,7 @@
 
 import { CERVENE, DECK, sortHand, suitOf, type Card } from '../cards';
 import { Random } from '../random';
-import { legalActions, actionMatchesLegal } from './legal';
+import { actionMatchesLegal, flekEnding, legalActions } from './legal';
 import { settle } from './scoring';
 import { trickWinner } from './tricks';
 import type {
@@ -350,12 +350,12 @@ function reduce(state: GameState, action: PlayerAction): GameState {
       const withdrawn = withdrawnFromBidding(bids);
 
       if (action.bid !== 'pass') {
-        // nový držitel; slovo dostává další v pořadí (mimo držitele a odstoupené)
+        // nový držitel; slovo dostává druhý z dvojice, která zrovna draží
         return {
           ...withBids,
           phase: {
             ...withBids.phase, best: action.bid,
-            toAct: nextNonHolder(action.seat, action.seat, withdrawn),
+            toAct: nextNonHolder(state.dealer, action.seat, withdrawn),
           },
         };
       }
@@ -384,9 +384,10 @@ function reduce(state: GameState, action: PlayerAction): GameState {
           phase: { name: 'discard-talon', standing },
         };
       }
+      // pas: odstoupivšího nahradí prostřední hráč a odpovídá ten, kdo nedrží
       return {
         ...withBids,
-        phase: { ...withBids.phase, toAct: nextNonHolder(action.seat, holder, withdrawn) },
+        phase: { ...withBids.phase, toAct: nextNonHolder(state.dealer, holder, withdrawn) },
       };
     }
 
@@ -505,23 +506,22 @@ function reduce(state: GameState, action: PlayerAction): GameState {
       const next = advanceFleks(state, state.contract, spoke);
       if (next !== null) return { ...state, phase: { name: 'fleks', fleks: next } };
 
-      // flekování skončilo schválením — hraje se, nebo se rovnou platí
-      const c = state.contract;
-      const plain = c.mode === 'hra' && c.sedma === null && c.kilo === null;
-      const onlyHra = Object.keys(spoke.levels).every((k) => k === 'hra');
-      // hospodské pravidlo: neflekovaná prostá hra se nehraje — platí se rovnou
-      if (state.config.autoSettlePlainHra && plain && Object.keys(spoke.levels).length === 0) {
-        return settlePlainHra(state, c);
-      }
       /*
-       * „Flekovaná hra se bez »re« nehraje" (ČSM volený B/19): aktér flek
-       * nezvedl, takže se sehrávka nekoná a platí vyflekovanou hru obraně.
-       * Licitovaný sazebník tohle ustanovení nemá, proto je za přepínačem.
+       * Flekování skončilo schválením. Co z toho plyne, rozhoduje `flekEnding`
+       * v `legal.ts` — tentýž předpis se ptá UI, aby varovalo předem, takže
+       * pravidlo žije na JEDNOM místě.
        */
-      if (state.config.autoSettleFlekkedHra && plain && onlyHra && spoke.levels.hra === 1) {
-        return settlePlainHra(state, c, { wonBy: 'defenders', flekLevel: 1 });
+      const c = state.contract;
+      switch (flekEnding(state.config, c, spoke)) {
+        case 'dobra':
+          return settlePlainHra(state, c);
+        case 'flek-bez-re':
+          return settlePlainHra(state, c, { wonBy: 'defenders', flekLevel: 1 });
+        case 'vyrovnano':
+          return settleEvenOut(state, c);
+        default:
+          return startTricks(state);
       }
-      return startTricks(state);
     }
 
     case 'play': {
@@ -623,6 +623,41 @@ function settlePlainHra(
   return {
     ...state,
     ledger: [state.ledger[0] + delta[0], state.ledger[1] + delta[1], state.ledger[2] + delta[2]],
+    handResults: [...state.handResults, result],
+    phase: { name: 'scored', result },
+  };
+}
+
+/**
+ * Vyrovnané závazky (Obecná pravidla čl. V/11): flekovaná a aktérem schválená
+ * Hra proti neflekované Sedmě. Obě strany se shodly, kdo co vyhrál, částky
+ * jsou stejné a sehrávka se nekoná — do archivu jdou obě komponenty, ať je
+ * z vyúčtování vidět PROČ je nula.
+ */
+function settleEvenOut(state: GameState, contract: Contract): GameState {
+  const s = state.config.sazby;
+  const cerveny = contract.trump === CERVENE ? s.cervenyMultiplier : 1;
+  const result: import('./types').HandResult = {
+    handNo: state.handNo,
+    contract,
+    cardPoints: { declarer: 0, defenders: 0 },
+    marriagePoints: { declarer: 0, defenders: 0 },
+    components: [
+      {
+        target: 'hra', wonBy: 'defenders', baseRate: s.hra, flekMultiplier: 2,
+        extraMultiplier: cerveny, amount: s.hra * 2 * cerveny, silent: false,
+        note: 'vyrovnáno — nehrálo se',
+      },
+      {
+        target: 'sedma', wonBy: 'declarer', baseRate: s.sedma, flekMultiplier: 1,
+        extraMultiplier: cerveny, amount: s.sedma * cerveny, silent: false,
+        note: 'vyrovnáno — nehrálo se',
+      },
+    ],
+    delta: [0, 0, 0],
+  };
+  return {
+    ...state,
     handResults: [...state.handResults, result],
     phase: { name: 'scored', result },
   };
@@ -784,18 +819,28 @@ function flekLevelsFromHistory(state: GameState): Partial<Record<import('./types
   return levels;
 }
 
-/** Další hráč na slovu v licitaci (přeskakuje aktuálního držitele). */
 /**
- * Další na slovo v licitaci: přeskoč držitele i každého, kdo už pasoval.
- * Kdo odstoupí, do licitace se nevrací (Obecná pravidla ČSM Čl. V/3).
+ * Kdo je v licitaci ve hře. Draží spolu ZADÁK a FORHONT; „po odstoupení
+ * jednoho z hráčů se do licitace zapojí i prostřední hráč, který přebírá jeho
+ * postavení" (Obecná pravidla čl. VII/3). Prostřední tedy nedostane slovo,
+ * dokud někdo neodstoupí — dřív se do dražby pletl hned po prvním „mám".
+ *
+ * Kdo odstoupí, nevrací se (čl. V/3), takže odstoupení jsou konečná.
  */
-function nextNonHolder(from: Seat, holder: Seat, withdrawn: readonly Seat[] = []): Seat {
-  let s = nextSeat(from);
-  for (let i = 0; i < 3; i += 1) {
-    if (s !== holder && !withdrawn.includes(s)) return s;
-    s = nextSeat(s);
-  }
-  return s;
+function biddingActive(dealer: Seat, withdrawn: readonly Seat[]): Seat[] {
+  const f = forhont(dealer);
+  const zadak = dealer; // ve třech dostává karty poslední
+  const order: Seat[] = withdrawn.length === 0 ? [zadak, f] : [zadak, f, nextSeat(f)];
+  return order.filter((s) => !withdrawn.includes(s));
+}
+
+/**
+ * Další na slovo: ze dvojice ve hře ten, kdo zrovna nedrží nejvyšší příhoz.
+ * Když ve hře zbyl jediný, licitace skončila a volající si to ošetří sám.
+ */
+function nextNonHolder(dealer: Seat, holder: Seat, withdrawn: readonly Seat[] = []): Seat {
+  const active = biddingActive(dealer, withdrawn);
+  return active.find((s) => s !== holder) ?? active[0] ?? holder;
 }
 
 /** Sedadla, která už v této licitaci pasovala (a tím z ní vypadla). */

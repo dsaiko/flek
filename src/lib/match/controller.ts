@@ -179,7 +179,7 @@ export class MatchController {
      * vynucená formalita — stojí dvojnásobek. Tu musí odklepnout člověk
      * (a UI se ho na ni ptá popupem), i kdyby jiná akce zrovna nebyla.
      */
-    if (passSettlesWithoutPlay(this.humanView())) return;
+    if (passSettlesWithoutPlay(this.humanView()) !== null) return;
     const historyLen = this.state.history.length;
     setTimeout(() => {
       if (this.stopped || this.state.history.length !== historyLen) return;

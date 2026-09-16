@@ -1412,6 +1412,22 @@ se ukázalo jako oprávněných (dvě z nich jen zčásti), dvě se zamítly s c
 - **Licitace prostředního hráče**: pořadí držení shodného stupně je pevné (forhont > prostřední
   > zadák), pravidla ho po odstoupení hráče přepínají (čl. VII/3). Viz §16.
 
+### Druhé kolo review (2026-09-16, po `baca982`)
+
+Codex prošel opravy znovu a našel tři místa, kde byl nález uzavřený jen napůl. Všechna tři
+sedí a jsou opravená:
+
+| Nález | Co bylo špatně | Oprava |
+|---|---|---|
+| #4 nedotažený | Deklarace už dovolovala jakýkoli vyšší stupeň, ale **filtr odhozu** pořád vycházel z barevného příhozu a zakazoval dát do talonu eso, desítku nebo poslední potřebnou sedmu. Po vylicitovaném stu se z 66 dvojic nabízelo 45 a žádná s hodnotovou kartou — přestože pro betl a durch je takový talon dovolený | Filtr zrušen; zůstala jediná podmínka, **zvolená karta do talonu nesmí** (volený B/7). Kdo si odhodí eso, zavřel si barevnou hru a hraje betl/durch — `declare` bez legální akce nezůstane, protože betl (7) a durch (8) pokryjí každý barevný příhoz. Riziko hlídá varovný popup, ne pravidla |
+| #6 nedotažený | Automaticky se ukončovala jen **holá** hra. Obecná pravidla čl. V/11 ale řeší i závazek Sedma: flek na hru, sedma bez fleku, aktér hru schvaluje → „sehrávka se nekoná, neboť závazky jsou finančně vyrovnané" | `flekEnding()` vrací i `vyrovnano`; do archivu jdou obě komponenty (hra obraně, sedma aktérovi) a delta je nula. Uplatní se jen tam, kde se částky opravdu rovnají — premisa článku je finanční |
+| licitace | Prostřední hráč dostával slovo hned po prvním „mám" forhonta. Podle čl. VII/3 draží **zadák s forhontem** a prostřední se zapojí teprve „po odstoupení jednoho z hráčů" | `biddingActive()` drží dvojici ve hře; prostřední nastupuje až na první pas a přebírá postavení toho, kdo odstoupil. Priorita držení shodného stupně (forhont > prostřední > zadák) zůstala — pro obě možná odstoupení vychází stejně, viz §16 |
+
+Nález o **ložených hrách** zůstává vědomě neimplementovaný a je přiznaný v README; nález
+o **síle tvrzení o férovosti AI** je oprávněný a vyřešený formulací: seed hledání je nezávislý
+na seedu rozdání, ale zamíchání pořád stojí na 32bitovém seedu, takže jde o redakci informace,
+ne o kryptografickou záruku. README to teď říká takhle.
+
 ### Varování před „dobrou", která platí hru
 
 B/19 dělá z „dobré" jedinou akci, která stojí peníze bez jediné odehrané karty. UI se proto
@@ -1440,6 +1456,8 @@ Nové bloky ve `scripts/verify.ts`:
 - **hra bez re**: flekovaná bez re se nehraje, s re ano, s vypnutým přepínačem taky
 - **varování**: předpověď „tahle dobrá zaplatí hru" se shoduje s reducerem (30 případů, kdy
   platí, a 90, kdy ne)
+- **vyrovnané závazky**: hra+sedma s flekem jen na hru končí nulou a dvěma komponentami; sedma
+  proti, flekovaná sedma, re i sazebník, kde se částky nerovnají, vedou na sehrávku
 
 Negativními kontrolami ověřeno u obou úniků: vrácení redakce `choose-trump` i vrácení starého
 odvození seedu shodí nový test.
