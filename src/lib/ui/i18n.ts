@@ -32,6 +32,14 @@ const STRINGS = {
   bidding: { cs: 'Licitace', en: 'Bidding', de: 'Lizitation', fr: 'Enchéris' },
   pass: { cs: 'Dobrá (pas)', en: 'Pass', de: 'Weiter', fr: 'Passe' },
   takeover: { cs: 'Dobrá, nebo přebereš?', en: 'Accept, or take over?', de: 'Gut, oder übernimmst du?', fr: 'Tu acceptes, ou tu reprends ?' },
+  // aktér se po odhozu ptá „Barva?" — nabízí soupeřům hru bez trumfů (čl. VII/1)
+  askColour: { cs: 'Barva?', en: 'Colour?', de: 'Farbe?', fr: 'Couleur ?' },
+  askColourHint: {
+    cs: 'Nabídni barvu, nebo hraj bez trumfů',
+    en: 'Offer the colour, or play without trumps',
+    de: 'Biete die Farbe an, oder spiel ohne Trumpf',
+    fr: 'Propose la couleur, ou joue sans atout',
+  },
   good: { cs: 'Dobrá', en: 'Good', de: 'Gut', fr: 'Bien' },
   fleks: { cs: 'Flekování', en: 'Doubling', de: 'Kontrieren', fr: 'Contres' },
   yourTurn: { cs: 'Hraj', en: 'Your turn', de: 'Du bist dran', fr: 'À toi de jouer' },

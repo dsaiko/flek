@@ -1005,13 +1005,16 @@ export class TableUI {
         }
         break;
 
-      case 'takeover':
+      case 'takeover': {
+        // aktér se v téhle fázi PTÁ („Barva?"), obrana odpovídá („Dobrá")
+        const asking = v.phase.name === 'takeover' && v.seat === v.phase.standing.declarer;
         for (const a of legal) {
           if (a.type !== 'takeover') continue;
-          const label = a.claim === 'good' ? t('good') : t(a.claim);
+          const label = a.claim === 'good' ? t(asking ? 'askColour' : 'good') : t(a.claim);
           btn(label, () => this.cb.onAction(a), { primary: a.claim === 'good' });
         }
         break;
+      }
 
       case 'fleks':
         for (const a of legal) {
@@ -1052,7 +1055,10 @@ export class TableUI {
         'discard-talon': t('discard'),
         declare: t('declare'),
         bidding: t('bidding'),
-        takeover: t('takeover'),
+        takeover:
+          v.phase.name === 'takeover' && v.seat === v.phase.standing.declarer
+            ? t('askColourHint')
+            : t('takeover'),
         fleks: t('fleks'),
         tricks: t('yourTurn'),
       };
@@ -1442,8 +1448,13 @@ export function bubbleText(a: PlayerAction, state: GameState): string | null {
        * s tlačítkem, které fallback používá.
        */
       return declareLabel(a, state.contract?.trump ?? standingTrumpOf(state));
-    case 'takeover':
-      return a.claim === 'good' ? t('good') : `${t(a.claim)}!`;
+    case 'takeover': {
+      if (a.claim !== 'good') return `${t(a.claim)}!`;
+      // „Barva?" od aktéra vs. „Dobrá" od obrany (fáze se po otázce nemění)
+      const p = state.phase;
+      const asking = p.name === 'takeover' && p.standing.declarer === a.seat;
+      return t(asking ? 'askColour' : 'good');
+    }
     case 'flek': {
       // historie už obsahuje TENTO flek — jeho jméno je tedy na indexu count-1
       let count = 0;

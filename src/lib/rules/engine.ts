@@ -95,7 +95,11 @@ function deal(state: GameState, seed: number, config?: RulesConfig): GameState {
     phase:
       cfg.variant === 'voleny'
         ? { name: 'choose-trump' }
-        : { name: 'bidding', bids: [], toAct: d1, best: null },
+        : // licitaci otevírá ZADÁK — „hráč, který dostává karty jako poslední,
+          // tj. hráč sedící ve směru hraní před forhontem" (Obecná pravidla
+          // čl. VII/3). Ve třech je to rozdávající; forhontovi pak stačí výši
+          // závazku vyrovnávat (drží shodný stupeň, viz `mayHoldEqual`).
+          { name: 'bidding', bids: [], toAct: dealer, best: null },
   };
 }
 
@@ -142,18 +146,23 @@ function startTricks(state: GameState): GameState {
 
 /** Ukončení převzetí (volený): vyřeší talon a kontrakt podle vítěze. */
 function resolveTakeover(state: GameState, standing: Standing): GameState {
-  const original = state.contract;
-  if (!original) throw new InvariantError('takeover bez kontraktu');
+  /*
+   * Talon odhodil původní aktér, takže `talonOwner` je jediný spolehlivý
+   * záznam o tom, kdo se ptal „Barva?" — `state.contract` v tuhle chvíli
+   * ještě neexistuje (deklarace přijde AŽ po převzetí, čl. VII/1).
+   */
+  const asker = state.talonOwner;
 
-  // nikdo nepřihodil vyšší závazek — hraje se původní kontrakt beze změny
-  if (standing.declarer === original.declarer && standing.mode === original.mode) {
-    return startFleks(state, original);
+  // nikdo nepřebral: aktér teprve teď hlásí závazek (čl. VII/1)
+  if (standing.mode === null) {
+    return { ...state, phase: { name: 'declare', standing } };
   }
+  if (standing.mode === 'hra') throw new InvariantError('převzetí musí být betl nebo durch');
 
   // hru přebral betlem/durchem obránce — NEBO ji přebral sám aktér
   // (po cizím betlu smí ohlásit durch; jeho nárok se nesmí zahodit)
   const contract: Contract = {
-    mode: standing.mode as 'betl' | 'durch',
+    mode: standing.mode,
     trump: null,
     declarer: standing.declarer,
     sedma: null,
@@ -162,7 +171,7 @@ function resolveTakeover(state: GameState, standing: Standing): GameState {
   };
 
   // původní aktér už talon odhodil a drží 10 karet; talon znovu nebere
-  if (standing.declarer === original.declarer || state.config.talonOnTakeover === 'keep') {
+  if (standing.declarer === asker || state.config.talonOnTakeover === 'keep') {
     return startFleks(state, contract);
   }
 
@@ -337,20 +346,37 @@ function reduce(state: GameState, action: PlayerAction): GameState {
       for (const c of action.cards) {
         if (!talonKnowledge[action.seat].includes(c)) talonKnowledge[action.seat].push(c);
       }
+      /*
+       * Volený: po odhozu talonu přichází otázka „Barva?" — aktér musí dát
+       * soupeřům možnost hrát betl/durch a teprve po jejich souhlasu hlásí
+       * závazek (Obecná pravidla čl. VII/1). Dřív se pořadí obracelo, takže
+       * obrana o převzetí rozhodovala se znalostí aktérovy sedmy a sta.
+       * Do fáze převzetí se vstupuje i s módem `null`; mód dostane teprve
+       * nárokem betl/durch. Po PŘEVZETÍ (mód už konkrétní) se talon odhazuje
+       * podruhé a následuje rovnou deklarace zamčeného módu.
+       */
+      const askColour = state.config.variant === 'voleny' && phase.standing.mode === null;
       return {
         ...state,
         hands,
         talon: [...action.cards],
         talonOwner: action.seat,
         talonKnowledge,
-        phase: { name: 'declare', standing: phase.standing },
+        phase: askColour
+          ? { name: 'takeover', toAct: action.seat, standing: phase.standing, passed: [] }
+          : { name: 'declare', standing: phase.standing },
       };
     }
 
     case 'declare': {
       if (phase.name !== 'declare') throw new InvariantError('declare mimo fázi');
       const st = phase.standing;
-      const trump = action.mode === 'hra' ? (st.trump ?? action.trump ?? null) : null;
+      /*
+       * `action.trump` má přednost: ve voleném ho deklarace vůbec nenese
+       * (trumf je zvolený a `st.trump` platí), v licitovaném je `st.trump`
+       * jen stopa po červeném příhozu a barvu vybírá až tahle akce.
+       */
+      const trump = action.mode === 'hra' ? (action.trump ?? st.trump ?? null) : null;
       const contract: Contract = {
         mode: action.mode,
         trump,
@@ -359,19 +385,8 @@ function reduce(state: GameState, action: PlayerAction): GameState {
         kilo: action.kilo ? action.seat : null,
         dveSedmy: action.dveSedmy ?? false,
       };
-      const s = { ...state, contract };
-      if (state.config.variant === 'voleny' && st.mode === null) {
-        // po deklaraci mohou obránci hru přebrat betlem/durchem (v pořadí mluvení)
-        const toAct = speakingOrder(state.dealer, action.seat)[0];
-        return {
-          ...s,
-          phase: {
-            name: 'takeover', toAct, passed: [],
-            standing: { declarer: action.seat, mode: action.mode, trump, bid: null },
-          },
-        };
-      }
-      return startFleks(s, contract);
+      // převzetí (volený) proběhlo UŽ PŘED deklarací, takže se rovnou flekuje
+      return startFleks({ ...state, contract }, contract);
     }
 
     case 'takeover': {
