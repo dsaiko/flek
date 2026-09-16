@@ -4,7 +4,7 @@ Poznámky k vydání. Sekci pro daný tag z tohohle souboru vytáhne CI a použi
 jako text releasu na GitHubu (`.github/workflows/release.yml`) — nadpis sekce se
 stane názvem vydání. Nová verze = **přidat sekci sem** a až pak tagovat.
 
-## Nevydáno — pravidla podle ČSM (pořadí, sto, fleky, limit)
+## v0.0.4 — pravidla podle ČSM (pořadí, sto, fleky, limit)
 
 Externí review prošlo engine proti pěti dokumentům ČSM. Devět nálezů bylo oprávněných; rozbor s citacemi článků je v [`docs/marias-design.md`](https://github.com/dsaiko/flek/blob/main/docs/marias-design.md) §25.
 
