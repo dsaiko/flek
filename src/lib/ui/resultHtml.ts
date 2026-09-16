@@ -58,6 +58,14 @@ export function settlementHtml(r: HandResult, v: PlayerView, deps: HtmlDeps): st
     })
     .join('');
 
+  /*
+   * Limit (čl. V/8): komponenty se pak nesečtou na výslednou částku, takže se
+   * strop musí ukázat — jinak vypadá vyúčtování jako chyba.
+   */
+  const limitLine = r.limit !== undefined
+    ? `<tr><td>${esc(t('limitWord'))}:</td><td class="money">${esc(fmtMoney(r.limit))}</td></tr>`
+    : '';
+
   const myDelta = r.delta[me];
   // nula není výhra — „Vyhrál jsi 0,00 Kč" je nesmysl a nastane, když se
   // komponenty přesně vyruší
@@ -77,7 +85,7 @@ export function settlementHtml(r: HandResult, v: PlayerView, deps: HtmlDeps): st
     <h3>${esc(t('vyuctovani'))}:</h3>
     <div class="felt-sub">${head} — ${esc(deps.nameOf(r.contract.declarer))}</div>
     ${pts}
-    <table><tbody>${rows}${deltaLine}${totalLine}</tbody></table>
+    <table><tbody>${rows}${limitLine}${deltaLine}${totalLine}</tbody></table>
     <div class="felt-others">${others}</div>
     ${comment}
   </div>`;

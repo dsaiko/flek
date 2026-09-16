@@ -29,6 +29,8 @@ export const SAZBY_CSM: Sazby = {
   kiloScaling: 'linear', // oficiální ČSM; 'double' = hospodská varianta
   cervenyMultiplier: 2,
   maxFlekLevel: 5, // kalhoty
+  limit: 500, // čl. V/8; volený i licitovaný sazebník shodně 500× základ
+  limitRaised: 750, // zvýšený limit, když flekovali oba obránci
 };
 
 export function defaultConfig(variant: Variant): RulesConfig {

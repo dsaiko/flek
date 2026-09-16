@@ -103,6 +103,16 @@ export interface Sazby {
   kiloScaling: 'double' | 'linear'; // za každých 10 bodů nad/pod 100
   cervenyMultiplier: number; // jen barevné hry (hra/sedma/kilo)
   maxFlekLevel: number; // 5 = kalhoty, 6 = kajzr
+  /**
+   * Strop výsledné sazby za jednu hru — „limit" (Obecná pravidla čl. V/8,
+   * 500× základ). Platí na to, co si dva hráči za rozdání vyrovnají.
+   */
+  limit: number;
+  /**
+   * „Zvýšený limit" (750×): platí, když se do flekování zapojili OBA hráči
+   * obrany (volený B/15, licitovaný čl. II/18).
+   */
+  limitRaised: number;
 }
 
 export interface RulesConfig {
@@ -139,6 +149,8 @@ export interface ComponentResult {
 export interface HandResult {
   handNo: number;
   contract: Contract;
+  /** Strop, který se na výplatu opravdu uplatnil (čl. V/8); jinak chybí. */
+  limit?: number;
   /** body stran v barevné hře (esa+desítky+poslední štych; hlášky zvlášť) */
   cardPoints: { declarer: number; defenders: number };
   marriagePoints: { declarer: number; defenders: number };

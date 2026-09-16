@@ -303,6 +303,98 @@ const KULE = 2 as const;
   assert.equal(r.components[0].amount, 2, 'červená hra ×2');
 
   console.log('PASS scoring — hra, sedma (hlášená/zabitá/tichá), kilo škálování, betl/durch, červené, fleky, zero-sum');
+
+  // ── tiché sto (Obecná pravidla čl. V/6, sazebníky obou variant) ───────────
+  /*
+   * Do tichého sta se počítají VŠECHNY hlášky, ne jen nejvyšší (to je hranice
+   * hlášeného sta, čl. IV/4). A neplatí se jako samostatný závazek: „zvyšuje
+   * hodnotu vyflekované hry 2×".
+   */
+  assert.deepEqual(
+    kiloSteps(60, [20, 20], 0, 'all'), { fulfilled: true, steps: 1, measured: 100 },
+    'tiché sto počítá všechny hlášky',
+  );
+  assert.equal(kiloSteps(60, [20, 20], 0).fulfilled, false, 'hlášené sto měří jen nejvyšší hláškou');
+
+  // 60 z karet + dvě nečervené hlášky (20+20) = přesně 100
+  const silentTricks = [
+    trick(0, [0, card(KULE_S, ESO)], [1, card(ZELENE, R7)], [2, card(ZELENE, R8)]),
+    trick(0, [0, card(KULE_S, R10)], [1, card(ZELENE, R9)], [2, card(ZELENE, KRAL)]),
+    trick(0, [0, card(CERVENE, ESO)], [1, card(CERVENE, R7)], [2, card(CERVENE, R8)]),
+    trick(0, [0, card(CERVENE, R10)], [1, card(CERVENE, R9)], [2, card(CERVENE, KRAL)]),
+    trick(0, [0, card(ZELENE, ESO)], [1, card(3, R7)], [2, card(3, R8)]),
+  ];
+  const silentMarriages = [{ seat: 0 as Seat, suit: ZELENE }, { seat: 0 as Seat, suit: 3 as 0 | 1 | 2 | 3 }];
+  r = settle({
+    handNo: 0, config: cfg, contract: { ...base }, flekLevels: {},
+    tricks: silentTricks, marriages: silentMarriages,
+  });
+  assert.equal(r.cardPoints.declarer, 60, 'fixtura: 50 z karet + 10 za poslední štych');
+  assert.equal(r.marriagePoints.declarer, 40, 'fixtura: dvě nečervené hlášky');
+  assert.equal(r.components.length, 1, 'tiché sto NENÍ samostatná komponenta');
+  assert.equal(r.components[0].target, 'hra');
+  assert.equal(r.components[0].amount, 2, 'tiché sto zdvojnásobuje hru: 1 → 2 (ne 1 + 2)');
+  assert.equal(r.components[0].note, 'tiché kilo 100');
+  assert.deepEqual(r.delta, [4, -2, -2]);
+
+  // flek na hru: tiché sto zdvojnásobuje až VYFLEKOVANOU hodnotu
+  r = settle({
+    handNo: 0, config: cfg, contract: { ...base }, flekLevels: { hra: 1 },
+    tricks: silentTricks, marriages: silentMarriages,
+  });
+  assert.equal(r.components[0].amount, 4, 'flek 2× a tiché sto 2× → 4');
+
+  // nad 100 náleží navíc sazba za tiché sto za každých 10 bodů (čl. V/6)
+  r = settle({
+    handNo: 0, config: cfg, contract: { ...base }, flekLevels: {},
+    tricks: silentTricks,
+    marriages: [...silentMarriages, { seat: 0 as Seat, suit: KULE_S as 0 | 1 | 2 | 3 }],
+  });
+  const silentBonus = r.components.find((c) => c.target === 'kilo');
+  assert.equal(r.components[0].amount, 2, 'hra pořád jen zdvojnásobená');
+  assert.ok(silentBonus?.silent, 'bonus nad 100 je tichá komponenta');
+  assert.equal(silentBonus?.amount, 2 * 4, '140 bodů = 4 desítky nad 100 × sazba tichého sta 2');
+
+  // hlášené sto se naopak sčítá s hrou (čl. V/2) a tiché se u něj neuplatní.
+  // Hranici hlášeného sta nese JEDNA hláška, proto trumfová: 60 + 40 = 100.
+  r = settle({
+    handNo: 0, config: cfg, contract: { ...base, kilo: 0 }, flekLevels: {},
+    tricks: silentTricks, marriages: [{ seat: 0 as Seat, suit: KULE_S as 0 | 1 | 2 | 3 }],
+  });
+  assert.equal(r.components.find((c) => c.target === 'hra')?.amount, 1, 'u hlášeného sta se hra nezdvojnásobuje');
+  assert.equal(r.components.find((c) => c.target === 'kilo')?.amount, 4, 'hlášené sto za 100 = sazba 4');
+  assert.deepEqual(r.delta, [10, -5, -5], 'hlášené sto přesně za 100 platí 1 + 4');
+  console.log('PASS scoring — tiché sto: všechny hlášky, zdvojnásobení hry, bonus nad 100');
+
+  // ── limit (čl. V/8, volený B/15, licitovaný II/18) ────────────────────────
+  const durch = { ...base, mode: 'durch' as const, trump: null };
+  // durch se musí UHRÁT, jinak platí aktér: deset štychů aktéra, karty 0..29
+  const durchTricks = Array.from({ length: 10 }, (_, i) =>
+    trick(0, [0, i * 3], [1, i * 3 + 1], [2, i * 3 + 2]));
+  r = settle({
+    handNo: 0, config: cfg, contract: durch, flekLevels: { durch: 5 },
+    tricks: durchTricks, marriages: [],
+  });
+  assert.equal(r.components[0].amount, 30 * 32, 'kalhoty na durch = 960');
+  assert.equal(r.limit, cfg.sazby.limit, 'nad limitem se musí strop zaznamenat');
+  assert.deepEqual(r.delta, [1000, -500, -500], 'limit 500× od každého');
+
+  // zapojili-li se do flekování oba obránci, platí zvýšený limit
+  r = settle({
+    handNo: 0, config: cfg, contract: durch, flekLevels: { durch: 5 },
+    tricks: durchTricks, marriages: [], flekRaisers: [1, 2],
+  });
+  assert.equal(r.limit, cfg.sazby.limitRaised);
+  assert.deepEqual(r.delta, [1500, -750, -750], 'zvýšený limit 750×');
+
+  // pod limitem se nic nemění a v výsledku se o něm nemluví
+  r = settle({
+    handNo: 0, config: cfg, contract: durch, flekLevels: { durch: 3 },
+    tricks: durchTricks, marriages: [],
+  });
+  assert.equal(r.limit, undefined, 'pod limitem se strop nezaznamenává');
+  assert.deepEqual(r.delta, [480, -240, -240]);
+  console.log('PASS scoring — limit 500×/750× stropí výslednou sazbu za hru');
 }
 
 // ── engine: self-play fuzz ───────────────────────────────────────────────────
@@ -2036,7 +2128,7 @@ const KULE = 2 as const;
       setItem: (k: string, val: string) => void store.set(k, val),
       removeItem: (k: string) => void store.delete(k),
     };
-    const { saveMatch, loadMatch } = await import('../src/lib/match/persist');
+    const { saveMatch, loadMatch, VERSION: SAVE_VERSION } = await import('../src/lib/match/persist');
 
     // dotáhni do sehrávky (tam je kontrakt povinný)
     let st: St8 = initialState({ ...defaultConfig('voleny'), autoSettlePlainHra: false }, 2);
@@ -2102,7 +2194,7 @@ const KULE = 2 as const;
     const setPhase = (mutate: (f: Record<string, unknown>) => void): void => {
       const c = fleksState();
       mutate(((c.phase as Record<string, unknown>).fleks) as Record<string, unknown>);
-      store.set('flek.match.v1', JSON.stringify({ v: 1, state: c }));
+      store.set('flek.match.v1', JSON.stringify({ v: SAVE_VERSION, state: c }));
     };
     setPhase((f) => { (f.lastRaiser as Record<string, unknown>).hra = 7; });
     assert.equal(loadMatch(), null, 'lastRaiser se sedadlem 7 musí být odmítnut');

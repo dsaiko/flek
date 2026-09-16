@@ -9,7 +9,12 @@ import { assertValid } from '../rules/engine';
 import type { GameState } from '../rules/types';
 
 const KEY = 'flek.match.v1';
-const VERSION = 1;
+/**
+ * Verze obálky savu. Zvýšená na 2 se sazbami `limit`/`limitRaised`: bez nich
+ * by zúčtování počítalo s `undefined` a konto by se rozsypalo, a rozehraná
+ * hra z v1 navíc běží podle jiného pořadí „Barva?" a deklarace.
+ */
+export const VERSION = 2;
 
 export function saveMatch(state: GameState): void {
   try {
@@ -43,7 +48,7 @@ function isSazby(x: unknown): boolean {
   if (!isRecord(x)) return false;
   const z = x as Record<string, unknown>;
   const numbers = ['hra', 'sedma', 'tichaSedma', 'kilo', 'ticheKilo', 'betl', 'durch', 'dveSedmy',
-    'cervenyMultiplier', 'maxFlekLevel'];
+    'cervenyMultiplier', 'maxFlekLevel', 'limit', 'limitRaised'];
   return numbers.every((k) => isNum(z[k])) && (z.kiloScaling === 'double' || z.kiloScaling === 'linear');
 }
 
