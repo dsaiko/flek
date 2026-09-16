@@ -3611,4 +3611,145 @@ console.log('PASS vzdání — platí se celý stojící závazek, mimo legalAct
 }
 console.log('PASS sav — vzdaná hra v archivu projde, živý kontrakt bez trumfu ne');
 
+// ── únik skrytých informací do workeru (review pravidel, §25 i1/i2) ─────────
+/*
+ * Fér hra se tvrdí v README, takže se musí i testovat — a to na CELÉM vstupu
+ * workeru, ne jen na jednom poli. Dvě samostatné díry: karta v `publicHistory`
+ * (redakce ji vynechávala) a seed AI odvozený ze seedu rozdání (`derive` je
+ * invertibilní, takže z něj šlo spočítat zamíchání balíčku = všechny ruce).
+ */
+{
+  const { initialState: initL, apply: apL } = await import('../src/lib/rules/engine');
+  const { legalActions: legalL } = await import('../src/lib/rules/legal');
+  const { view: viewL } = await import('../src/lib/rules/view');
+  const { defaultConfig: cfgL } = await import('../src/lib/rules/sazby');
+  const { Random: RndL } = await import('../src/lib/random');
+  type StL = ReturnType<typeof initL>;
+
+  /** Karty, které dané sedadlo v daném stavu NESMÍ znát. */
+  const secretsFor = (st: StL, seat: 0 | 1 | 2): Set<number> => {
+    const out = new Set<number>();
+    for (const s2 of [0, 1, 2] as const) {
+      if (s2 === seat) continue;
+      for (const c of st.hands[s2]) out.add(c);
+    }
+    for (const c of st.unseen) out.add(c);
+    for (const c of st.talon) out.add(c);
+    /*
+     * Co sedadlo FYZICKY vidělo, skrytá informace není: vlastní odhoz zná
+     * navždy, i když talon po převzetí zvedl soupeř a drží ty karty v ruce
+     * (ČSM volený B/7). Proto se `talonKnowledge` z tajemství odečítá.
+     */
+    for (const c of st.talonKnowledge[seat]) out.delete(c);
+    return out;
+  };
+
+  /** Všechny hodnoty pod klíči, které nesou karty (rekurzivně). */
+  const cardValues = (value: unknown, key = ''): number[] => {
+    const CARD_KEYS = ['card', 'cards', 'hand', 'talon', 'talonKnown', 'revealedTrump', 'won', 'trick'];
+    const out: number[] = [];
+    const walk = (v: unknown, k: string, inCardKey: boolean): void => {
+      const here = inCardKey || CARD_KEYS.includes(k);
+      if (typeof v === 'number') { if (here) out.push(v); return; }
+      if (Array.isArray(v)) { for (const x of v) walk(x, k, here); return; }
+      if (v !== null && typeof v === 'object') {
+        for (const [kk, vv] of Object.entries(v as Record<string, unknown>)) {
+          walk(vv, kk, CARD_KEYS.includes(kk) ? true : kk === 'seat' ? false : here && kk !== 'winner');
+        }
+      }
+    };
+    walk(value, key, false);
+    return out;
+  };
+
+  let checkedStates = 0;
+  let chooseTrumpSeen = 0;
+  for (const variant of ['voleny', 'licitovany'] as const) {
+    for (let seed = 101; seed <= 130; seed += 1) {
+      const rng = new RndL(seed * 7 + 1);
+      let st: StL = initL(cfgL(variant), 2);
+      // velké seedy: kdyby prosákl do pohledu, nespletl by se s kartou ani počtem
+      st = apL(st, { type: 'deal', seed: 1_000_003 * seed });
+      let guard = 0;
+      while (st.phase.name !== 'scored' && st.phase.name !== 'idle') {
+        if ((guard += 1) > 400) throw new Error('únik-test: hra se zasekla');
+        for (const seat of [0, 1, 2] as const) {
+          const v = viewL(st, seat);
+          const secret = secretsFor(st, seat);
+          for (const n of cardValues(v)) {
+            assert.ok(!secret.has(n), `${variant}/${seed}: karta ${n} unikla sedadlu ${seat} (${st.phase.name})`);
+          }
+          // seed rozdání se do pohledu nesmí dostat v žádné podobě
+          assert.ok(
+            !JSON.stringify(v).includes(String(st.seed)),
+            `${variant}/${seed}: seed rozdání je v pohledu sedadla ${seat}`,
+          );
+          for (const a of v.publicHistory) {
+            if (a.type !== 'choose-trump') continue;
+            chooseTrumpSeen += 1;
+            assert.ok(
+              a.card === 'hidden' || a.card === 'from-people',
+              `${variant}/${seed}: veřejná historie nese zvolenou kartu (${String(a.card)})`,
+            );
+          }
+          checkedStates += 1;
+        }
+        let acted = false;
+        for (const seat of [0, 1, 2] as const) {
+          const acts = legalL(viewL(st, seat));
+          if (acts.length === 0) continue;
+          st = apL(st, acts[rng.int(acts.length)]);
+          acted = true;
+          break;
+        }
+        if (!acted) break;
+      }
+    }
+  }
+  assert.ok(chooseTrumpSeen > 0, 'test musí projít i volbou trumfu, jinak nic nekontroluje');
+  console.log(`PASS únik — pohled hráče neobsahuje cizí karty ani seed rozdání (${checkedStates} stavů)`);
+}
+
+// seed AI: nesmí jít odvodit ze seedu rozdání (a naopak)
+{
+  const { MatchController: MCL } = await import('../src/lib/match/controller');
+  const { defaultConfig: cfgS } = await import('../src/lib/rules/sazby');
+  const { Random: RndS } = await import('../src/lib/random');
+
+  const seedsOf = (dealSeed: number, aiSeedSource?: () => number): number[] => {
+    const seen: number[] = [];
+    const driver = {
+      // požadavek se nikdy nedokončí: stačí zachytit seed, hra běžet nemusí
+      think: (r: { seed: number }) => { seen.push(r.seed); return new Promise<never>(() => {}); },
+      cancel: () => {},
+    };
+    const ctrl = new MCL(driver as never, {
+      config: cfgS('voleny'), humanSeat: 1, difficulty: 'easy', budgetMs: 0,
+      seedSource: () => dealSeed, aiDelayMs: 0, autoGood: false,
+      ...(aiSeedSource ? { aiSeedSource } : {}),
+    });
+    ctrl.dealNext(); // volí forhont (sedadlo 0) = AI, takže požadavek padne hned
+    ctrl.stop();
+    return seen;
+  };
+
+  const DEAL = 123_456_789;
+  const got = seedsOf(DEAL);
+  assert.ok(got.length > 0, 'test potřebuje aspoň jeden požadavek na AI');
+  for (const s of got) {
+    for (let n = 0; n <= 5000; n += 1) {
+      assert.notEqual(
+        RndS.derive(DEAL, n), s,
+        `seed AI ${s} je derive(seedRozdání, ${n}) — z toho jde spočítat celé rozdání`,
+      );
+    }
+    assert.notEqual(s, DEAL, 'seed AI nesmí být přímo seed rozdání');
+  }
+  // dva zápasy s TÝMŽ rozdáním nesmí dát tytéž seedy (jinak je to funkce rozdání)
+  assert.notDeepEqual(seedsOf(DEAL), seedsOf(DEAL), 'seed AI nesmí být funkcí seedu rozdání');
+  // pro testy a reprodukovatelnost jde základ zafixovat
+  assert.deepEqual(seedsOf(DEAL, () => 42), seedsOf(DEAL, () => 42), 'zafixovaný základ musí být deterministický');
+  console.log('PASS únik — seed AI je nezávislý na seedu rozdání a nejde z něj invertovat');
+}
+
 console.log('OK: vše prošlo');
