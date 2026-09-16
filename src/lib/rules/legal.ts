@@ -256,12 +256,12 @@ export function legalActions(v: PlayerView): PlayerAction[] {
         : contract.declarer;
       const sideOf = (s: Seat): boolean => s === contract.declarer; // true = strana aktéra
 
-      const targets: FlekTarget[] =
-        contract.mode === 'hra'
-          ? (['hra', ...(contract.sedma !== null ? ['sedma'] : []), ...(contract.kilo !== null ? ['kilo'] : [])] as FlekTarget[])
-          : [contract.mode];
-
-      for (const t of targets) {
+      /*
+       * „V daném kole schvalování se lze vyjadřovat již jen k tomu závazku,
+       * který v předchozím kole protistrana flekovala" (Obecná pravidla
+       * čl. V/4) — otevřené komponenty proto nese `f.open`, ne celý závazek.
+       */
+      for (const t of f.open) {
         const level = f.levels[t] ?? 0;
         if (level >= v.config.sazby.maxFlekLevel) continue;
         const last = f.lastRaiser[t];
@@ -272,8 +272,14 @@ export function legalActions(v: PlayerView): PlayerAction[] {
         if (eligible) out.push({ type: 'flek', seat: me, target: t });
       }
 
-      // sedma/sto proti: obránce, jen v barevné hře, jen dokud komponenta neexistuje
-      if (contract.mode === 'hra' && !sideOf(me)) {
+      /*
+       * Sedma/sto proti: „Závazky Sedma a Sto mohou hlásit i hráči obrany
+       * V PRVNÍM KOLE komentování ohlášeného trumfového závazku" (Obecná
+       * pravidla čl. VII/1) — tedy jen volený a jen v kole 0. Licitovaná
+       * pravidla je zakazují úplně: „Sedmu ani sto proti nelze hlásit"
+       * (čl. II/23).
+       */
+      if (v.config.variant === 'voleny' && contract.mode === 'hra' && !sideOf(me) && f.round === 0) {
         const canSedmaProti =
           contract.sedma === null && contract.trump !== null && v.hand.includes(card(contract.trump, R7));
         const canKiloProti = contract.kilo === null;

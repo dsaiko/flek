@@ -37,6 +37,8 @@ const PHASE_NAMES = [
 const CONTRACT_PHASES = ['fleks', 'tricks'];
 
 const isSeat = (x: unknown): boolean => x === 0 || x === 1 || x === 2;
+const FLEK_TARGETS = ['hra', 'sedma', 'kilo', 'betl', 'durch', 'dveSedmy'];
+const isFlekTarget = (x: unknown): boolean => typeof x === 'string' && FLEK_TARGETS.includes(x);
 const isNum = (x: unknown): boolean => typeof x === 'number' && Number.isFinite(x);
 const isStr = (x: unknown): boolean => typeof x === 'string';
 const isCardArray = (x: unknown): boolean =>
@@ -107,7 +109,12 @@ function isValidPhase(p: Record<string, unknown>): boolean {
       // levels jdou do 2**level v scoringu, lastRaiser do porovnání stran
       return isRecord(f.levels) && Object.values(f.levels as object).every((l) => inRange(l, 0, 16)) &&
         isRecord(f.lastRaiser) && Object.values(f.lastRaiser as object).every(isSeat) &&
-        isSeat(f.toAct) && Array.isArray(f.passed) && (f.passed as unknown[]).every(isSeat);
+        isSeat(f.toAct) && Array.isArray(f.spoke) && (f.spoke as unknown[]).every(isSeat) &&
+        // `open` řídí nabídku fleků, `raised` otevírá příští kolo — cizí klíč
+        // by dal flek na komponentu, kterou závazek nemá, a scoring by ji platil
+        Array.isArray(f.open) && (f.open as unknown[]).every(isFlekTarget) &&
+        Array.isArray(f.raised) && (f.raised as unknown[]).every(isFlekTarget) &&
+        inRange(f.round, 0, 32);
     }
     case 'tricks':
       // hra končí na trickNo === 9; jiná hodnota (nebo neceločíselná) znamená
@@ -153,7 +160,7 @@ function isHistoryAction(x: unknown): boolean {
     case 'takeover':
       return a.claim === 'betl' || a.claim === 'durch' || a.claim === 'good';
     case 'flek':
-      return isStr(a.target);
+      return isFlekTarget(a.target);
     case 'play':
       return isCard(a.card) && typeof a.announceMarriage === 'boolean';
     case 'announce-proti':
