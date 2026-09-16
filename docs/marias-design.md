@@ -1371,3 +1371,62 @@ obojí se škáluje z výšky sukna, takže „o kousek výš" je při jiném po
 Negativními kontrolami ověřeno: vrácení redakce ve `view()` shodí test i27, nefiltrovaná ruka
 shodí kontrolu „11 karet", box, který se neschová, shodí kontrolu po zúčtování, a původní
 pozice otočené karty (`pos-me`) shodí kontrolu překryvu.
+
+## 25. Deep review pravidel proti ČSM (2026-09-16)
+
+Externí review (`.codex-review-pravidla.md`, Codex, 2026-09-14) prošlo implementaci proti pěti
+dokumentům ČSM a vytklo jedenáct věcí. Každá se validovala proti kódu **i proti PDF**; devět
+se ukázalo jako oprávněných (dvě z nich jen zčásti), dvě se zamítly s citací.
+
+### Zapracováno
+
+| # | Závažnost | Nález | Oprava |
+|---|---|---|---|
+| 1 | kritická | Seed AI vznikal jako `derive(seedRozdání, tah*3+sedadlo)`. `derive` je invertibilní xorshift a druhý parametr worker zná, takže si ze seedu tahu spočítal **seed rozdání** a z něj celé zamíchání = všechny ruce. | Základ seedů se losuje nezávisle (`crypto`, jinak `Math.random`) a kombinuje s pořadím tahu v zápase; `aiSeedSource` ho testům zafixuje |
+| 2 | vysoká | `redact()` pouštěl `choose-trump` **i s kartou**, takže zvolený trumf byl v `publicHistory` každého soupeře — §24 ho schoval jen z `revealedTrump` | Veřejné zůstává jen „z ruky / z lidu"; totožnost karty je `'hidden'` |
+| 3 | vysoká | Tiché sto se měřilo jen nejvyšší hláškou a platilo se jako **samostatná komponenta** navíc ke hře | Tiché sto počítá **všechny hlášky** (čl. V/6) a **zdvojnásobuje vyflekovanou hru** místo vlastní komponenty; nad 100 náleží navíc sazba tichého sta za každých 10 bodů |
+| 4 | vysoká | Deklarace byla zamčená na přesný druh, příznaky i barvu vysoutěženého závazku | Porovnává se **místo v žebříčku**: vysoutěžený stupeň je minimum, nahoru je otevřeno (čl. VII/3) — po betlu jde durch, po nečerveném stu i červené |
+| 5 | vysoká | Ve voleném se hlásil závazek **před** otázkou „Barva?", takže obrana rozhodovala o převzetí se znalostí sedmy a sta | Po odhozu se jde do fáze převzetí (aktér se ptá, obrana odpovídá) a **teprve pak** se hlásí závazek (čl. VII/1) |
+| 6 | vysoká | „Flekovaná hra se bez »re« nehraje" (volený B/19) se nerespektovalo | Holá hra s flekem a bez re se rovnou platí obraně; přepínač `autoSettleFlekkedHra` (default jen volený — licitovaná pravidla ustanovení nemají) |
+| 7 | vysoká | Sedma/sto proti šlo hlásit i v licitovaném | Zakázáno (licitovaný čl. II/23) a ve voleném omezeno na **první kolo** komentování (čl. VII/1) |
+| 9 | střední | Flekovací kola: otevřené byly pořád všechny komponenty a fáze končila až po pasu tří sedadel | `FlekState` nese kolo, otevřené komponenty a kdo už mluvil; otevřené je jen to, co protistrana zvýšila v minulém kole, a fáze končí schválením **jedné strany** (čl. V/4). Kolo 0 patří obraně — aktér ke svému závazku nemluví |
+| 10 | střední | Chyběl limit | `Sazby.limit`/`limitRaised` (500× a 750× při flekování obou obránců) stropí výslednou sazbu za hru; `HandResult.limit` to ukáže ve vyúčtování |
+| 11 | nízká | README tvrdil, že licitaci začíná forhont, engine ji začínal prostředním hráčem; ČSM říká zadák | Licitaci otevírá **zadák** (= rozdávající ve třech, čl. VII/3); README opraven |
+
+### Zamítnuto
+
+| Nález | Proč |
+|---|---|
+| „Hlášené sto přesně za 100 se účtuje 1 + 4 = 5, přestože sazba Sta je 4" | Sto je **složený závazek** (hra + sto) a „u kombinovaných závazků se výsledné sazby sčítají, resp. odčítají, byl-li splněn jen jeden z nich" (Obecná pravidla čl. V/2). Stejně se chová sedma (1 + 2). 1 + 4 je správně; opravou prošla jen tichá varianta, kde pravidla explicitně mluví o **zdvojnásobení hry** (čl. V/6, volený A) |
+| #8 „licitovaná varianta je funkčně neúplná" (dvě sedmy, omyl) | Není to vada implementace, ale **vědomý rozsah** (§10): „dvě sedmy" scoring neumí a nenabízí se ani se zapnutým configem, licitovat sedmu bez sedmy (a s ní institut „omylu", licitovaný čl. II/17) taky neděláme. Nově je to napsané i v README, ať se to nečte jako chyba |
+
+### Co zůstává nepodporované (a je to teď napsané)
+
+- **Ložené hry** (Obecná čl. V/9–10, volený B/15–18, licitovaný čl. II/18–22): rozpoznání
+  ložené hry je řešení hry, ne účetnictví, a rozdíl se platí konkrétním flekujícím hráčům.
+  Limit se stropí, rozúčtování ložené hry ne.
+- **Prémiové body, pauzírující čtvrtý hráč, fyzické snímání a skládání, většina renonců** —
+  turnajové mechanismy mimo rozsah tříhráčové browserové hry.
+- **Jedno zvýšení na tah**: hráč smí v kole zvýšit jednu komponentu, pravidla dovolují
+  vyjádřit se v jednom kole ke **všem** částem závazku („flek na hru, sedma dobrá").
+- **Licitace prostředního hráče**: pořadí držení shodného stupně je pevné (forhont > prostřední
+  > zadák), pravidla ho po odstoupení hráče přepínají (čl. VII/3). Viz §16.
+
+### Testy
+
+Nové bloky ve `scripts/verify.ts`:
+
+- **únik**: nad 60 rozdáními obou variant se prochází CELÝ `PlayerView` každého sedadla a každé
+  pole nesoucí karty se porovná s kartami, které to sedadlo znát nesmí; plus kontrola, že seed
+  rozdání není v pohledu a že žádný seed AI není `derive(seedRozdání, n)` pro n do 5000
+- **scoring**: tiché sto se dvěma hláškami (přesně 100 → sazba 2, ne 3), zdvojnásobení
+  vyflekované hry, bonus nad 100, hlášené sto pořád 1 + 4, limit 500× i 750×
+- **pořadí**: po odhozu se ptá aktér, v historii obrany není deklarace, betl/durch se po
+  „Barva?" už nenabízejí
+- **licitace**: otevírá zadák pro všechny tři rozdávající
+- **deklarace**: po betlu durch, po nečerveném stu i červené, nic pod vysoutěženým stupněm
+- **fleky**: kola, otevřené komponenty, konec po souhlasu strany, proti jen volený a jen v kole 0
+- **hra bez re**: flekovaná bez re se nehraje, s re ano, s vypnutým přepínačem taky
+
+Negativními kontrolami ověřeno u obou úniků: vrácení redakce `choose-trump` i vrácení starého
+odvození seedu shodí nový test.

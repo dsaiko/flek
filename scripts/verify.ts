@@ -1099,7 +1099,7 @@ const KULE = 2 as const;
 
 {
   const { defaultConfig } = await import('../src/lib/rules/sazby');
-  const { deriveConstraints, TALON_SLOT } = await import('../src/lib/ai/determinize');
+  const { deriveConstraints } = await import('../src/lib/ai/determinize');
   const { card: mk3, CERVENE: CE3, R7: S73, KRAL: K3, SVRSEK: SV3 } = await import('../src/lib/cards');
   const nap2 = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 

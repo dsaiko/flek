@@ -13,7 +13,7 @@ import { nextSeat, type GameState, type Variant } from '../lib/rules/types';
 import type { Pattern } from '../lib/ui/cardAssets';
 import { createSounds } from '../lib/ui/sounds';
 import type { TalkSet } from '../lib/ui/tableTalk';
-import { aiNames, currentLang, t } from '../lib/ui/i18n';
+import { currentLang, t } from '../lib/ui/i18n';
 import { TableUI } from '../lib/ui/table';
 
 // ── nastavení ────────────────────────────────────────────────────────────────
