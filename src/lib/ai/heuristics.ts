@@ -223,12 +223,19 @@ export function decideAuction(v: PlayerView, difficulty: Difficulty, rng: Random
     }
 
     case 'takeover': {
-      const good = legal.find((a) => a.type === 'takeover' && a.claim === 'good') as PlayerAction;
+      /*
+       * Tahle fáze má dvě role: aktér se tu PTÁ „Barva?" (claim 'good'),
+       * obrana odpovídá. Otázka ale nemusí být legální — s esem nebo desítkou
+       * v talonu aktérovi zbývá jen betl a durch, takže `good` může chybět
+       * a slepé `return good` by vrátilo `undefined`.
+       */
+      const good = legal.find((a) => a.type === 'takeover' && a.claim === 'good');
       const durchOpt = legal.find((a) => a.type === 'takeover' && a.claim === 'durch');
       const betlOpt = legal.find((a) => a.type === 'takeover' && a.claim === 'betl');
       if (durchOpt && durchHoles(hand) <= t.durchHoles) return durchOpt;
       if (betlOpt && betlHoles(hand) <= t.betlHoles) return betlOpt;
-      return good;
+      // bez barevné hry se musí vybrat menší zlo: betl je levnější než durch
+      return good ?? betlOpt ?? durchOpt ?? legal[0];
     }
 
     case 'fleks': {

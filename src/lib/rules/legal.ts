@@ -15,6 +15,32 @@ import { bidRank, forhont, nextSeat } from './types';
 
 const MODE_RANK: Record<GameMode, number> = { hra: 0, betl: 1, durch: 2 };
 
+/**
+ * Smí aktér po odhozu vůbec hlásit barevnou hru? Talon bez esa/desítky
+ * (ČSM volený C/13) — a bez trumfu, pokud běží house rule `talonForbidsTrump`.
+ * Bez toho by otázka „Barva?" vedla do deklarace bez jediné legální akce.
+ */
+function colourDeclarationPossible(v: PlayerView, st: { trump: Suit | null }): boolean {
+  const talon = v.talon ?? [];
+  if (talon.some(isValuable)) return false;
+  if (!v.config.talonForbidsTrump) return true;
+  return !talon.some((c) => st.trump !== null && suitOf(c) === st.trump);
+}
+
+/**
+ * Místo deklarace v licitačním žebříčku (`bidRank`). Holá hra leží pod
+ * žebříčkem (stupeň 1 je sedma), proto 0.
+ */
+function declareRank(mode: GameMode, sedma: boolean, kilo: boolean, trump: Suit | null): number {
+  if (mode === 'betl') return bidRank({ kind: 'betl', cervena: false });
+  if (mode === 'durch') return bidRank({ kind: 'durch', cervena: false });
+  const cervena = trump === CERVENE;
+  if (sedma && kilo) return bidRank({ kind: 'sto-sedma', cervena });
+  if (kilo) return bidRank({ kind: 'sto', cervena });
+  if (sedma) return bidRank({ kind: 'sedma', cervena });
+  return 0;
+}
+
 const isValuable = (c: Card): boolean => rankOf(c) === ESO || rankOf(c) === R10;
 
 /** Všechny závazky licitačního žebříčku (bez nelegálních kombinací). */
@@ -137,11 +163,24 @@ export function legalActions(v: PlayerView): PlayerAction[] {
       const st = phase.standing;
       if (me !== st.declarer) break;
 
-      if (st.mode === 'betl' || st.mode === 'durch') {
-        // mód zamčený (převzetí ve voleném / licitovaný betl-durch)
+      /*
+       * Volený: mód zamčený PŘEVZETÍM (obránce sebral hru betlem/durchem) —
+       * hlásí se přesně to, co si nárokoval. Poznávací znamení je `bid === null`:
+       * v licitovaném týž mód pochází z příhozu, a ten se smí překonat výš.
+       */
+      if (st.bid === null && (st.mode === 'betl' || st.mode === 'durch')) {
         out.push({ type: 'declare', seat: me, mode: st.mode, sedma: false, kilo: false });
         break;
       }
+
+      /*
+       * Licitovaný: ohlášený závazek „nesmí být v dané posloupnosti níže, než
+       * jej zavazuje výška ukončené licitace, může se však jednat o JAKÝKOLIV
+       * VYŠŠÍ druh závazku" (Obecná pravidla čl. VII/3). Neporovnává se tedy
+       * druh závazku ani barva, ale jen místo v žebříčku — po vylicitovaném
+       * betlu jde ohlásit durch a po nečerveném stu i to červené.
+       */
+      const minRank = st.bid ? bidRank(st.bid) : 0;
 
       // hra: talon nesmí obsahovat esa/desítky (příp. trumfy dle house rule)
       const talon = v.talon ?? [];
@@ -152,46 +191,53 @@ export function legalActions(v: PlayerView): PlayerAction[] {
       const pushHra = (trump: Suit) => {
         if (!hraTalonOk(trump)) return;
         const canSedma = v.hand.includes(card(trump, R7));
-        const bid = st.bid;
-        // licitovaný: deklarace musí pokrýt vysoutěžený závazek
-        const needSedma = bid !== null && (bid.kind === 'sedma' || bid.kind === 'sto-sedma');
-        const needKilo = bid !== null && (bid.kind === 'sto' || bid.kind === 'sto-sedma');
         for (const sedma of [false, true]) {
           for (const kilo of [false, true]) {
             if (sedma && !canSedma) continue;
-            if (needSedma && !sedma) continue;
-            if (needKilo && !kilo) continue;
+            if (declareRank('hra', sedma, kilo, trump) < minRank) continue;
             out.push({
               type: 'declare', seat: me, mode: 'hra', sedma, kilo,
-              ...(st.trump === null ? { trump } : {}),
+              ...(fixedTrump === null ? { trump } : {}),
             });
           }
         }
       };
 
-      if (st.trump !== null) {
-        pushHra(st.trump);
-      } else {
-        // licitovaný: volba trumfu — červená jen při červeném závazku (a naopak)
-        const bid = st.bid;
-        const suits: Suit[] = bid?.cervena ? [CERVENE] : ([0, 1, 2, 3] as Suit[]).filter(
-          (s) => bid === null || s !== CERVENE,
-        );
-        for (const s of suits) pushHra(s);
-      }
+      /*
+       * Ve voleném je trumf dávno zvolený, takže je pevný. V licitovaném je
+       * `standing.trump` jen stopa po ČERVENÉM příhozu — barvu vybírá až
+       * deklarace a o tom, že červená zůstane, rozhoduje žebříček.
+       */
+      const fixedTrump = v.config.variant === 'voleny' ? st.trump : null;
+      if (fixedTrump !== null) pushHra(fixedTrump);
+      else for (const s of [0, 1, 2, 3] as Suit[]) pushHra(s);
 
-      // volený: aktér smí místo hry ohlásit betl/durch (licitovaný jen dle závazku)
-      if (v.config.variant === 'voleny') {
-        out.push({ type: 'declare', seat: me, mode: 'betl', sedma: false, kilo: false });
-        out.push({ type: 'declare', seat: me, mode: 'durch', sedma: false, kilo: false });
+      /*
+       * Betl a durch hlásí ve VOLENÉM aktér už na otázku „Barva?" (fáze
+       * převzetí, Obecná pravidla čl. VII/1), takže sem patří jen licitovaný.
+       */
+      if (v.config.variant === 'licitovany') {
+        for (const mode of ['betl', 'durch'] as const) {
+          if (declareRank(mode, false, false, null) < minRank) continue;
+          out.push({ type: 'declare', seat: me, mode, sedma: false, kilo: false });
+        }
       }
       break;
     }
 
     case 'takeover': {
       if (me !== phase.toAct) break;
-      out.push({ type: 'takeover', seat: me, claim: 'good' });
-      const currentRank = MODE_RANK[phase.standing.mode ?? 'hra'];
+      const stT = phase.standing;
+      /*
+       * Ve voleném tahle fáze začíná otázkou „Barva?" (Obecná pravidla čl.
+       * VII/1): aktér po odhozu nabídne soupeřům hru bez trumfů, a teprve po
+       * jejich souhlasu hlásí závazek. Ptát se má ale jen ten, kdo barevnou
+       * hru opravdu HRÁT MŮŽE — s esem nebo desítkou v talonu (odhodit je smí,
+       * počítá-li s betlem/durchem) mu zbývá právě betl a durch.
+       */
+      const askable = me !== stT.declarer || stT.mode !== null || colourDeclarationPossible(v, stT);
+      if (askable) out.push({ type: 'takeover', seat: me, claim: 'good' });
+      const currentRank = MODE_RANK[stT.mode ?? 'hra'];
       if (MODE_RANK.betl > currentRank) out.push({ type: 'takeover', seat: me, claim: 'betl' });
       if (MODE_RANK.durch > currentRank) out.push({ type: 'takeover', seat: me, claim: 'durch' });
       break;

@@ -699,8 +699,10 @@ const KULE = 2 as const;
     };
     step((a) => a.type === 'choose-trump' && a.card !== 'from-people', 'choose-trump');
     step((a) => a.type === 'discard' && a.cards.every((c) => pts2(c) === 0), 'discard');
-    step((a) => a.type === 'declare' && a.mode === 'hra' && !a.sedma && !a.kilo, 'declare hra');
-    const declarer = st.contract?.declarer;
+    // „Barva?" — aktér nabídne hru bez trumfů JEŠTĚ PŘED deklarací (čl. VII/1)
+    const declarer = actorOf(st);
+    assert.equal(st.phase.name, 'takeover', 'po odhozu se ve voleném ptá „Barva?"');
+    step((a) => a.type === 'takeover' && a.claim === 'good', 'Barva?');
     // obránce přebere betlem
     step((a) => a.type === 'takeover' && a.claim === 'betl', 'takeover betl');
     // původní aktér přebere durchem
@@ -921,13 +923,18 @@ const KULE = 2 as const;
       st = apply(st, a as Act);
     };
     step((a) => a.type === 'choose-trump' && a.card !== 'from-people');
-    step((a) => a.type === 'discard');
-    step((a) => a.type === 'declare');
-    assert.equal(st.phase.name, 'takeover');
-    if (st.phase.name === 'takeover') assert.equal(st.phase.toAct, 2, 'první mluví sedadlo 2 (po forhontovi)');
+    // bez esa a desítky v talonu, jinak aktérovi zbude jen betl/durch (C/13)
+    step((a) => a.type === 'discard' && a.cards.every((c) => pointsOf(c) === 0));
+    // „Barva?" je na aktérovi (sedadlo 1), teprve pak odpovídá obrana
+    assert.equal(st.phase.name, 'takeover', 'převzetí se řeší hned po odhozu (čl. VII/1)');
+    if (st.phase.name === 'takeover') assert.equal(st.phase.toAct, 1, 'ptá se aktér');
     step((a) => a.type === 'takeover' && a.claim === 'good');
-    if (st.phase.name === 'takeover') assert.equal(st.phase.toAct, 0, 'druhý mluví sedadlo 0');
-    console.log('PASS regrese i24 — pořadí mluvení při převzetí od forhonta');
+    if (st.phase.name === 'takeover') assert.equal(st.phase.toAct, 2, 'první odpovídá sedadlo 2 (po forhontovi)');
+    step((a) => a.type === 'takeover' && a.claim === 'good');
+    if (st.phase.name === 'takeover') assert.equal(st.phase.toAct, 0, 'druhý odpovídá sedadlo 0');
+    step((a) => a.type === 'takeover' && a.claim === 'good');
+    assert.equal(st.phase.name, 'declare', 'po souhlasu obou obránců teprve hlásí aktér');
+    console.log('PASS regrese i24 — „Barva?" od aktéra, odpovědi obrany od forhonta');
   }
 
   // ── i22: AI volí trumf podle ruky, ne první nabídnutý (ani červenou) ─────
@@ -1266,7 +1273,8 @@ const KULE = 2 as const;
       };
       step((a) => a.type === 'choose-trump' && a.card !== 'from-people', 'choose-trump');
       step((a) => a.type === 'discard' && a.cards.every((c) => pts5(c) === 0), 'discard');
-      step((a) => a.type === 'declare' && a.mode === 'hra' && !a.sedma && !a.kilo, 'declare hra');
+      // „Barva?" (čl. VII/1) — převzetí se řeší JEŠTĚ PŘED deklarací
+      step((a) => a.type === 'takeover' && a.claim === 'good', 'Barva?');
       // hru přebere OBRÁNCE betlem — právě tuhle větev 'keep' řeší
       step((a) => a.type === 'takeover' && a.claim === 'betl', 'takeover betl');
       let guard = 0;
@@ -2088,7 +2096,8 @@ const KULE = 2 as const;
       for (const pred of [
         (a: Act8) => a.type === 'choose-trump' && a.card !== 'from-people',
         (a: Act8) => a.type === 'discard' && a.cards.every((c) => pts8(c) === 0),
-        (a: Act8) => a.type === 'declare' && a.mode === 'hra' && !a.sedma && !a.kilo,
+        // „Barva?" — ve voleném se převzetí řeší před deklarací (čl. VII/1)
+        (a: Act8) => a.type === 'takeover' && a.claim === 'good',
       ]) {
         await nap8(20);
         const a = ctrl.humanLegal().find(pred);
@@ -2114,7 +2123,9 @@ const KULE = 2 as const;
     const humanGoods = auto.state.history.filter(
       (a) => a.type === 'takeover' && a.seat === 0 && a.claim === 'good',
     );
-    assert.equal(humanGoods.length, 1, 'controller musí vynucenou „dobrou" potvrdit za člověka');
+    // první „dobrá" je test sám („Barva?"), druhou musí po cizím durchu — kde
+    // už nic jiného nezbývá — potvrdit controller
+    assert.equal(humanGoods.length, 2, 'controller musí vynucenou „dobrou" potvrdit za člověka');
     assert.notEqual(auto.state.phase.name, 'takeover', 'převzetí se musí uzavřít bez klikání');
     auto.stop();
     console.log('PASS regrese i12 — takeover/„dobrá" bez volby se neklikají ručně');
@@ -2561,6 +2572,12 @@ const KULE = 2 as const;
     const trumpSuit = st.phase.name === 'discard-talon' ? st.phase.standing.trump : null;
     assert.ok(trumpSuit !== null, 'volba trumfu musí trumf nastavit');
     st = apply(st, acts9(st).find((a) => a.type === 'discard' && a.cards.every((c) => pts9(c) === 0)) as Act9);
+    // „Barva?" a souhlas obou obránců — deklarace je až za nimi (čl. VII/1)
+    let guard5 = 0;
+    while (st.phase.name === 'takeover') {
+      if ((guard5 += 1) > 10) throw new Error('scénář i5 se zasekl na převzetí');
+      st = apply(st, acts9(st).find((a) => a.type === 'takeover' && a.claim === 'good') as Act9);
+    }
     const declare = acts9(st).find((a) => a.type === 'declare' && a.mode === 'hra' && !a.sedma && !a.kilo);
     assert.ok(declare, 'scénář i5 čeká deklaraci prosté hry');
     assert.equal((declare as { trump?: number }).trump, undefined, 've voleném akce trumf nenese');
@@ -2694,6 +2711,13 @@ const KULE = 2 as const;
 
     // sehrávka: karta se vrací do ruky, stranou už neleží nic
     st = apply(st, actsA(st).find((a) => a.type === 'discard' && a.cards.every((c) => ptsA(c) === 0)) as ActA);
+    assert.ok(trumpAsideOf(view(st, 0)), 'při „Barva?" pořád leží');
+    // „Barva?" a souhlas obou obránců; deklarace je až za nimi (čl. VII/1)
+    let guardA = 0;
+    while (st.phase.name === 'takeover') {
+      if ((guardA += 1) > 10) throw new Error('scénář §24 se zasekl na převzetí');
+      st = apply(st, actsA(st).find((a) => a.type === 'takeover' && a.claim === 'good') as ActA);
+    }
     assert.ok(trumpAsideOf(view(st, 0)), 'při deklaraci pořád leží');
     st = apply(st, actsA(st).find((a) => a.type === 'declare') as ActA);
     /*
@@ -2763,30 +2787,35 @@ const KULE = 2 as const;
       store.set('flek.match.v1', JSON.stringify(parsed));
     };
 
-    // (i4) mód v převzetí je vždy konkrétní; s null by resolveTakeover
-    // vyrobil kontrakt s null módem a hra by se zúčtovala jako durch
+    /*
+     * (i4, přehodnoceno v §25) Mód `null` je v převzetí legitimní: tak vypadá
+     * otázka „Barva?", která teď přichází PŘED deklarací (čl. VII/1), a
+     * kontrakt v tu chvíli ještě neexistuje. Zakázaný zůstává mód 'hra' —
+     * z něj by `resolveTakeover` vyrobil bezbarvý kontrakt a hra by se
+     * dohrávala v přirozeném pořadí a zúčtovala jako durch.
+     */
     patch((x) => { ((x.phase as Record<string, unknown>).standing as Record<string, unknown>).mode = null; });
-    assert.equal(loadMatch(), null, 'převzetí bez módu závazku musí být odmítnuto');
-    // (i4) a bez kontraktu resolveTakeover vyhodí InvariantError
-    patch((x) => { x.contract = null; });
-    assert.equal(loadMatch(), null, 'převzetí bez kontraktu musí být odmítnuto');
+    assert.ok(loadMatch(), 'otázka „Barva?" (mód null, bez kontraktu) se musí obnovit');
+    patch((x) => { ((x.phase as Record<string, unknown>).standing as Record<string, unknown>).mode = 'hra'; });
+    assert.equal(loadMatch(), null, 'mód „hra" v převzetí musí být odmítnut');
 
     // (i24) POZITIVNÍ případ: betl i durch v převzetí musí projít, jinak by
     // se rozehraný zápas při obnovení tiše zahodil
-    for (const mode of ['hra', 'betl', 'durch'] as const) {
+    for (const mode of ['betl', 'durch'] as const) {
       patch((x) => {
         ((x.phase as Record<string, unknown>).standing as Record<string, unknown>).mode = mode;
-        (x.contract as Record<string, unknown>).mode = mode;
-        if (mode !== 'hra') (x.contract as Record<string, unknown>).trump = null;
+        x.contract = {
+          mode, trump: null, declarer: 0, sedma: null, kilo: null, dveSedmy: false,
+        };
       });
       assert.ok(loadMatch(), `probíhající převzetí na ${mode} se musí obnovit`);
     }
 
     // (i5) zlomkový trumf: projde rozsahem, ale žádná barva se mu nerovná
     patch((x) => {
-      ((x.phase as Record<string, unknown>).standing as Record<string, unknown>).mode = 'hra';
-      (x.contract as Record<string, unknown>).mode = 'hra';
-      (x.contract as Record<string, unknown>).trump = 0.5;
+      x.contract = {
+        mode: 'hra', trump: 0.5, declarer: 0, sedma: null, kilo: null, dveSedmy: false,
+      };
     });
     assert.equal(loadMatch(), null, 'zlomkový trumf musí být odmítnut');
     patch((x) => { x.revealedTrump = 2.5; });
@@ -3516,11 +3545,11 @@ console.log('PASS karty — názvy barev a hodnot ve všech čtyřech jazycích'
   assert.throws(() => ap(after, { type: 'concede', seat: 0 }), /rozehranou/, 'concede po zúčtování musí selhat');
 
   /*
-   * Převzetí betlem: ve fázi `takeover` drží nárok `phase.standing`, zatímco
-   * `state.contract` je PŘEKONANÁ deklarace. Vzdání se proto musí účtovat
-   * podle nároku (betl), ne podle staré hry — jinak by šlo utéct z betlu za
-   * sazbu holé hry. Scénář je vynucený (nárok `betl` je legální vždy), takže
-   * nemůže tiše vypadnout.
+   * Převzetí betlem: nárok drží `phase.standing`, kontrakt ještě NEEXISTUJE —
+   * ve voleném se totiž o převzetí rozhoduje před deklarací (čl. VII/1).
+   * Vzdání se proto musí účtovat podle nároku (betl/durch), ne jako holá hra,
+   * jinak by šlo z betlu utéct za sazbu 1. Scénář je vynucený (nárok `betl`
+   * je ve fázi převzetí legální vždy), takže nemůže tiše vypadnout.
    */
   for (const claim of ['betl', 'durch'] as const) {
     const cfgV = defaultConfig('voleny');
@@ -3529,11 +3558,17 @@ console.log('PASS karty — názvy barev a hodnot ve všech čtyřech jazycích'
     for (let steps = 0; steps < 200 && tst.phase.name !== 'tricks' && tst.phase.name !== 'scored'; steps += 1) {
       if (tst.phase.name === 'takeover' && claimed === null) {
         const actor = tst.phase.toAct;
-        const act = legal(viewOf(tst, actor)).find((a) => a.type === 'takeover' && a.claim === claim);
+        const acts = legal(viewOf(tst, actor));
+        // aktér se nejdřív zeptá „Barva?"; přebírá až obránce po něm
+        if (actor === tst.talonOwner) {
+          tst = ap(tst, acts.find((a) => a.type === 'takeover' && a.claim === 'good')!);
+          continue;
+        }
+        const act = acts.find((a) => a.type === 'takeover' && a.claim === claim);
         assert.ok(act, `převzetí (${claim}) musí být ve fázi takeover legální`);
         claimed = actor;
         tst = ap(tst, act);
-        break; // vzdáváme ROVNOU ve fázi převzetí, dokud je contract překonaný
+        break; // vzdáváme ROVNOU ve fázi převzetí, dokud kontrakt neexistuje
       }
       for (const seat of [0, 1, 2] as const) {
         const v = viewOf(tst, seat);
@@ -3548,9 +3583,10 @@ console.log('PASS karty — názvy barev a hodnot ve všech čtyřech jazycích'
     }
     assert.notEqual(claimed, null, `scénář s převzetím (${claim}) vůbec nenastal — test by nic neověřil`);
     assert.equal(tst.phase.name, 'takeover', 'po převzetí se má pokračovat ve fázi takeover');
-    // rozlišující bod: starý kontrakt je pořád hra, nárok je betl/durch
-    assert.notEqual(tst.contract, null, 'fixtura předpokládá už deklarovanou hru');
-    assert.equal(tst.contract!.mode, 'hra', 'fixtura předpokládá překonanou hru v contractu');
+    assert.notEqual(claimed, tst.talonOwner, 'scénář vyžaduje, aby přebíral OBRÁNCE');
+    // rozlišující bod: kontrakt ještě není, nárok betl/durch žije ve standing
+    assert.equal(tst.contract, null, 'před deklarací kontrakt neexistuje — to je jádro nálezu');
+    if (tst.phase.name === 'takeover') assert.equal(tst.phase.standing.mode, claim);
 
     const rate = claim === 'betl' ? cfgV.sazby.betl : cfgV.sazby.durch;
     const out = ap(tst, { type: 'concede', seat: claimed as 0 | 1 | 2 });
@@ -3565,29 +3601,29 @@ console.log('PASS karty — názvy barev a hodnot ve všech čtyřech jazycích'
   }
 
   /*
-   * Opačná větev téhož: dokud NIKDO nepřebral, je nárok ve `standing` totožný
-   * s deklarací — a vzdání musí zaplatit i vedlejší závazky (sedmu/kilo),
-   * které zná jen `contract`. Kdyby se kontrakt přepočítával ze `standing`
-   * vždycky, tyhle komponenty by se ztratily.
+   * Opačná větev téhož: po deklaraci (fáze fleků) je autoritativní `contract`
+   * a vzdání musí zaplatit i vedlejší závazky (sedmu/kilo). Kdyby se kontrakt
+   * přepočítával ze `standing` vždycky, tyhle komponenty by se ztratily.
    */
   {
     const cfgV = defaultConfig('voleny');
     // seed 1: aktér drží trumfovou sedmu, takže jde deklarovat hru SE SEDMOU
     let tst: S = ap(init(cfgV, 2), { type: 'deal', seed: 1 });
-    for (let steps = 0; steps < 200 && tst.phase.name !== 'takeover' && tst.phase.name !== 'scored'; steps += 1) {
+    for (let steps = 0; steps < 200 && tst.phase.name !== 'fleks' && tst.phase.name !== 'scored'; steps += 1) {
       for (const seat of [0, 1, 2] as const) {
         const v = viewOf(tst, seat);
         const acts = legal(v);
         if (acts.length === 0) continue;
-        // vynuť deklaraci se sedmou, ať je co ztratit
+        // vynuť deklaraci se sedmou, ať je co ztratit; převzetí se jen schvaluje
         const withSedma = acts.find((a) => a.type === 'declare' && a.mode === 'hra' && a.sedma);
-        tst = ap(tst, withSedma ?? thinkC({
+        const goodTakeover = acts.find((a) => a.type === 'takeover' && a.claim === 'good');
+        tst = ap(tst, withSedma ?? goodTakeover ?? thinkC({
           view: v, difficulty: 'easy', seed: Rnd.derive(1, steps * 3 + seat), budgetMs: 0, iterations: 0,
         }).action);
         break;
       }
     }
-    assert.equal(tst.phase.name, 'takeover', 'fixtura předpokládá fázi převzetí');
+    assert.equal(tst.phase.name, 'fleks', 'fixtura předpokládá fázi fleků');
     assert.notEqual(tst.contract, null);
     assert.notEqual(tst.contract!.sedma, null, 'fixtura předpokládá ohlášenou sedmu — jinak nic nerozliší');
 
@@ -3596,7 +3632,7 @@ console.log('PASS karty — názvy barev a hodnot ve všech čtyřech jazycích'
     assert.ok(r);
     assert.deepEqual(
       r.components.map((c) => c.target).sort(), ['hra', 'sedma'],
-      'dokud nikdo nepřebral, platí se i vedlejší závazky z deklarace',
+      'po deklaraci se platí i vedlejší závazky z kontraktu',
     );
   }
 
@@ -3842,6 +3878,158 @@ console.log('PASS sav — vzdaná hra v archivu projde, živý kontrakt bez trum
   // pro testy a reprodukovatelnost jde základ zafixovat
   assert.deepEqual(seedsOf(DEAL, () => 42), seedsOf(DEAL, () => 42), 'zafixovaný základ musí být deterministický');
   console.log('PASS únik — seed AI je nezávislý na seedu rozdání a nejde z něj invertovat');
+}
+
+// ── pořadí „Barva?" a deklarace, licitace od zadáka, volnost deklarace ──────
+{
+  const { initialState: initR, apply: apR } = await import('../src/lib/rules/engine');
+  const { legalActions: legalR } = await import('../src/lib/rules/legal');
+  const { view: viewR } = await import('../src/lib/rules/view');
+  const { defaultConfig: cfgR } = await import('../src/lib/rules/sazby');
+  const { card: mkR, CERVENE: CER, R7: S7R, ESO: AR, R10: TR, KRAL: KR, SVRSEK: SVR } =
+    await import('../src/lib/cards');
+  const { forhont: forhontR } = await import('../src/lib/rules/types');
+  type StR = ReturnType<typeof initR>;
+  type ActR = ReturnType<typeof legalR>[number];
+  const actsR = (st: StR): ActR[] => {
+    for (const seat of [0, 1, 2] as const) {
+      const a = legalR(viewR(st, seat));
+      if (a.length > 0) return a;
+    }
+    return [];
+  };
+
+  /*
+   * „Pokud chce hrát hru s trumfy, musí dát ještě PO ODLOŽENÍ TALONU možnost
+   * ostatním hrát hru bez trumfů (Betl, Durch). Učiní tak otázkou »Barva?«
+   * … Pokud oba hráči obrany hru schválí, aktér nahlásí závazek"
+   * (ČSM, Obecná pravidla Čl. VII/1).
+   *
+   * Dřív běželo pořadí obráceně, takže obrana o převzetí rozhodovala se
+   * znalostí aktérovy sedmy a sta.
+   */
+  {
+    let checked = 0;
+    for (let seed = 1; seed <= 25; seed += 1) {
+      let st: StR = apR(initR(cfgR('voleny'), 2), { type: 'deal', seed });
+      st = apR(st, actsR(st).find((a) => a.type === 'choose-trump' && a.card !== 'from-people') as ActR);
+      const cheap = actsR(st).find((a) => a.type === 'discard' && a.cards.every((c) => pointsOf(c) === 0));
+      if (!cheap) continue;
+      st = apR(st, cheap);
+
+      assert.equal(st.phase.name, 'takeover', `seed ${seed}: po odhozu se ptá „Barva?"`);
+      assert.equal(st.contract, null, 'závazek se hlásí až po převzetí, kontrakt tedy neexistuje');
+      if (st.phase.name !== 'takeover') continue;
+      assert.equal(st.phase.toAct, st.talonOwner, 'ptá se ten, kdo odhodil talon');
+
+      // obrana rozhoduje BEZ znalosti sedmy a sta — v historii žádná deklarace
+      for (const seat of [0, 1, 2] as const) {
+        assert.ok(
+          !viewR(st, seat).publicHistory.some((a) => a.type === 'declare'),
+          'obrana nesmí znát závazek dřív, než se na převzetí vyjádří',
+        );
+      }
+
+      // aktér se zeptá, obrana schválí → teprve teď hlásí závazek
+      let guard = 0;
+      while (st.phase.name === 'takeover') {
+        if ((guard += 1) > 10) throw new Error('převzetí se zaseklo');
+        st = apR(st, actsR(st).find((a) => a.type === 'takeover' && a.claim === 'good') as ActR);
+      }
+      assert.equal(st.phase.name, 'declare', 'po souhlasu obou obránců hlásí aktér');
+      assert.equal(
+        st.phase.name === 'declare' ? st.phase.standing.declarer : null, st.talonOwner,
+        'hlásí pořád týž aktér',
+      );
+      // a betl/durch už tady nejsou — ty se nabízely na otázku „Barva?"
+      assert.equal(
+        actsR(st).some((a) => a.type === 'declare' && a.mode !== 'hra'), false,
+        'po „Barva?" se hlásí jen barevná hra',
+      );
+      checked += 1;
+    }
+    assert.ok(checked >= 10, `málo prověřených rozdání (${checked})`);
+    console.log(`PASS pořadí — „Barva?" před deklarací (${checked} rozdání, ČSM čl. VII/1)`);
+  }
+
+  /*
+   * „S prvotní nabídkou … začíná licitovat ZADÁK (hráč, který dostává karty
+   * jako poslední), tj. hráč sedící ve směru hraní před forhontem"
+   * (Obecná pravidla Čl. VII/3). Ve třech je to rozdávající.
+   */
+  {
+    for (const dealer of [0, 1, 2] as const) {
+      const st: StR = apR(initR(cfgR('licitovany'), dealer), { type: 'deal', seed: 3 });
+      // `deal` posouvá rozdávajícího, takže se ptáme na TEN stav
+      assert.equal(st.phase.name, 'bidding');
+      if (st.phase.name !== 'bidding') continue;
+      assert.equal(st.phase.toAct, st.dealer, 'licitaci otevírá zadák (= rozdávající)');
+      assert.notEqual(st.phase.toAct, forhontR(st.dealer), 'forhont neotevírá');
+    }
+    console.log('PASS licitace — otevírá zadák (ČSM čl. VII/3)');
+  }
+
+  /*
+   * „Ohlášený závazek nesmí být v dané posloupnosti níže, než jej zavazuje
+   * výška ukončené licitace, může se však jednat o JAKÝKOLIV VYŠŠÍ druh
+   * závazku" (Obecná pravidla Čl. VII/3).
+   */
+  {
+    const base = cfgR('licitovany');
+    // ruka s nečervenou i červenou sedmou, ať jdou sedmové závazky hlásit
+    const hand = [mkR(CER, S7R), mkR(1, S7R), mkR(CER, AR), mkR(CER, TR), mkR(1, AR),
+      mkR(1, TR), mkR(2, KR), mkR(2, SVR), mkR(3, AR), mkR(3, TR)];
+    const mkDeclare = (bid: { kind: string; cervena: boolean } | null) => ({
+      seat: 0 as const, config: base, dealer: 2 as const, hand, handCounts: [10, 10, 10] as [number, number, number],
+      revealedTrump: null, unseenCount: 0, talonKnown: [], talon: [] as number[], contract: null,
+      phase: {
+        name: 'declare' as const,
+        standing: {
+          declarer: 0 as const,
+          mode: bid?.kind === 'betl' || bid?.kind === 'durch' ? bid.kind : null,
+          trump: bid?.cervena ? 0 : null,
+          bid,
+        },
+      },
+      publicHistory: [], handResults: [], ledger: [0, 0, 0] as [number, number, number], handNo: 1,
+    });
+    const kindsOf = (bid: { kind: string; cervena: boolean } | null): string[] =>
+      legalR(mkDeclare(bid) as never)
+        .flatMap((a) => {
+          if (a.type !== 'declare') return [];
+          if (a.mode !== 'hra') return [a.mode];
+          const cerv = (a.trump ?? 0) === CER ? '-č' : '';
+          const kind = a.sedma && a.kilo ? 'sto-sedma' : a.kilo ? 'sto' : a.sedma ? 'sedma' : 'hra';
+          return [`${kind}${cerv}`];
+        })
+        .filter((x, i, all) => all.indexOf(x) === i);
+
+    // po vylicitovaném betlu jde ohlásit durch
+    const afterBetl = kindsOf({ kind: 'betl', cervena: false });
+    assert.ok(afterBetl.includes('durch'), 'po betlu musí jít ohlásit durch');
+    assert.ok(afterBetl.includes('betl'), 'betl samozřejmě taky');
+    assert.equal(afterBetl.some((k) => k.startsWith('sto') || k.startsWith('sedma') || k === 'hra'), false,
+      'barevná hra je pod betlem — nabízet se nesmí');
+
+    // po nečerveném stu jde nahoru i červené sto, sto a sedma i betl/durch
+    const afterSto = kindsOf({ kind: 'sto', cervena: false });
+    for (const want of ['sto', 'sto-sedma', 'sto-č', 'sto-sedma-č', 'betl', 'durch']) {
+      assert.ok(afterSto.includes(want), `po nečerveném stu musí jít ohlásit ${want}`);
+    }
+    for (const no of ['hra', 'sedma', 'sedma-č']) {
+      assert.equal(afterSto.includes(no), false, `${no} je pod vysoutěženým stem`);
+    }
+
+    // po ČERVENÉ sedmě smí i nečervené sto (stupeň 3 > stupeň 2)
+    const afterRedSeven = kindsOf({ kind: 'sedma', cervena: true });
+    assert.ok(afterRedSeven.includes('sto'), 'nečervené sto je nad červenou sedmou');
+    assert.equal(afterRedSeven.includes('hra'), false, 'holá hra je pod vylicitovanou sedmou');
+    assert.equal(afterRedSeven.includes('sedma'), false, 'nečervená sedma je pod tou červenou');
+
+    // bez licitace (všichni pasovali) smí forhont holou hru
+    assert.ok(kindsOf(null).includes('hra'), 'bez příhozu je holá hra v pořádku');
+    console.log('PASS deklarace — vysoutěžený stupeň je MINIMUM, ne přesný předpis (čl. VII/3)');
+  }
 }
 
 console.log('OK: vše prošlo');

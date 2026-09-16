@@ -29,9 +29,12 @@ const PHASE_NAMES = [
   'takeover', 'fleks', 'tricks', 'scored',
 ];
 
-// fáze, které bez kontraktu buď zamrznou (legalActions nevrátí nic), nebo
-// při vyřešení převzetí vyhodí InvariantError
-const CONTRACT_PHASES = ['fleks', 'tricks', 'takeover'];
+/*
+ * Fáze, které bez kontraktu zamrznou (legalActions nevrátí nic). Převzetí mezi
+ * ně UŽ NEPATŘÍ: ve voleném se řeší hned po odhozu a před deklarací (Obecná
+ * pravidla čl. VII/1), takže kontrakt v tu chvíli ještě neexistuje.
+ */
+const CONTRACT_PHASES = ['fleks', 'tricks'];
 
 const isSeat = (x: unknown): boolean => x === 0 || x === 1 || x === 2;
 const isNum = (x: unknown): boolean => typeof x === 'number' && Number.isFinite(x);
@@ -91,11 +94,12 @@ function isValidPhase(p: Record<string, unknown>): boolean {
       return standingOk(p.standing);
     case 'takeover':
       /*
-       * V převzetí je mód VŽDY konkrétní (nastavuje ho deklarace). S `null` by
-       * `resolveTakeover` přetypoval null na 'betl'|'durch' a hra by se
-       * dohrávala v přirozeném pořadí a zúčtovala jako durch.
+       * Mód `null` je legitimní: tak vypadá otázka „Barva?", než někdo
+       * betl/durch nárokuje. Mód 'hra' ale ne — `resolveTakeover` by z něj
+       * udělal bezbarvý kontrakt a hra by se dohrávala v přirozeném pořadí
+       * a zúčtovala jako durch.
        */
-      return standingOk(p.standing) && (p.standing as { mode?: unknown }).mode !== null &&
+      return standingOk(p.standing) && (p.standing as { mode?: unknown }).mode !== 'hra' &&
         isSeat(p.toAct) && Array.isArray(p.passed) && (p.passed as unknown[]).every(isSeat);
     case 'fleks': {
       if (!isRecord(p.fleks)) return false;
