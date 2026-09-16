@@ -20,3 +20,5 @@ kartu vsem — AI znala forhontovu kartu. Opraveno. (docs/marias-design.md §24)
 overeni funkcnosti podle pravidel + overeni nekoukani do karet
 
 "vse za mnou"
+
+pri betlu/durchu - nemela by byt ruka desitka razena jinak?
