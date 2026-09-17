@@ -2832,6 +2832,36 @@ const KULE = 2 as const;
     console.log('PASS vějíř — v betlu/durchu klesá desítka pod spodka (přirozené pořadí)');
   }
 
+  // ── „Barva?" je otázka, ne souhlas — hláška ji nesmí přebít ────────────
+  {
+    const { bubbleText, talkSituationFor, isColourQuestion } =
+      await import('../src/lib/ui/table');
+    let st: StA = initialState(defaultConfig('voleny'), 2); // forhont = 0 = aktér
+    st = apply(st, { type: 'deal', seed: 4 });
+    st = apply(st, actsA(st).find((a) => a.type === 'choose-trump' && a.card !== 'from-people') as ActA);
+    st = apply(st, actsA(st).find((a) => a.type === 'discard' && a.cards.every((c) => ptsA(c) === 0)) as ActA);
+    assert.equal(st.phase.name, 'takeover', 'po odhozu se aktér ptá „Barva?"');
+
+    const ask = actsA(st).find((a) => a.type === 'takeover' && a.claim === 'good') as ActA;
+    assert.ok(ask.type === 'takeover' && ask.seat === 0, 'ptá se aktér (forhont)');
+    st = apply(st, ask); // otázkou se fáze nemění, mluví se pořád o témž závazku
+
+    assert.equal(isColourQuestion(ask, st), true, 'aktérovo „dobrá" je otázka');
+    assert.equal(
+      talkSituationFor(ask, st), null,
+      'za „Barva?" se hláška neříká — popisek nese informaci (§5.8)',
+    );
+    assert.equal(bubbleText(ask, st), 'Barva?');
+
+    // odpověď obrany souhlas JE — tam hláška patří
+    const answer = actsA(st).find((a) => a.type === 'takeover' && a.claim === 'good') as ActA;
+    assert.ok(answer.type === 'takeover' && answer.seat !== 0, 'odpovídá obrana');
+    assert.equal(isColourQuestion(answer, st), false);
+    assert.equal(talkSituationFor(answer, st), 'accept', 'souhlas obrany hláškou nahradit lze');
+    assert.equal(bubbleText(answer, st), 'Dobrá');
+    console.log('PASS bublina — „Barva?" zůstane otázkou, souhlas obrany smí být hláška');
+  }
+
   // ── i2: seed musí být celé číslo v rozsahu 32 bitů ─────────────────────
   {
     const { parseSeedParam, createSeedSequence } = await import('../src/lib/match/seedSequence');

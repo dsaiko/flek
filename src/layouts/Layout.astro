@@ -50,26 +50,9 @@ const GOATCOUNTER = 'https://flek.goatcounter.com/count';
     .lang-en .cs, .lang-en .de, .lang-en .fr,
     .lang-de .cs, .lang-de .en, .lang-de .fr,
     .lang-fr .cs, .lang-fr .en, .lang-fr .de { display: none; }
-
-    .home-link {
-      position: fixed; top: 18px; z-index: 30;
-      background: rgba(255,255,255,.94); border: 1px solid #e5e7eb;
-      box-shadow: 0 2px 10px rgba(17,24,39,.08); backdrop-filter: blur(10px);
-    }
-    .home-link {
-      left: 18px; display: inline-flex; align-items: center; gap: 7px;
-      color: #374151; border-radius: 999px; padding: 8px 16px;
-      font: 600 14px/1.2 system-ui, sans-serif; text-decoration: none;
-    }
-    .home-link:hover { background: #f9fafb; }
-    .home-link .arrow { transition: transform .12s; }
-    .home-link:hover .arrow { transform: translateX(-3px); }
-
   </style>
 </head>
 <body data-title-cs={titleCs} data-title-en={titleEn} data-title-de={titleDe} data-title-fr={titleFr} data-description-cs={descriptionCs} data-description-en={descriptionEn} data-description-de={descriptionDe} data-description-fr={descriptionFr}>
-  <a class="home-link" href="https://www.saiko.cz/"><span class="arrow">←</span><span class="cs">PROJEKTY</span><span class="en">PROJECTS</span><span class="de">PROJEKTE</span><span class="fr">PROJETS</span></a>
-
   <slot />
 
   <script is:inline>

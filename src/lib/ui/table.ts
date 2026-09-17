@@ -715,14 +715,11 @@ export class TableUI {
 
   /** Hláška místo popisku — jen tam, kde popisek nenese informaci (§5.8). */
   private flavourFor(a: PlayerAction, state: GameState): string | null {
+    // `deal` nemá sedadlo (a hlášku taky ne) — zároveň tím projde zúžení typu
     if (this.talkSet === 'off' || a.type === 'deal') return null;
-    const seed = [a.seat, state.handNo, state.history.length];
-    if (a.type === 'good' || (a.type === 'takeover' && a.claim === 'good')) {
-      return this.pickTalk('accept', seed);
-    }
-    if (a.type === 'bid' && a.bid === 'pass') return this.pickTalk('pass', seed);
-    if (a.type === 'choose-trump' && a.card === 'from-people') return this.pickTalk('fromPeople', seed);
-    return null;
+    const situation = talkSituationFor(a, state);
+    if (situation === null) return null;
+    return this.pickTalk(situation, [a.seat, state.handNo, state.history.length]);
   }
 
   private bubbleEl(seat: Seat): HTMLElement {
@@ -1475,6 +1472,38 @@ function standingTrumpOf(state: GameState): number | null {
   return null;
 }
 
+/**
+ * Je tenhle „dobrá" aktérova otázka „Barva?", ne souhlas obrany?
+ *
+ * Ve voleném aktér po odhozu talonu NENABÍZÍ souhlas, ale ptá se obrany, jestli
+ * smí hrát barevnou hru (ČSM, Obecná pravidla Čl. VII/1) — a teprve po odpovědi
+ * hlásí závazek. Obojí je tatáž akce `takeover/good` a fáze se otázkou nemění,
+ * takže je to poznat jen podle sedadla.
+ */
+export function isColourQuestion(a: PlayerAction, state: GameState): boolean {
+  if (a.type !== 'takeover' || a.claim !== 'good') return false;
+  const p = state.phase;
+  return p.name === 'takeover' && p.standing.declarer === a.seat;
+}
+
+/**
+ * Situace, za kterou se místo popisku řekne hláška — nebo `null`, když se má
+ * ukázat popisek (§5.8: hláška jen tam, kde popisek nenese informaci).
+ *
+ * Aktérova „Barva?" informaci nese, a hláška za ni navíc mluvila obranou:
+ * hráč, který se ptal, si sám nad hlavou přečetl „Tak hraj, sakra". Souhlasy
+ * patří těm, kdo na otázku odpovídají.
+ */
+export function talkSituationFor(a: PlayerAction, state: GameState): TalkSituation | null {
+  if (a.type === 'deal') return null;
+  if (a.type === 'good' || (a.type === 'takeover' && a.claim === 'good')) {
+    return isColourQuestion(a, state) ? null : 'accept';
+  }
+  if (a.type === 'bid' && a.bid === 'pass') return 'pass';
+  if (a.type === 'choose-trump' && a.card === 'from-people') return 'fromPeople';
+  return null;
+}
+
 export function bubbleText(a: PlayerAction, state: GameState): string | null {
   switch (a.type) {
     case 'choose-trump':
@@ -1488,13 +1517,9 @@ export function bubbleText(a: PlayerAction, state: GameState): string | null {
        * s tlačítkem, které fallback používá.
        */
       return declareLabel(a, state.contract?.trump ?? standingTrumpOf(state));
-    case 'takeover': {
+    case 'takeover':
       if (a.claim !== 'good') return `${t(a.claim)}!`;
-      // „Barva?" od aktéra vs. „Dobrá" od obrany (fáze se po otázce nemění)
-      const p = state.phase;
-      const asking = p.name === 'takeover' && p.standing.declarer === a.seat;
-      return t(asking ? 'askColour' : 'good');
-    }
+      return t(isColourQuestion(a, state) ? 'askColour' : 'good');
     case 'flek': {
       // historie už obsahuje TENTO flek — jeho jméno je tedy na indexu count-1
       let count = 0;

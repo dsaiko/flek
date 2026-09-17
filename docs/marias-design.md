@@ -1531,3 +1531,34 @@ po vysoutěženém betlu/durchu a při převzetí, kde hráč odhazem esa dělá
 Blok i30 ve `scripts/verify.ts` má nově obě strany: s `'betl'` i `'durch'` nevaruje ani eso, ani
 rozbitá hláška; s `'hra'` a s `null` varování zůstává. Negativní kontrolou ověřeno — bez podmínky
 test spadne (`actual [{ kind: 'valuable' }]` proti `expected []`).
+
+## 28. „Barva?" je otázka, ne souhlas (2026-09-17)
+
+Uživatelovo hlášení: *„jsem na forhontu, odhazuji talon, pak tam mám možnost ‚Barva?', ale když to
+odmáčknu, objeví se hláška typu ‚Tak hraj, sakra' — moc mi to nedává smysl."*
+
+Nedávalo. Aktérova otázka i souhlas obrany jsou **tatáž akce** `takeover/good` (fáze se otázkou
+nemění, Čl. VII/1 — aktér se ptá a teprve po odpovědi hlásí závazek). `bubbleText()` je rozlišovalo
+podle sedadla, ale `flavourFor()` ne: každé `good` bralo jako souhlas a nahradilo popisek hláškou
+ze sady souhlasů. Hráč, který se právě zeptal, si tak nad vlastní hlavou přečetl větu, kterou měla
+říct obrana — „Tak hraj, sakra" adresované sobě samému.
+
+Porušovalo to i vlastní pravidlo §5.8: **hláška jen tam, kde popisek nenese informaci**. „Barva?"
+informaci nese — je to jediné místo, kde se nabídka barevné hry vysloví.
+
+### Oprava
+
+- `isColourQuestion(a, state)` — jedno místo, které pozná aktérovu otázku podle sedadla; používá
+  ho `bubbleText()` i nová `talkSituationFor()`
+- `talkSituationFor(a, state)` je čistá funkce (dřív to bylo tělo privátní `flavourFor`): vrací
+  situaci pro hlášku, nebo `null` = *ukaž popisek*. Za „Barva?" vrací `null`, za souhlas obrany
+  `'accept'`. `flavourFor` z ní jen vybere text — a jde konečně testovat bez DOM.
+
+### Testy
+
+Nový blok ve `scripts/verify.ts` dohraje volený scénář k otázce a ověří obě strany téže akce:
+aktérova „Barva?" hlášku nedostane a bublina ukáže „Barva?", souhlas obrany hlášku dostat smí a
+bez ní ukáže „Dobrá". Negativní kontrolou ověřeno — bez rozlišení test spadne (`'accept' !== null`).
+
+Browser kontrola do smoke nepřibyla: jeho scénář (seed 10) odhazuje do talonu eso, takže aktérovi
+zbývá jen betl a durch a na otázku „Barva?" se v něm vůbec nedojde.
