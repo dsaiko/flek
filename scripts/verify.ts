@@ -835,7 +835,28 @@ const KULE = 2 as const;
       [{ kind: 'marriage', suit: CERV }],
       'odhoz obou půlek hlášky musí varovat také',
     );
-    console.log('PASS regrese i30 — varování odhozu (eso/desítka, rozbitá i pohřbená hláška)');
+
+    /*
+     * Vysoutěžený betl/durch: odhodit eso je přesně to, co se má udělat (zákaz
+     * platí jen „u závazků s ustanovením trumfové barvy", Obecná pravidla Čl.
+     * IV/11) a hlášky se v nich nepočítají (Čl. IV/1). Varovat není o čem.
+     */
+    for (const mode of ['betl', 'durch'] as const) {
+      assert.deepEqual(discardWarnings(hand, [mk(1, A), mk(2, S7)], mode), [], `${mode}: eso do talonu nevaruje`);
+      assert.deepEqual(
+        discardWarnings(hand, [mk(CERV, K), mk(CERV, SV)], mode), [],
+        `${mode}: hláška v talonu nevaruje`,
+      );
+    }
+    assert.deepEqual(
+      discardWarnings(hand, [mk(1, A), mk(2, S7)], 'hra'), [{ kind: 'valuable' }],
+      'v barevné hře varování zůstává',
+    );
+    assert.deepEqual(
+      discardWarnings(hand, [mk(1, A), mk(2, S7)], null), [{ kind: 'valuable' }],
+      'dokud závazek nepadl, varuje se pořád (volený odhazuje před deklarací)',
+    );
+    console.log('PASS regrese i30 — varování odhozu (eso/desítka, hláška; v betlu/durchu mlčí)');
   }
 }
 

@@ -7,6 +7,7 @@
  */
 
 import { KRAL, SVRSEK, card, pointsOf, type Card, type Suit } from '../cards';
+import type { GameMode } from '../rules/types';
 
 export type DiscardWarning =
   | { kind: 'valuable' }
@@ -25,8 +26,22 @@ export function marriagesIn(hand: readonly Card[]): Suit[] {
  * Co je na zamýšleném odhozu riskantní.
  *  - `valuable`: eso/desítka v talonu ⇒ půjde hrát jen betl/durch
  *  - `marriage`: odhoz rozbije (nebo do talonu pohřbí) drženou hlášku
+ *
+ * `committed` je závazek, který už je v době odhozu znám (vysoutěžený betl
+ * v licitovaném, nárok při převzetí); `null` = ještě se bude deklarovat.
+ * V betlu a durchu nemá ani jedno varování o čem být: zákaz odkládat esa a
+ * desítky platí jen „u závazků s ustanovením trumfové barvy" (Obecná pravidla
+ * Čl. IV/11) a hodnoty karet včetně hlášek jsou ve hře jen tam, kde jde o body
+ * (Čl. IV/1) — betl ani durch se body nepočítají. Kdo si vysoutěžil betl a
+ * odhazuje eso, dělá přesně to, co má; varovat ho, že „pak lze hrát jen betl",
+ * je v lepším případě šum a v horším rada proti němu.
  */
-export function discardWarnings(hand: readonly Card[], discard: readonly Card[]): DiscardWarning[] {
+export function discardWarnings(
+  hand: readonly Card[],
+  discard: readonly Card[],
+  committed: GameMode | null = null,
+): DiscardWarning[] {
+  if (committed === 'betl' || committed === 'durch') return [];
   const out: DiscardWarning[] = [];
   if (discard.some((c) => pointsOf(c) > 0)) out.push({ kind: 'valuable' });
 
