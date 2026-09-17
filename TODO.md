@@ -26,6 +26,10 @@ radi podle rezimu hry: v betlu/durchu klesa desitka mezi spodka a devitku
 (prirozene poradi), v barevne hre zustava hned za esem. Poradi se srovna uz
 pri odhozu do talonu na vysoutezeny betl i pri prevzeti betlem.
 
+~~zavazek soupere je v rohu neviditelny~~ ✅ pri flekovani stoji velky uprostred sukna
+(se jmenem aktera), po zbytek hry zustava pod jmenem, ale vetsi a se zlatym rameckem.
+(docs/marias-design.md §29)
+
 ~~na forhontu po odhozu talonu zmacknu "Barva?" a objevi se hlaska "tak hraj, sakra"~~ ✅
 aktérova otazka a souhlas obrany jsou tataz akce; flavourFor je nerozlisoval a za otazku
 ukazal hlasku ze sady souhlasu. Ted "Barva?" zustane popiskem. (docs/marias-design.md §28)

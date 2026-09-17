@@ -69,6 +69,9 @@ import Layout from '../layouts/Layout.astro';
 
         <div id="center-float"></div>
 
+        <!-- závazek uprostřed sukna po dobu flekování (viz .seat-contract) -->
+        <div id="contract-center" hidden></div>
+
         <!-- nastavení: stejný panel jako vyúčtování, otevírá ozubené kolo v liště -->
         <div id="settings-float" hidden>
           <div class="felt-panel settings-panel">
@@ -340,17 +343,48 @@ import Layout from '../layouts/Layout.astro';
   }
   #status.me-turn { font-weight: 700; color: #ffe9a8; }
   /* co kdo hraje patří K HRÁČI, ne doprostřed stolu — jméno tam pak není třeba.
-     Místo je vyhrazené vždy, aby se karty soupeře nepohnuly, až badge naskočí. */
-  .seatbox .seat-contract { min-height: 24px; }
+     Místo je vyhrazené vždy, aby se karty soupeře nepohnuly, až badge naskočí:
+     `min-height` proto počítá s výškou plného badge (písmo × řádkování + odsazení). */
+  #table { --contract-fs: clamp(13px, 2.35cqh, 23px); }
+  .seatbox .seat-contract { min-height: calc(var(--contract-fs) * 1.86 + 2px); }
   .seat-contract:not(:empty) {
-    display: inline-flex; align-items: center; gap: 5px; flex-wrap: wrap; justify-content: center;
+    display: inline-flex; align-items: center; gap: .35em; flex-wrap: wrap; justify-content: center;
     background: #fffdf2; color: #2b2b33;
-    font-weight: 700; font-size: 13px; padding: 3px 10px; border-radius: 8px;
-    box-shadow: 0 2px 8px rgba(0,0,0,.35); border: 1px solid #d9d2ba;
+    font-weight: 800; font-size: var(--contract-fs); line-height: 1.3;
+    padding: .28em .62em; border-radius: .42em;
+    box-shadow: 0 2px 10px rgba(0,0,0,.45); border: 1px solid var(--gold);
     margin-bottom: 4px; max-width: 100%;
   }
-  .seat-contract svg { flex: none; display: block; }
+  .seat-contract svg { flex: none; display: block; width: 1.15em; height: 1.15em; }
   #contract-me:not(:empty) { align-self: flex-start; margin: 5px 0 0; }
+
+  /*
+   * Flekování je jediná chvíle, kdy se o závazku ROZHODUJE — a badge u sedadla
+   * je v rohu sotva vidět. Po tu dobu proto totéž stojí uprostřed sukna, velké;
+   * pak se zase schová a platí badge u hráče. Otevřený panel (varování, dotaz)
+   * má přednost, jinak by se překrývaly.
+   */
+  #contract-center {
+    position: absolute; left: 50%; top: 38%; transform: translate(-50%, -50%);
+    z-index: 12; pointer-events: none; text-align: center;
+    display: flex; flex-direction: column; align-items: center; gap: .3em;
+    background: #fffdf2; color: #2b2b33;
+    padding: clamp(9px, 1.9cqh, 22px) clamp(14px, 3cqh, 34px);
+    border: 2px solid var(--gold); border-radius: 14px;
+    box-shadow: 0 10px 30px rgba(0,0,0,.45);
+  }
+  #contract-center[hidden] { display: none; }
+  /* otevřený panel přes střed stolu závazek přebíjí */
+  #center-float.open ~ #contract-center { display: none; }
+  #contract-center .cc-who {
+    font: 700 clamp(10px, 1.7cqh, 16px)/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+    letter-spacing: 2px; text-transform: uppercase; color: #7a7360;
+  }
+  #contract-center .cc-what {
+    display: inline-flex; align-items: center; gap: .35em; flex-wrap: wrap; justify-content: center;
+    font-weight: 800; font-size: clamp(17px, 4cqh, 38px); line-height: 1.15;
+  }
+  #contract-center .cc-what svg { flex: none; display: block; width: 1.05em; height: 1.05em; }
 
   /*
    * Úvodní obrazovka: karty rozhozené u okrajů stolu (podle mockupu z Claude

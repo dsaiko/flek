@@ -1562,3 +1562,27 @@ bez ní ukáže „Dobrá". Negativní kontrolou ověřeno — bez rozlišení t
 
 Browser kontrola do smoke nepřibyla: jeho scénář (seed 10) odhazuje do talonu eso, takže aktérovi
 zbývá jen betl a durch a na otázku „Barva?" se v něm vůbec nedojde.
+
+## 29. Závazek je vidět: velký doprostřed při flekování (2026-09-17)
+
+Uživatelovo hlášení: *„když se ptají soupeři na barvu, je jejich volba (trumf a hra) v rohu dost
+neviditelná. Při potvrzování hry bych to vytáhl někam doprostřed. Po zbytek hry bych to nechal
+pod jménem tak, jak to teď je, ale nějak bych to zvětšil a zvýraznil."*
+
+Badge „Hra ♥ · Sedma" visí u sedadla aktéra schválně (§5.6: *co kdo hraje patří k hráči*, jméno
+pak v popisku být nemusí). Jenže **v okamžiku, kdy se o závazku rozhoduje**, je to jediná
+informace, podle které se hráč rozhoduje mezi „Dobrá" a flekem — a leží v rohu v 13 px.
+
+### Oprava
+
+- po dobu fáze `fleks` stojí totéž velké **uprostřed sukna** (`#contract-center`): jméno aktéra
+  jako nadpisek (uprostřed stolu už není poznat, komu badge patří) a pod ním závazek. Pak panel
+  zmizí a platí zase badge u hráče.
+- badge u sedadla vychází z nové proměnné `--contract-fs` (`clamp(13px, 2.35cqh, 23px)`), má
+  zlatý rámeček a ikona barvy roste s písmem (`width: 1.15em`). Vyhrazená výška se počítá z téže
+  proměnné, takže se karty soupeře po naskočení badge pořád nepohnou.
+- text obou míst staví jedna funkce `contractLabelHtml()` — dvě místa se nemůžou rozejít.
+- otevřený panel přes střed stolu (varování, vyúčtování) má přednost: `#center-float.open ~
+  #contract-center { display: none }`, bez jediného řádku v JS.
+
+Vše v `cqh` podle sazby stolu (§5.2), takže to drží v okně i ve fullscreenu.
