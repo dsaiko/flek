@@ -1292,8 +1292,12 @@ function pickIntroCards(): Card[] {
   return deck.slice(0, INTRO_LAYOUT.length);
 }
 
-/** Kolik posledních hlášek si pamatujeme, ať se neopakují. */
-const RECENT_TALK = 6;
+/**
+ * Kolik posledních hlášek si pamatujeme, ať se neopakují. Musí zůstat MENŠÍ než
+ * nejkratší tabulka hlášek — jinak by se vyhýbání vyčerpalo a výběr by spadl
+ * zpátky na vylosovanou hlášku (hlídá test v scripts/verify.ts).
+ */
+export const RECENT_TALK = 14;
 /** Jak dlouho bublina visí, a nejkratší doba, než ji smí přebít další. */
 const BUBBLE_MS = 2600;
 const MIN_BUBBLE_MS = 1100;

@@ -1,5 +1,8 @@
 ---
 import Layout from '../layouts/Layout.astro';
+import pkg from '../../package.json';
+
+const version = pkg.version;
 ---
 <Layout
   titleCs="Flek! · Mariáš"
@@ -122,6 +125,140 @@ import Layout from '../layouts/Layout.astro';
           </div>
         </div>
 
+        <!--
+          Nápověda („otazník" vlevo v liště): pravidla vlastními slovy, odkazy na
+          oficiální znění, pocta originálu i otci a atribuce karetních sad. Jazyky
+          jsou čtyři bloky vedle sebe — přepínač jazyka je schová pravidlem
+          `.lang-xx .yy { display: none }` jako všude jinde na stránce.
+        -->
+        <div id="help-float" hidden>
+          <div class="felt-panel help-panel">
+            <button id="help-close-x" class="help-x" type="button" aria-label="Zavřít / Close">×</button>
+            <h3><span class="cs">Nápověda</span><span class="en">Help</span><span class="de">Hilfe</span><span class="fr">Aide</span></h3>
+            <div class="help-body" id="help-body">
+              <div class="cs">
+                <h4>Jak se hraje</h4>
+                <p>Mariáš je hra pro tři hráče s 32 kartami (žaludy, zelené, červené a kule, od sedmy po eso). Jeden hráč — <b>aktér</b> — hraje sám proti dvěma <b>obráncům</b> a plní závazek, který si sám vybral.</p>
+                <p>Rozdává se sedm karet a pak pět. Ve <b>voleném</b> si forhont (hráč po rozdávajícím) zvolí z prvních sedmi karet trumfovou barvu a zvolenou kartu odloží stranou lícem dolů. V <b>licitovaném</b> se o hru draží a vyšší závazek přebíjí nižší. Aktér pak odloží dvě karty do talonu — na konci se mu počítají jako uhrané — a ohlásí, co bude hrát.</p>
+                <p>Pak přijde deset zdvihů. Barva se musí <b>přiznat</b>; kdo ji nemá, musí trumfnout, a kdo nemá ani trumf, přidá cokoli. Zdvih bere nejvyšší karta vynesené barvy — pokud do něj nepadl trumf.</p>
+                <p>Eso a desítka mají po deseti bodech, poslední zdvih taky deset. Král a svršek téže barvy jsou <b>hláška</b> za 20 bodů (v trumfech za 40), ale jen když ji ohlásíte při odehrání první z té dvojice.</p>
+                <p>Pozor na desítku: ve hrách s trumfem leží hned pod esem, v betlu a durchu je naopak nižší než spodek.</p>
+                <h4>Volený a licitovaný</h4>
+                <p><b>Volený</b> (jako FLEK!) — trumf vybírá vždy forhont ze svých prvních sedmi karet a zvolenou kartu odloží stranou lícem dolů; když se mu do karet nechce, může volit naslepo „z lidu" z druhé pětice. Pak se obrany zeptá „Barva?" a hru hlásí až po jejím souhlasu. Přebrat mu ji soupeři mohou jen betlem nebo durchem, zato smějí hlásit sedmu nebo sto proti.</p>
+                <p><b>Licitovaný</b> (jako RE!) — trumf se dopředu nevolí, o hru se draží: sedma, sto, sto a sedma, betl, durch… vyšší závazek přebíjí nižší a červená se počítá o stupeň výš. Kdo zůstane poslední, bere talon a musí ohlásit aspoň to, co vydražil — víc smí (po vysoutěženém betlu třeba durch). Barvu si vybere teprve při ohlášení.</p>
+                <h4>Závazky</h4>
+                <p><b>Hra</b> — uhrát víc bodů než obrana (při rovnosti prohrává aktér). <b>Sedma</b> — vzít poslední zdvih trumfovou sedmou. <b>Sto</b> — nasbírat 100 a víc bodů. <b>Betl</b> — nezískat ani jeden zdvih. <b>Durch</b> — získat všechny. Betl a durch se hrají bez trumfů.</p>
+                <h4>Flekování a peníze</h4>
+                <p>Obrana může závazek zdvojnásobit <b>flekem</b>, aktér odpoví <b>re</b>, obrana <b>tutti</b> a dál boty a kalhoty. Každá složka se zdvojuje zvlášť a červený trumf zdvojnásobuje barevné závazky ještě jednou. Po každém rozdání se platí: kdo závazek splnil, tomu platí oba soupeři; kdo ho nesplnil, platí oběma.</p>
+                <h4>Oficiální pravidla</h4>
+                <p>Hra se drží pravidel <b>Českého svazu mariáše</b> pro tříhráčový volený a licitovaný mariáš o peníze. Pravidla se sem nekopírují, odkazujeme na zdroj:</p>
+                <ul>
+                  <li><a href="https://www.csm1986.cz/public/CMS_Materialy/00_Spolecne_pro_vsechny_druhy_mariase/Dokumenty_CMS/Obecna_pravidla_hry_marias_2009.pdf" target="_blank" rel="noopener">Obecná pravidla hry mariáš 2009</a></li>
+                  <li><a href="https://www.talon.cz/pravidla/mari%C3%A1%C5%A1_pravidla_volen%C3%BD.pdf" target="_blank" rel="noopener">Pravidla voleného mariáše</a></li>
+                  <li><a href="https://www.talon.cz/pravidla/mari%C3%A1%C5%A1_pravidla_licitovan%C3%BD_2014.pdf" target="_blank" rel="noopener">Pravidla licitovaného mariáše (2014)</a></li>
+                  <li><a href="https://www.csm1986.cz/" target="_blank" rel="noopener">Český svaz mariáše</a></li>
+                </ul>
+                <h4>Pocta</h4>
+                <p><b>FLEK!</b> (1991–92) a <b>RE!</b> (1993) napsal v Turbo Pascalu <b>Ing. Jaroslav Pivoňka</b> (Pivoňka Software). Tahle hra je jejich poctou, ne portem — žádný původní kód ani binárka tu nejsou.</p>
+                <p>Věnováno mému otci, <b>Josefu Saikovi</b>, který miloval matematiku a nasměroval mě k programování.</p>
+                <h4>Karty</h4>
+                <p>Historická sada jsou skeny jednohlavých pražských karet (Ant. Kratochvíl, Praha, kolem 1860) — volné dílo, přes <a href="https://commons.wikimedia.org/wiki/Category:Jednohlave" target="_blank" rel="noopener">Wikimedia Commons</a> (skeny: Bibliothèque nationale de France, Gallica). Moderní sada je původní a je pod licencí MIT jako zbytek kódu.</p>
+              </div>
+              <div class="en">
+                <h4>How it is played</h4>
+                <p>Mariáš is a game for three players with 32 German-suited cards (acorns, leaves, hearts, bells; seven to ace). One player — the <b>declarer</b> — plays alone against two <b>defenders</b> and has to fulfil a contract of their own choosing.</p>
+                <p>Seven cards are dealt, then five. In the <b>chosen</b> variant forehand (the player after the dealer) picks a trump suit from their first seven cards and puts that card aside face down. In the <b>auction</b> variant the hand is bid for and a higher commitment beats a lower one. The declarer then puts two cards in the talon — they count as won at the end — and announces what they will play.</p>
+                <p>Then come ten tricks. You must <b>follow suit</b>; if you cannot, you must trump, and if you have no trump either, you may play anything. The highest card of the led suit takes the trick, unless someone trumped it.</p>
+                <p>Aces and tens are worth ten points each, the last trick another ten. A king and the ober of the same suit are a <b>marriage</b> worth 20 (40 in trumps), but only if you announce it as you play the first of the pair.</p>
+                <p>Watch the ten: in games with a trump it sits just below the ace, but in betl and durch it is lower than the unter.</p>
+                <h4>Chosen and auction</h4>
+                <p><b>Chosen</b> (as in FLEK!) — the trump is always picked by forehand, from their first seven cards, and that card is set aside face down; with a poor hand they may pick blind “from the people”, the second packet of five. They then ask the defenders whether a colour game stands and announce only once the answer is in. The opponents can take the hand over only with betl or durch, but they may call seven or hundred against.</p>
+                <p><b>Auction</b> (as in RE!) — no trump is chosen in advance; the hand is bid for: seven, hundred, hundred and seven, betl, durch… a higher commitment beats a lower one, and a red one counts a step above. Whoever is left takes the talon and must announce at least what they bid — more is allowed (durch after a bid betl). The suit is chosen only at the announcement.</p>
+                <h4>Contracts</h4>
+                <p><b>Game</b> — score more than the defence (a tie loses for the declarer). <b>Seven</b> — take the last trick with the trump seven. <b>Hundred</b> — score 100 or more. <b>Betl</b> — take no trick at all. <b>Durch</b> — take every one. Betl and durch are played without a trump.</p>
+                <h4>Doubling and money</h4>
+                <p>The defence may double the contract with a <b>flek</b>, the declarer answers <b>re</b>, the defence <b>tutti</b>, and on through boty and kalhoty. Each component is doubled independently, and a red trump doubles the colour contracts once more. Each hand is settled at once: whoever fulfils their contract is paid by both opponents, whoever fails pays them both.</p>
+                <h4>Official rules</h4>
+                <p>The game follows the rules of the <b>Czech Mariáš Association</b> for three-handed chosen and auction mariáš played for money. The rules are not copied here; these link to the source:</p>
+                <ul>
+                  <li><a href="https://www.csm1986.cz/public/CMS_Materialy/00_Spolecne_pro_vsechny_druhy_mariase/Dokumenty_CMS/Obecna_pravidla_hry_marias_2009.pdf" target="_blank" rel="noopener">General rules of mariáš (2009)</a></li>
+                  <li><a href="https://www.talon.cz/pravidla/mari%C3%A1%C5%A1_pravidla_volen%C3%BD.pdf" target="_blank" rel="noopener">Rules of the chosen variant</a></li>
+                  <li><a href="https://www.talon.cz/pravidla/mari%C3%A1%C5%A1_pravidla_licitovan%C3%BD_2014.pdf" target="_blank" rel="noopener">Rules of the auction variant (2014)</a></li>
+                  <li><a href="https://www.csm1986.cz/" target="_blank" rel="noopener">Czech Mariáš Association</a></li>
+                </ul>
+                <h4>Tribute</h4>
+                <p><b>FLEK!</b> (1991–92) and <b>RE!</b> (1993) were written in Turbo Pascal by <b>Ing. Jaroslav Pivoňka</b> (Pivoňka Software). This game is a tribute to them, not a port — it contains none of the original code or binaries.</p>
+                <p>Dedicated to my father, <b>Josef Saiko</b>, who loved mathematics and set me on the path to programming.</p>
+                <h4>Cards</h4>
+                <p>The historical deck is scans of a single-headed Prague pattern (Ant. Kratochvíl, Prague, around 1860) — public domain, via <a href="https://commons.wikimedia.org/wiki/Category:Jednohlave" target="_blank" rel="noopener">Wikimedia Commons</a> (scans: Bibliothèque nationale de France, Gallica). The modern deck is original and MIT licensed, like the rest of the code.</p>
+              </div>
+              <div class="de">
+                <h4>So wird gespielt</h4>
+                <p>Mariasch ist ein Spiel für drei Personen mit 32 Blatt (Eichel, Grün, Rot, Schell; Sieben bis Ass). Ein Spieler — der <b>Alleinspieler</b> — spielt gegen zwei <b>Gegenspieler</b> und muss das Spiel erfüllen, das er selbst gewählt hat.</p>
+                <p>Ausgeteilt werden sieben Karten, dann fünf. Beim <b>gewählten</b> Mariasch sucht der Vorhand (der Spieler nach dem Geber) aus seinen ersten sieben Karten die Trumpffarbe und legt diese Karte verdeckt beiseite. Beim <b>lizitierten</b> Mariasch wird um das Spiel geboten, das höhere Spiel schlägt das niedrigere. Dann legt der Alleinspieler zwei Karten in den Talon — sie zählen am Ende für ihn — und sagt an, was er spielt.</p>
+                <p>Es folgen zehn Stiche. Farbe muss <b>bedient</b> werden; wer sie nicht hat, muss stechen, und wer auch keinen Trumpf hat, gibt eine beliebige Karte zu. Den Stich nimmt die höchste Karte der angespielten Farbe — sofern nicht gestochen wurde.</p>
+                <p>Ass und Zehn zählen je zehn Punkte, der letzte Stich ebenfalls zehn. König und Ober derselben Farbe sind eine <b>Ansage</b> zu 20 Punkten (in Trumpf 40), aber nur, wenn man sie beim Ausspielen der ersten dieser beiden Karten ansagt.</p>
+                <p>Achtung bei der Zehn: in Spielen mit Trumpf steht sie gleich unter dem Ass, beim Bettel und beim Durchmarsch dagegen unter dem Unter.</p>
+                <h4>Gewählt und lizitiert</h4>
+                <p><b>Gewähltes Mariasch</b> (wie FLEK!) — den Trumpf bestimmt immer die Vorhand aus ihren ersten sieben Karten und legt diese Karte verdeckt beiseite; bei schlechtem Blatt darf sie blind aus dem zweiten Päckchen wählen. Danach fragt sie die Gegenspieler und sagt erst nach deren Zustimmung an. Übernehmen dürfen die Gegner nur mit Bettel oder Durchmarsch, dafür dürfen sie Sieben oder Hundert dagegen ansagen.</p>
+                <p><b>Lizitiertes Mariasch</b> (wie RE!) — kein Trumpf im Voraus, es wird geboten: Sieben, Hundert, Hundert und Sieben, Bettel, Durchmarsch… das höhere Spiel schlägt das niedrigere, Rot zählt eine Stufe höher. Wer übrig bleibt, nimmt den Talon und muss mindestens das ansagen, was er geboten hat — mehr darf er (nach einem gebotenen Bettel etwa Durchmarsch). Die Farbe wählt er erst bei der Ansage.</p>
+                <h4>Die Spiele</h4>
+                <p><b>Spiel</b> — mehr Punkte als die Gegenspieler (bei Gleichstand verliert der Alleinspieler). <b>Sieben</b> — den letzten Stich mit der Trumpfsieben. <b>Hundert</b> — 100 Punkte oder mehr. <b>Bettel</b> — keinen einzigen Stich. <b>Durchmarsch</b> — alle Stiche. Bettel und Durchmarsch werden ohne Trumpf gespielt.</p>
+                <h4>Kontrieren und Geld</h4>
+                <p>Die Gegenspieler dürfen mit <b>Flek</b> verdoppeln, der Alleinspieler antwortet mit <b>Re</b>, dann folgen Tutti, Boty und Kalhoty. Jeder Bestandteil wird einzeln verdoppelt, und rote Trumpffarbe verdoppelt die Farbspiele noch einmal. Nach jedem Blatt wird sofort abgerechnet: wer sein Spiel erfüllt, dem zahlen beide Gegner; wer es verliert, zahlt beiden.</p>
+                <h4>Offizielle Regeln</h4>
+                <p>Das Spiel hält sich an die Regeln des <b>Tschechischen Mariasch-Verbands</b> für das Spiel zu dritt um Geld. Die Regeln werden hier nicht kopiert, nur verlinkt:</p>
+                <ul>
+                  <li><a href="https://www.csm1986.cz/public/CMS_Materialy/00_Spolecne_pro_vsechny_druhy_mariase/Dokumenty_CMS/Obecna_pravidla_hry_marias_2009.pdf" target="_blank" rel="noopener">Allgemeine Regeln (2009)</a></li>
+                  <li><a href="https://www.talon.cz/pravidla/mari%C3%A1%C5%A1_pravidla_volen%C3%BD.pdf" target="_blank" rel="noopener">Regeln des gewählten Mariasch</a></li>
+                  <li><a href="https://www.talon.cz/pravidla/mari%C3%A1%C5%A1_pravidla_licitovan%C3%BD_2014.pdf" target="_blank" rel="noopener">Regeln des lizitierten Mariasch (2014)</a></li>
+                  <li><a href="https://www.csm1986.cz/" target="_blank" rel="noopener">Tschechischer Mariasch-Verband</a></li>
+                </ul>
+                <h4>Hommage</h4>
+                <p><b>FLEK!</b> (1991–92) und <b>RE!</b> (1993) schrieb <b>Ing. Jaroslav Pivoňka</b> (Pivoňka Software) in Turbo Pascal. Dieses Spiel ist eine Hommage, kein Port — es enthält weder Originalcode noch Originaldateien.</p>
+                <p>Gewidmet meinem Vater, <b>Josef Saiko</b>, der die Mathematik liebte und mich zum Programmieren gebracht hat.</p>
+                <h4>Karten</h4>
+                <p>Das historische Blatt sind Scans eines einköpfigen Prager Bildes (Ant. Kratochvíl, Prag, um 1860) — gemeinfrei, über <a href="https://commons.wikimedia.org/wiki/Category:Jednohlave" target="_blank" rel="noopener">Wikimedia Commons</a> (Scans: Bibliothèque nationale de France, Gallica). Das moderne Blatt ist eigens gezeichnet und steht wie der übrige Code unter MIT-Lizenz.</p>
+              </div>
+              <div class="fr">
+                <h4>Comment on joue</h4>
+                <p>Le mariáš se joue à trois avec 32 cartes à enseignes germaniques (glands, feuilles, cœurs, grelots ; du sept à l’as). Un joueur — le <b>preneur</b> — affronte seul deux <b>défenseurs</b> et doit remplir le contrat qu’il a lui-même choisi.</p>
+                <p>On distribue sept cartes, puis cinq. Dans la variante <b>choisie</b>, le joueur placé après le donneur choisit l’atout parmi ses sept premières cartes et met cette carte de côté, face cachée. Dans la variante <b>aux enchères</b>, on mise sur la donne et un contrat plus élevé bat le précédent. Le preneur écarte ensuite deux cartes au talon — elles comptent pour lui à la fin — et annonce ce qu’il jouera.</p>
+                <p>Viennent alors dix plis. Il faut <b>fournir la couleur</b> ; à défaut, il faut couper, et sans atout non plus, on joue n’importe quoi. Le pli revient à la plus forte carte de la couleur demandée, sauf s’il a été coupé.</p>
+                <p>L’as et le dix valent dix points chacun, le dernier pli dix aussi. Le roi et le cavalier de la même couleur forment un <b>mariage</b> de 20 points (40 à l’atout), mais seulement s’il est annoncé au moment où l’on joue la première des deux cartes.</p>
+                <p>Attention au dix : dans les jeux avec atout il se place juste sous l’as, mais au bettel et au durch il est plus faible que le valet.</p>
+                <h4>Variante choisie et variante aux enchères</h4>
+                <p><b>Choisie</b> (comme FLEK!) — l’atout est toujours choisi par le joueur assis après le donneur, parmi ses sept premières cartes, et cette carte est mise de côté face cachée ; avec une mauvaise main, il peut choisir à l’aveugle dans le second paquet de cinq. Il demande ensuite aux défenseurs si un jeu à couleur tient, et n’annonce qu’après leur réponse. Les adversaires ne peuvent reprendre la donne qu’au bettel ou au durch, mais ils peuvent annoncer sept ou cent contre.</p>
+                <p><b>Aux enchères</b> (comme RE!) — pas d’atout décidé d’avance, on mise sur la donne : sept, cent, cent et sept, bettel, durch… un contrat plus élevé bat le précédent, et le rouge vaut un échelon de plus. Le dernier en lice prend le talon et doit annoncer au moins ce qu’il a misé — davantage est permis (un durch après un bettel misé). Il ne choisit la couleur qu’au moment de l’annonce.</p>
+                <h4>Les contrats</h4>
+                <p><b>Jeu</b> — marquer plus de points que la défense (à égalité, le preneur perd). <b>Sept</b> — remporter le dernier pli avec le sept d’atout. <b>Cent</b> — réunir 100 points ou plus. <b>Bettel</b> — ne prendre aucun pli. <b>Durch</b> — les prendre tous. Le bettel et le durch se jouent sans atout.</p>
+                <h4>Les contres et l’argent</h4>
+                <p>La défense peut doubler le contrat par un <b>flek</b>, le preneur répond <b>re</b>, la défense <b>tutti</b>, puis viennent boty et kalhoty. Chaque composante double séparément, et un atout rouge double encore une fois les contrats à couleur. Chaque donne se règle aussitôt : qui remplit son contrat est payé par les deux adversaires, qui le manque les paie tous les deux.</p>
+                <h4>Règles officielles</h4>
+                <p>Le jeu suit les règles de la <b>Fédération tchèque de mariáš</b> pour la partie à trois jouée pour de l’argent. Les règles ne sont pas recopiées ici, seulement liées :</p>
+                <ul>
+                  <li><a href="https://www.csm1986.cz/public/CMS_Materialy/00_Spolecne_pro_vsechny_druhy_mariase/Dokumenty_CMS/Obecna_pravidla_hry_marias_2009.pdf" target="_blank" rel="noopener">Règles générales (2009)</a></li>
+                  <li><a href="https://www.talon.cz/pravidla/mari%C3%A1%C5%A1_pravidla_volen%C3%BD.pdf" target="_blank" rel="noopener">Règles de la variante choisie</a></li>
+                  <li><a href="https://www.talon.cz/pravidla/mari%C3%A1%C5%A1_pravidla_licitovan%C3%BD_2014.pdf" target="_blank" rel="noopener">Règles de la variante aux enchères (2014)</a></li>
+                  <li><a href="https://www.csm1986.cz/" target="_blank" rel="noopener">Fédération tchèque de mariáš</a></li>
+                </ul>
+                <h4>Hommage</h4>
+                <p><b>FLEK!</b> (1991–92) et <b>RE!</b> (1993) ont été écrits en Turbo Pascal par <b>Ing. Jaroslav Pivoňka</b> (Pivoňka Software). Ce jeu leur rend hommage, ce n’est pas un portage — il ne contient ni code ni binaire d’origine.</p>
+                <p>Dédié à mon père, <b>Josef Saiko</b>, qui aimait les mathématiques et m’a mis sur la voie de la programmation.</p>
+                <h4>Cartes</h4>
+                <p>Le jeu historique provient de scans d’un modèle de Prague à figures simples (Ant. Kratochvíl, Prague, vers 1860) — domaine public, via <a href="https://commons.wikimedia.org/wiki/Category:Jednohlave" target="_blank" rel="noopener">Wikimedia Commons</a> (scans : Bibliothèque nationale de France, Gallica). Le jeu moderne est original et sous licence MIT, comme le reste du code.</p>
+              </div>
+            </div>
+            <div class="help-foot">
+              <span class="help-version">Flek! v{version}</span>
+              <a class="help-src" href="https://github.com/dsaiko/flek" target="_blank" rel="noopener">github.com/dsaiko/flek</a>
+            </div>
+            <div class="felt-actions">
+              <button id="help-close" class="action-btn primary"><span class="cs">Hotovo</span><span class="en">Done</span><span class="de">Fertig</span><span class="fr">Terminé</span></button>
+            </div>
+          </div>
+        </div>
+
         <div class="me-row">
           <div id="actions"></div>
           <div id="hand"></div>
@@ -136,6 +273,15 @@ import Layout from '../layouts/Layout.astro';
       </div>
 
       <div class="game-controls">
+        <div class="ctl-left">
+          <button id="btn-help" class="ctl-btn icon" title="Nápověda / Help" aria-label="Nápověda / Help">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
+              <circle cx="12" cy="12" r="9"/>
+              <path d="M9.2 9.3a2.9 2.9 0 1 1 3.6 2.8c-.5.15-.8.6-.8 1.1v.7" stroke-linecap="round"/>
+              <circle cx="12" cy="17" r="1.05" fill="currentColor" stroke="none"/>
+            </svg>
+          </button>
+        </div>
         <div class="ctl-right">
           <button id="btn-new" class="ctl-btn primary"><span class="cs">Nová hra</span><span class="en">New game</span><span class="de">Neues Spiel</span><span class="fr">Nouvelle partie</span></button>
           <button id="btn-settings" class="ctl-btn icon" title="Nastavení" aria-label="Nastavení">
@@ -423,8 +569,52 @@ import Layout from '../layouts/Layout.astro';
   @media (prefers-reduced-motion: reduce) { #intro img { animation: none; } }
 
   /* panel nastavení — stejná vrstva i vzhled jako vyúčtování */
+  /*
+   * Nápověda. Stejný modální vzor jako nastavení (překrytí přes stůl, klik mimo
+   * i Esc zavírá), ale textu je na jednu obrazovku moc — panel proto scrolluje
+   * uvnitř sebe a výšku má odvozenou od sukna, aby nikdy nepřetekl stůl.
+   */
+  #help-float {
+    position: absolute; inset: 0; z-index: 24;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(12,16,22,.55); border-radius: 16px; padding: clamp(8px, 2cqh, 22px);
+  }
+  #help-float[hidden] { display: none; }
+  .help-panel {
+    position: relative; text-align: left;
+    width: min(760px, 100%); max-width: 100%; max-height: 100%;
+    display: flex; flex-direction: column; padding-top: 12px;
+  }
+  .help-x {
+    position: absolute; top: 6px; right: 10px; z-index: 1;
+    background: none; border: 0; cursor: pointer; padding: 0 4px;
+    color: #bfeee8; font: 400 26px/1 system-ui, sans-serif;
+  }
+  .help-x:hover { color: #fff; }
+  .help-body {
+    overflow-y: auto; min-height: 0; padding-right: 6px;
+    font-size: clamp(12px, 1.9cqh, 15px); line-height: 1.5;
+    overscroll-behavior: contain;
+  }
+  .help-body h4 {
+    margin: 14px 0 4px; font-size: 1em; letter-spacing: .06em; text-transform: uppercase;
+    color: #ffe9a8;
+  }
+  .help-body h4:first-child { margin-top: 0; }
+  .help-body p { margin: 0 0 7px; }
+  .help-body ul { margin: 0 0 7px; padding-left: 1.2em; }
+  .help-body li { margin: 2px 0; }
+  .help-body a { color: #fff; }
+  .help-foot {
+    display: flex; justify-content: space-between; gap: 12px;
+    margin-top: 10px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,.2);
+    color: #bfeee8; font-size: 12px;
+  }
+  .help-foot a { color: #bfeee8; }
+
+  /* modální panely jdou nad všechno na sukně, i nad závazek uprostřed (z-index 12) */
   #settings-float {
-    position: absolute; inset: 0; z-index: 6;
+    position: absolute; inset: 0; z-index: 24;
     display: flex; align-items: center; justify-content: center;
     background: rgba(12,16,22,.45); border-radius: 16px; padding: 16px;
   }
@@ -464,7 +654,9 @@ import Layout from '../layouts/Layout.astro';
   .langmenu { position: relative; }
   #lang-current { display: grid; place-items: center; }
   .langpill {
-    position: absolute; bottom: calc(100% + 8px); right: 0; z-index: 20;
+    /* nad nápovědou i nastavením (z-index 24): jazyk se přepíná i s otevřeným
+       panelem — právě v nápovědě to člověk potřebuje nejvíc */
+    position: absolute; bottom: calc(100% + 8px); right: 0; z-index: 26;
     display: flex; flex-direction: column; gap: 2px;
     background: var(--frame); border: 1px solid rgba(255,255,255,.12);
     border-radius: 10px; padding: 4px; box-shadow: 0 10px 30px rgba(0,0,0,.5);
@@ -782,7 +974,7 @@ import Layout from '../layouts/Layout.astro';
   .game-controls {
     min-height: 76px; flex: none;
     display: flex; flex-wrap: wrap; gap: 10px 24px; align-items: center;
-    justify-content: flex-end; padding: 10px 10px 0;
+    justify-content: space-between; padding: 10px 10px 0;
     color: var(--on-frame-dim); font-size: 14px;
   }
   .game-controls label {

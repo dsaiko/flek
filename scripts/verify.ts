@@ -3158,15 +3158,27 @@ const KULE = 2 as const;
   // ── úplnost: každá situace, každý jazyk, obě sady ──────────────────────
   {
     assert.ok(TALK_SITUATIONS.length >= 7, 'situací má být aspoň sedm');
-    // dost hlášek na to, aby se v jedné hře neopakovaly
+    /*
+     * Dost hlášek na to, aby se v jedné hře neopakovaly. Osm jich bylo málo:
+     * `accept` padne v jednom rozdání klidně šestkrát a hráč slyšel pořád to
+     * samé. Okno „nedávno řečených" (RECENT_TALK) proto musí zůstat MENŠÍ než
+     * nejkratší tabulka, jinak se vyhýbání vyčerpá a repertoár se zase zúží.
+     */
+    const { RECENT_TALK } = await import('../src/lib/ui/table');
+    let shortest = Infinity;
     for (const [name, table] of Object.entries(TALK_TABLES)) {
       for (const [situation, lines] of Object.entries(table as Record<string, Record<string, readonly string[]>>)) {
         for (const lang of LANGS) {
           const n = (lines[lang] ?? []).length;
-          assert.ok(n >= 8, `${name}/${lang}/${situation}: jen ${n} hlášek, má být aspoň 8`);
+          assert.ok(n >= 14, `${name}/${lang}/${situation}: jen ${n} hlášek, má být aspoň 14`);
+          shortest = Math.min(shortest, n);
         }
       }
     }
+    assert.ok(
+      RECENT_TALK < shortest,
+      `okno nedávných hlášek (${RECENT_TALK}) musí být menší než nejkratší tabulka (${shortest})`,
+    );
     for (const situation of TALK_SITUATIONS) {
       for (const set of SETS) {
         for (const lang of LANGS) {

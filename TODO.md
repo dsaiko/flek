@@ -3,8 +3,9 @@
 ~~lepsi lista~~ ✅ nastaveni za ozubenym kolem (v0.0.2)
 ~~verze aplikace~~ ✅ 0.0.2 (package.json + tag; zobrazit ji ma „o Aplikaci")
 
-pravidla mariase (vlastnimi slovy, 4 jazyky)
-o Aplikaci ← musi obsahovat atribuci licence karet (zmizela s patickou)
+~~pravidla mariase (vlastnimi slovy, 4 jazyky)~~ ✅ v napovede pod otaznikem vlevo dole
+~~o Aplikaci ← musi obsahovat atribuci licence karet (zmizela s patickou)~~ ✅ tamtez:
+pocta Pivonkovi i otci, licence karetnich sad, verze a odkaz na repo (design doc §31)
 domena + nasazeni
 mince/bank, klavesy, mobil
 overeni FLEK! v DOSBoxu → preset SAZBY_FLEK
@@ -25,6 +26,9 @@ overeni funkcnosti podle pravidel + overeni nekoukani do karet
 radi podle rezimu hry: v betlu/durchu klesa desitka mezi spodka a devitku
 (prirozene poradi), v barevne hre zustava hned za esem. Poradi se srovna uz
 pri odhozu do talonu na vysoutezeny betl i pri prevzeti betlem.
+
+~~hlasky se dost opakuji~~ ✅ kazda bunka (sada × jazyk × situace) je dvojnasobna,
+celkem 1304 textu, a pamet nedavno recenych je 14 misto 6 (design doc §32)
 
 ~~ve fullscreenu prohlizece se spodek stolu nevejde na obrazovku~~ ✅ sirka stolu ted
 pocita i s vyskou okna (ram ma pevny pomer 1400/900). Hlida smoke v okne 1440×900.
