@@ -26,6 +26,10 @@ radi podle rezimu hry: v betlu/durchu klesa desitka mezi spodka a devitku
 (prirozene poradi), v barevne hre zustava hned za esem. Poradi se srovna uz
 pri odhozu do talonu na vysoutezeny betl i pri prevzeti betlem.
 
+~~na forhontu po odhozu talonu zmacknu "Barva?" a objevi se hlaska "tak hraj, sakra"~~ ✅
+aktérova otazka a souhlas obrany jsou tataz akce; flavourFor je nerozlisoval a za otazku
+ukazal hlasku ze sady souhlasu. Ted "Barva?" zustane popiskem. (docs/marias-design.md §28)
+
 ~~hlasim betl - odhazuji - vybiram eso - dostanu hlasku, ze s odhozenymi trumfy se muze
 hrat jen betl~~ ✅ v betlu/durchu uz varovani pred odhozem mlci (zakaz odkladat esa
 a desitky plati jen u her s trumfem, CSM Cl. IV/11; hlasky se nepocitaji, Cl. IV/1).
