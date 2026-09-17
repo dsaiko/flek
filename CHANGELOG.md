@@ -4,6 +4,32 @@ Poznámky k vydání. Sekci pro daný tag z tohohle souboru vytáhne CI a použi
 jako text releasu na GitHubu (`.github/workflows/release.yml`) — nadpis sekce se
 stane názvem vydání. Nová verze = **přidat sekci sem** a až pak tagovat.
 
+## v0.0.5 — desítka v betlu, čitelný závazek a stůl, co se vejde do okna
+
+Pět věcí, které vyplavaly při hraní. Čtyři z nich jsou o tom, že hra ukazovala něco jiného, než co se doopravdy dělo.
+
+### Desítka klesá tam, kam patří
+
+V betlu a durchu je desítka **nižší karta než spodek** (Obecná pravidla ČSM, čl. IV/6 a 7) — nahoru pod eso se posouvá jen ve hrách s trumfem (čl. II/1). Engine to tak počítal odjakživa, ale vějíř ne: desítka v něm ležela hned vedle esa, o dvě místa výš, než jak doopravdy brala. Ruka se teď skládá podle toho, co se hraje, a srovná se už při odhozu do talonu na vysoutěžený betl i po převzetí.
+
+### Varování před odhozem mlčí, když nemá o čem mluvit
+
+Kdo si vysoutěžil betl a odhazoval do talonu eso, dostal hlášku „s esem/desítkou v talonu lze hrát jen betl nebo durch" — tedy varování před něčím, co právě dělal schválně. Zákaz odkládat esa a desítky platí jen „u závazků s ustanovením trumfové barvy" (čl. IV/11) a hlášky se počítají jen tam, kde jde o body (čl. IV/1). V betlu a durchu proto varování nepřijde. Ve voleném se odhazuje ještě před deklarací, tam zůstává.
+
+### „Barva?" je otázka, ne souhlas
+
+Aktér se po odhozu ptá obrany, jestli smí hrát barevnou hru, a závazek hlásí až po odpovědi (čl. VII/1). Jenže otázka i souhlas jsou tatáž akce — a hra za otázku dosazovala hlášku ze sady souhlasů. Hráč, který se právě zeptal, si tak nad vlastní hlavou přečetl „Tak hraj, sakra". Teď u otázky zůstane „Barva?" a hlášky patří těm, kdo odpovídají.
+
+### Vidíš, o čem rozhoduješ
+
+Závazek soupeře visel v rohu pod jménem ve třinácti pixelech — a přitom je to jediné, podle čeho se člověk rozhoduje mezi „Dobrá" a flekem. **Po dobu flekování proto stojí velký uprostřed sukna** i se jménem aktéra; pak zmizí a platí zase destička u hráče, která je nově výrazně větší, se zlatým rámečkem a s ikonou barvy, která roste s písmem.
+
+### Stůl se vejde do okna
+
+S prohlížečem přes celou obrazovku (1440×900) utíkal spodek stolu pod dolní hranu a muselo se scrollovat: rám má pevný poměr 1400/900, takže v širokém okně rostl i do výšky, ale o výšku okna se nikdo nestaral. Teď se šířka počítá i z ní. Hlídá to smoke test přímo v tom okně, kde to selhávalo.
+
+Zmizela taky horní záložka s odkazem na projekty — mariáš je samostatný projekt.
+
 ## v0.0.4 — pravidla podle ČSM (pořadí, sto, fleky, limit)
 
 Externí review prošlo engine proti pěti dokumentům ČSM. Devět nálezů bylo oprávněných; rozbor s citacemi článků je v [`docs/marias-design.md`](https://github.com/dsaiko/flek/blob/main/docs/marias-design.md) §25.
