@@ -26,4 +26,7 @@ radi podle rezimu hry: v betlu/durchu klesa desitka mezi spodka a devitku
 (prirozene poradi), v barevne hre zustava hned za esem. Poradi se srovna uz
 pri odhozu do talonu na vysoutezeny betl i pri prevzeti betlem.
 
-hlasim betl - odhazuji - vybiram eso - dostanu hlasku, ze s odhozenymi trumfy se muze hrat jen betl
+~~hlasim betl - odhazuji - vybiram eso - dostanu hlasku, ze s odhozenymi trumfy se muze
+hrat jen betl~~ ✅ v betlu/durchu uz varovani pred odhozem mlci (zakaz odkladat esa
+a desitky plati jen u her s trumfem, CSM Cl. IV/11; hlasky se nepocitaji, Cl. IV/1).
+Ve volenem se odhazuje pred deklaraci, tam varovani zustava. (docs/marias-design.md §27)

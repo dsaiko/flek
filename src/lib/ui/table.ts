@@ -9,7 +9,7 @@
 import { sortHand, suitOf, card as mkCard, KRAL, SVRSEK, type Card, type OrderMode, type Suit } from '../cards';
 import { legalActions, passSettlesWithoutPlay } from '../rules/legal';
 import { orderMode, trickWinner } from '../rules/tricks';
-import type { GameState, PlayerAction, PlayerView, Seat } from '../rules/types';
+import type { GameMode, GameState, PlayerAction, PlayerView, Seat } from '../rules/types';
 import { forhont } from '../rules/types';
 import { view } from '../rules/view';
 import { backSrc, cardName, cardSrc, suitIcon, suitName, type Pattern } from './cardAssets';
@@ -978,7 +978,7 @@ export class TableUI {
             );
             if (!action) return;
             // rizikové odhozy potvrdit popupem vestavěným do stolu
-            const warns = discardWarnings(v.hand, cards).map((w) =>
+            const warns = discardWarnings(v.hand, cards, knownMode(v)).map((w) =>
               w.kind === 'valuable' ? t('talonWarn') : marriageWarn(w.suit),
             );
             if (warns.length > 0) this.showConfirmPopup(warns, t('discardConfirm'), () => this.cb.onAction(action));
@@ -1429,11 +1429,20 @@ export function trumpAsideOf(
  * tím neprozradí — příhozy i nároky jsou veřejné.
  */
 export function handOrderMode(v: PlayerView): OrderMode {
+  const mode = knownMode(v);
+  return mode === null ? 'trump' : orderMode(mode);
+}
+
+/**
+ * Závazek, o kterém se v danou chvíli veřejně ví; `null` = ještě nepadl.
+ * Stojící závazek má přednost před `contract` (ten ve fázi převzetí drží už
+ * překonanou deklaraci) — viz `handOrderMode`.
+ */
+export function knownMode(v: PlayerView): GameMode | null {
   const p = v.phase;
   const standing =
     p.name === 'discard-talon' || p.name === 'declare' || p.name === 'takeover' ? p.standing : null;
-  const mode = standing?.mode ?? v.contract?.mode ?? null;
-  return mode === null ? 'trump' : orderMode(mode);
+  return standing?.mode ?? v.contract?.mode ?? null;
 }
 
 /** Ruka tak, jak ji vidí hráč: bez karty, která leží stranou na stole. */

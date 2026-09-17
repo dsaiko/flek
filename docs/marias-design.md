@@ -1497,3 +1497,37 @@ Nový blok ve `scripts/verify.ts`: v barevné hře zůstává desítka za esem, 
 mezi spodka a devítku, vysoutěžený betl platí už při odhozu a nárok při převzetí přebíjí
 překonanou deklaraci. Negativní kontrolou ověřeno — s natvrdo vráceným `'trump'` test spadne
 (`actual [7,3,6,5,4,2]` proti `expected [7,6,5,4,3,2]`).
+
+## 27. Varování před odhozem mlčí v betlu a durchu (2026-09-17)
+
+Uživatelovo hlášení: *„hlásím betl – odhazuji – vybírám eso – dostanu hlášku, že s odhozenými
+trumfy se může hrát jen betl."*
+
+### Co říkají pravidla
+
+| | |
+|---|---|
+| **Obecná pravidla, Čl. IV/11** | „**U závazků s ustanovením trumfové barvy** je zakázáno odkládat esa a desítky do talonu." |
+| **Obecná pravidla, Čl. IV/1** | hodnoty (eso a desítka po 10, hláška 20, trumfová 40) jsou ve hře, „**je-li cílem nebo součástí cíle** ohlášeného závazku **získat co největší počet bodů**" |
+| **Obecná pravidla, Čl. IV/6 a 7** | betl i durch: „Trumfovní barva se nestanovuje." |
+
+Betl ani durch trumfovou barvu nemají a body se v nich nepočítají, takže ani jedno varování
+před odhozem nemá o čem být.
+
+### Oprava
+
+`discardWarnings(hand, discard, committed)` dostalo třetí parametr — závazek, který je v době
+odhozu **veřejně znám** — a při `'betl'`/`'durch'` nevrací nic. Mode dodává nová `knownMode(v)`
+v `ui/table.ts` (stejné odvození, jaké §26 používá na řazení vějíře: `phase.standing` má přednost
+před překonanou deklarací v `state.contract`).
+
+Ve **voleném** se odhazuje ještě před deklarací, takže tam `knownMode()` vrací `null` a obě
+varování zůstávají — to je přesně ten případ, kvůli kterému vznikla. Mizí jen v **licitovaném**
+po vysoutěženém betlu/durchu a při převzetí, kde hráč odhazem esa dělá právě to, co má; hláška
+„pak lze hrát jen betl" mu v lepším případě překážela a v horším radila proti němu.
+
+### Testy
+
+Blok i30 ve `scripts/verify.ts` má nově obě strany: s `'betl'` i `'durch'` nevaruje ani eso, ani
+rozbitá hláška; s `'hra'` a s `null` varování zůstává. Negativní kontrolou ověřeno — bez podmínky
+test spadne (`actual [{ kind: 'valuable' }]` proti `expected []`).
