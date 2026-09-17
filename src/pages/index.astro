@@ -219,8 +219,17 @@ import Layout from '../layouts/Layout.astro';
 
   /* ── stůl ── */
   /* stůl je hlavní obsah stránky — nemá důvod se mačkat do šířky textu */
+  /*
+   * Stůl se musí vejít na obrazovku BEZ scrollování. Rám má pevný poměr
+   * 1400/900, takže jeho výška plyne ze šířky — a šířka proto musí počítat
+   * i s výškou okna, jinak široké okno vytlačí spodek stolu pod jeho dolní
+   * hranu. `--page-gap` je svislé odsazení <main> (nahoře + dole).
+   * Ve fullscreenu poměr neplatí a šířku přepisuje pravidlo níž.
+   */
   .game-section {
-    width: min(94vw, 1500px);
+    --page-gap: 64px;
+    width: min(94vw, 1500px, calc((100vh - var(--page-gap)) * 1400 / 900));
+    width: min(94vw, 1500px, calc((100dvh - var(--page-gap)) * 1400 / 900));
     margin-inline: auto;
     /* vystup z max-width 1060px v <main> */
     position: relative; left: 50%; transform: translateX(-50%);
