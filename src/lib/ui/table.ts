@@ -9,7 +9,7 @@
 import { sortHand, suitOf, card as mkCard, KRAL, SVRSEK, type Card, type OrderMode, type Suit } from '../cards';
 import { legalActions, passSettlesWithoutPlay } from '../rules/legal';
 import { orderMode, trickWinner } from '../rules/tricks';
-import type { GameMode, GameState, PlayerAction, PlayerView, Seat } from '../rules/types';
+import type { Contract, GameMode, GameState, PlayerAction, PlayerView, Seat } from '../rules/types';
 import { forhont } from '../rules/types';
 import { view } from '../rules/view';
 import { backSrc, cardName, cardSrc, suitIcon, suitName, type Pattern } from './cardAssets';
@@ -673,21 +673,27 @@ export class TableUI {
     ];
     const c = v.contract;
     const hidden = !c || v.phase.name === 'idle' || v.phase.name === 'scored';
+    const label = c === null ? '' : contractLabelHtml(c, state);
     for (const [seat, el] of boxes) {
-      if (hidden || c === null || seat !== c.declarer) {
-        if (el.innerHTML !== '') el.innerHTML = '';
-        continue;
-      }
-      const parts: string[] = [];
-      parts.push(
-        c.mode === 'hra' ? `${t('hra')} ${c.trump !== null ? suitIcon(c.trump) : ''}` : t(c.mode),
-      );
-      if (c.sedma !== null) parts.push(c.sedma === c.declarer ? t('sedma') : t('sedmaProti'));
-      if (c.kilo !== null) parts.push(c.kilo === c.declarer ? t('kilo') : t('kiloProti'));
-      const fleks = flekSummary(state);
-      if (fleks) parts.push(fleks);
-      const html = parts.join(' · ');
+      const mine = !hidden && c !== null && seat === c.declarer;
+      const html = mine ? label : '';
       if (el.innerHTML !== html) el.innerHTML = html;
+    }
+
+    /*
+     * Totéž velké uprostřed sukna, ale jen po dobu flekování: tam se o závazku
+     * rozhoduje a badge u sedadla je v rohu sotva vidět. Uprostřed už není
+     * poznat, komu badge patří, takže se přidává jméno aktéra.
+     */
+    const centre = $(this.root, '#contract-center');
+    if (!hidden && c !== null && v.phase.name === 'fleks') {
+      const html = `<span class="cc-who">${esc(this.nameOf(c.declarer))}</span>`
+        + `<span class="cc-what">${label}</span>`;
+      if (centre.innerHTML !== html) centre.innerHTML = html;
+      centre.hidden = false;
+    } else {
+      if (centre.innerHTML !== '') centre.innerHTML = '';
+      centre.hidden = true;
     }
   }
 
@@ -1502,6 +1508,20 @@ export function talkSituationFor(a: PlayerAction, state: GameState): TalkSituati
   if (a.type === 'bid' && a.bid === 'pass') return 'pass';
   if (a.type === 'choose-trump' && a.card === 'from-people') return 'fromPeople';
   return null;
+}
+
+/**
+ * Popisek závazku („Hra ♥ · Sedma · Flek!") — stejný text pro badge u sedadla
+ * i pro velký panel uprostřed, aby se ta dvě místa nemohla rozejít.
+ */
+export function contractLabelHtml(c: Contract, state: GameState): string {
+  const parts: string[] = [];
+  parts.push(c.mode === 'hra' ? `${t('hra')} ${c.trump !== null ? suitIcon(c.trump) : ''}` : t(c.mode));
+  if (c.sedma !== null) parts.push(c.sedma === c.declarer ? t('sedma') : t('sedmaProti'));
+  if (c.kilo !== null) parts.push(c.kilo === c.declarer ? t('kilo') : t('kiloProti'));
+  const fleks = flekSummary(state);
+  if (fleks) parts.push(fleks);
+  return parts.join(' · ');
 }
 
 export function bubbleText(a: PlayerAction, state: GameState): string | null {
