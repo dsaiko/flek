@@ -9,7 +9,7 @@
 
 import { CERVENE, DECK, sortHand, suitOf, type Card } from '../cards';
 import { Random } from '../random';
-import { actionMatchesLegal, flekEnding, legalActions } from './legal';
+import { actionMatchesLegal, flekEnding, legalActions, trumplessChoicePending } from './legal';
 import { settle } from './scoring';
 import { trickWinner } from './tricks';
 import type {
@@ -115,10 +115,19 @@ function biddingHolder(state: GameState & { phase: { name: 'bidding' } }): Seat 
   return forhont(state.dealer);
 }
 
-/** Sedadla v pořadí mluvení (od forhonta), bez vyjmenovaných. */
-function speakingOrder(dealer: Seat, skip: Seat): Seat[] {
-  const start = forhont(dealer);
-  return [start, nextSeat(start), nextSeat(nextSeat(start))].filter((s) => s !== skip);
+/**
+ * Ostatní dvě sedadla v pořadí mluvení: „ve směru hraní" od toho, kdo právě
+ * mluvil nebo hlásil (Obecná pravidla čl. V/4, volený B/11 „sled hodinových
+ * ručiček, jeden po druhém"). Kruh se otevírá u aktéra, resp. u toho, kdo
+ * vznesl nárok — první slovo má hráč po jeho levici.
+ *
+ * Dřív pořadí začínalo vždy u forhonta. Ve voleném s aktérem-forhontem je to
+ * totéž, ale v licitovaném (aktérem může být kdokoli) a při převzetí mluvil
+ * jako první forhont i tehdy, když seděl až za rohem — a druhý mluvčí zná
+ * názor prvního, takže na pořadí záleží.
+ */
+function speakingOrder(after: Seat): Seat[] {
+  return [nextSeat(after), nextSeat(nextSeat(after))];
 }
 
 /** Komponenty závazku, ke kterým se dá vyjádřit. */
@@ -133,10 +142,10 @@ function flekTargets(contract: Contract): FlekTarget[] {
 }
 
 /** Sedadla strany, která je na tahu v tomhle kole (v pořadí mluvení). */
-function flekSideMembers(state: GameState, contract: Contract, seat: Seat): Seat[] {
+function flekSideMembers(contract: Contract, seat: Seat): Seat[] {
   return seat === contract.declarer
     ? [contract.declarer]
-    : speakingOrder(state.dealer, contract.declarer);
+    : speakingOrder(contract.declarer);
 }
 
 /**
@@ -144,13 +153,13 @@ function flekSideMembers(state: GameState, contract: Contract, seat: Seat): Seat
  * jediného zvýšení — to je „schválení závazku některou ze stran" a konec fáze.
  */
 function advanceFleks(state: GameState, contract: Contract, f: FlekState): FlekState | null {
-  const members = flekSideMembers(state, contract, f.toAct);
+  const members = flekSideMembers(contract, f.toAct);
   const next = members.find((m) => !f.spoke.includes(m));
   if (next !== undefined) return { ...f, toAct: next };
   if (f.raised.length === 0) return null;
   // kolo skončilo zvýšením → slovo dostává protistrana, a jen k tomu, co padlo
   const otherSide = flekSideMembers(
-    state, contract, f.toAct === contract.declarer ? defendersOf(contract.declarer)[0] : contract.declarer,
+    contract, f.toAct === contract.declarer ? defendersOf(contract.declarer)[0] : contract.declarer,
   );
   return {
     ...f,
@@ -169,7 +178,7 @@ function startFleks(state: GameState, contract: Contract): GameState {
    * v prvním kole nemluví. Dřív fáze začínala u forhonta, takže aktér-forhont
    * říkal „dobrá" ke své vlastní hře.
    */
-  const defenders = speakingOrder(state.dealer, contract.declarer);
+  const defenders = speakingOrder(contract.declarer);
   const fleks: FlekState = {
     levels: {},
     lastRaiser: {},
@@ -334,7 +343,9 @@ function reduce(state: GameState, action: PlayerAction): GameState {
         ...state,
         hands,
         unseen: [],
-        revealedTrump: trumpCard, // ukázaná karta je veřejná (i „z lidu")
+        // zvolená karta leží stranou lícem dolů (Čl. VII/1) — i „z lidu";
+        // ve stavu je pro volícího, `view()` ji ostatním nedá
+        revealedTrump: trumpCard,
         phase: {
           name: 'discard-talon',
           standing: { declarer: action.seat, mode: null, trump, bid: null },
@@ -408,7 +419,10 @@ function reduce(state: GameState, action: PlayerAction): GameState {
        * nárokem betl/durch. Po PŘEVZETÍ (mód už konkrétní) se talon odhazuje
        * podruhé a následuje rovnou deklarace zamčeného módu.
        */
-      const askColour = state.config.variant === 'voleny' && phase.standing.mode === null;
+      const askColour =
+        state.config.variant === 'voleny' && phase.standing.mode === null &&
+        // obránce, který talon sebral (trumf žádný), rovnou hlásí betl/durch
+        !trumplessChoicePending(state.config, phase.standing);
       return {
         ...state,
         hands,
@@ -438,7 +452,19 @@ function reduce(state: GameState, action: PlayerAction): GameState {
         kilo: action.kilo ? action.seat : null,
         dveSedmy: action.dveSedmy ?? false,
       };
-      // převzetí (volený) proběhlo UŽ PŘED deklarací, takže se rovnou flekuje
+      /*
+       * Obránce, který sebral talon, ohlásil betl: „z ohlášeného Betla mohou
+       * zbývající dva hráči přebrat hru ještě na Durcha" (čl. VII/1), takže
+       * se ještě jednou otevře převzetí. Durch je konečný a rovnou se flekuje.
+       */
+      if (trumplessChoicePending(state.config, st) && action.mode === 'betl') {
+        const standing: Standing = { declarer: action.seat, mode: 'betl', trump: null, bid: null };
+        return {
+          ...state,
+          phase: { name: 'takeover', standing, passed: [], toAct: speakingOrder(action.seat)[0] },
+        };
+      }
+      // jinak převzetí (volený) proběhlo UŽ PŘED deklarací a rovnou se flekuje
       return startFleks({ ...state, contract }, contract);
     }
 
@@ -446,17 +472,44 @@ function reduce(state: GameState, action: PlayerAction): GameState {
       if (phase.name !== 'takeover') throw new InvariantError('takeover mimo fázi');
       if (action.claim === 'good') {
         const passed = [...phase.passed, action.seat];
-        const others = speakingOrder(state.dealer, phase.standing.declarer);
+        const others = speakingOrder(phase.standing.declarer);
         if (others.every((o) => passed.includes(o))) {
           return resolveTakeover(state, phase.standing);
         }
         const nextTo = others.find((o) => !passed.includes(o)) as Seat;
         return { ...state, phase: { ...phase, passed, toAct: nextTo } };
       }
-      // vyšší nárok: nový držitel, pasy se ruší, slovo dostávají ostatní
+      if (action.claim === 'take') {
+        /*
+         * „Seberou odložený talon a následně po odhozu jiného talonu ohlásí
+         * Betl či Durch" (čl. VII/1): obránce zvedne talon (a vidí ho),
+         * odhodí dvě karty a druh hry bez trumfů vybere až s nimi v ruce.
+         * Stojící závazek: bez módu i bez trumfu — viz `trumplessChoicePending`.
+         * House rule 'keep' talon nechává ležet a jde se rovnou k volbě.
+         */
+        const standing: Standing = { declarer: action.seat, mode: null, trump: null, bid: null };
+        if (state.config.talonOnTakeover === 'keep') {
+          return { ...state, phase: { name: 'declare', standing } };
+        }
+        const hands = state.hands.map((h) => h.slice()) as [Card[], Card[], Card[]];
+        hands[action.seat] = sortHand(hands[action.seat].concat(state.talon));
+        const talonKnowledge = state.talonKnowledge.map((k) => k.slice()) as [Card[], Card[], Card[]];
+        for (const c of state.talon) {
+          if (!talonKnowledge[action.seat].includes(c)) talonKnowledge[action.seat].push(c);
+        }
+        return {
+          ...state,
+          hands,
+          talon: [],
+          talonOwner: null,
+          talonKnowledge,
+          phase: { name: 'discard-talon', standing },
+        };
+      }
+      // aktérův betl/durch, nebo nárok na durch proti ohlášenému betlu: nový
+      // držitel, pasy se ruší, slovo dostávají ostatní ve směru hraní
       const standing: Standing = { declarer: action.seat, mode: action.claim, trump: null, bid: null };
-      const others = speakingOrder(state.dealer, action.seat);
-      return { ...state, phase: { name: 'takeover', standing, passed: [], toAct: others[0] } };
+      return { ...state, phase: { name: 'takeover', standing, passed: [], toAct: speakingOrder(action.seat)[0] } };
     }
 
     case 'flek': {
@@ -697,7 +750,9 @@ function contractToSettle(state: GameState): Contract | null {
   if (c !== null && c.declarer === st.declarer && (st.mode === null || c.mode === st.mode)) return c;
 
   const kind = st.bid?.kind ?? null;
-  const mode = st.mode ?? (kind === 'betl' || kind === 'durch' ? kind : 'hra');
+  // kdo sebral talon a ještě nevybral, hraje hru bez trumfů — vzdání platí
+  // aspoň betl, jinak by zvednutý talon byl levným únikem za sazbu hry
+  const mode = st.mode ?? (kind === 'betl' || kind === 'durch' ? kind : trumplessChoicePending(state.config, st) ? 'betl' : 'hra');
   const colour = mode === 'hra';
   // vysoutěžený závazek musí deklarace pokrýt (legal.ts), takže sedma/kilo
   // z příhozu jsou pro vzdávajícího závazné stejně jako by byly ohlášené

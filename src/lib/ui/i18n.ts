@@ -32,6 +32,14 @@ const STRINGS = {
   bidding: { cs: 'Licitace', en: 'Bidding', de: 'Lizitation', fr: 'Enchéris' },
   pass: { cs: 'Dobrá (pas)', en: 'Pass', de: 'Weiter', fr: 'Passe' },
   takeover: { cs: 'Dobrá, nebo přebereš?', en: 'Accept, or take over?', de: 'Gut, oder übernimmst du?', fr: 'Tu acceptes, ou tu reprends ?' },
+  // obránce „sebere odložený talon" a betl/durch ohlásí až po odhozu (čl. VII/1)
+  take: { cs: 'Beru talon', en: 'Take the talon', de: 'Talon nehmen', fr: 'Je prends le talon' },
+  takeHint: {
+    cs: 'Vyber 2 karty do talonu — pak ohlásíš betl, nebo durch',
+    en: 'Choose 2 cards for the talon — then declare betl or durch',
+    de: 'Lege 2 Karten in den Talon — dann sagst du Bettel oder Durchmarsch an',
+    fr: 'Choisis 2 cartes pour le talon — puis annonce bettel ou durch',
+  },
   // aktér se po odhozu ptá „Barva?" — nabízí soupeřům hru bez trumfů (čl. VII/1)
   askColour: { cs: 'Barva?', en: 'Colour?', de: 'Farbe?', fr: 'Couleur ?' },
   askColourHint: {

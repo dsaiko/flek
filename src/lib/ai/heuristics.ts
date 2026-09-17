@@ -11,7 +11,7 @@ import {
   card, pointsOf, rankOf, strength, suitOf,
   type Card, type Suit,
 } from '../cards';
-import { legalActions } from '../rules/legal';
+import { legalActions, trumplessChoicePending } from '../rules/legal';
 import { winningPlay, beats } from '../rules/tricks';
 import type { PlayerAction, PlayerView } from '../rules/types';
 import { Random } from '../random';
@@ -145,7 +145,10 @@ export function decideAuction(v: PlayerView, difficulty: Difficulty, rng: Random
 
     case 'discard-talon': {
       const st = v.phase.standing;
-      const mode = st.mode ?? 'hra';
+      // kdo sebral talon (volený), bude hrát betl nebo durch — odhazuje podle
+      // toho, kam se s dvanácti kartami spíš vejde (durch jen s jistotami)
+      const trumpless = trumplessChoicePending(v.config, st);
+      const mode = st.mode ?? (trumpless ? (durchHoles(hand) <= t.durchHoles ? 'durch' : 'betl') : 'hra');
       const pair = chooseDiscard(hand, st.trump, mode);
       return (
         legal.find(
@@ -232,8 +235,12 @@ export function decideAuction(v: PlayerView, difficulty: Difficulty, rng: Random
       const good = legal.find((a) => a.type === 'takeover' && a.claim === 'good');
       const durchOpt = legal.find((a) => a.type === 'takeover' && a.claim === 'durch');
       const betlOpt = legal.find((a) => a.type === 'takeover' && a.claim === 'betl');
+      // obránce druh hry nehlásí, jen „sebere talon" (čl. VII/1) — bere ho,
+      // když má na betl nebo durch už teď; s talonem si pak vybere
+      const takeOpt = legal.find((a) => a.type === 'takeover' && a.claim === 'take');
       if (durchOpt && durchHoles(hand) <= t.durchHoles) return durchOpt;
       if (betlOpt && betlHoles(hand) <= t.betlHoles) return betlOpt;
+      if (takeOpt && (durchHoles(hand) <= t.durchHoles || betlHoles(hand) <= t.betlHoles)) return takeOpt;
       // bez barevné hry se musí vybrat menší zlo: betl je levnější než durch
       return good ?? betlOpt ?? durchOpt ?? legal[0];
     }

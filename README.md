@@ -33,14 +33,15 @@ Two variants ship, both playable from the opening screen:
 
 | Variant                  | Original | How the contract is decided                                                                                                    |
 | ------------------------ | -------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| **Chosen** (volený)      | FLEK!    | Forehand picks the trump from their first seven cards (or blind, from the second five), asks the defenders whether a colour game stands, and announces the contract only after they answer. They may take it over with betl or durch. |
+| **Chosen** (volený)      | FLEK!    | Forehand picks the trump from their first seven cards (or blind, from the second five), asks the defenders whether a colour game stands, and announces the contract only after they answer. A defender may instead take the talon, discard, and only then declare betl or durch; an announced betl can still be taken over with durch. |
 | **Auction** (licitovaný) | RE!      | Players bid for the contract; a higher commitment beats a lower one, and the winner takes the talon.                           |
 
 Beyond the plain game, players commit to **seven** (winning the last trick with
 the trump seven), **hundred** (scoring 100 points or more), **betl** (losing
 every trick) and **durch** (winning every one). Each component is doubled
-independently through the _flek_ ladder — flek, re, tutti, boty, kalhoty — and a
-red trump doubles the colour contracts again.
+independently through the _flek_ ladder — flek, re, tutti, boty, and in the chosen
+variant kalhoty (the auction rules stop at the fourth) — and a red trump doubles
+the colour contracts again.
 
 The UI speaks Czech, English, German and French, and the money is kept across
 hands in a running account. The question mark at the bottom left opens an

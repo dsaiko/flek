@@ -113,6 +113,21 @@ function declareRank(mode: GameMode, sedma: boolean, kilo: boolean, trump: Suit 
 
 const isValuable = (c: Card): boolean => rankOf(c) === ESO || rankOf(c) === R10;
 
+/**
+ * Stojící závazek je hra BEZ TRUMFŮ, jejíž druh (betl/durch) se teprve
+ * vybere: tak vypadá `standing` obránce, který ve voleném „sebral odložený
+ * talon" (Obecná pravidla čl. VII/1) a po odhozu ohlásí betl či durch.
+ * Ve voleném nemůže trumf chybět z jiného důvodu — forhont ho zvolil ještě
+ * před odhozem. V licitovaném `trump === null` znamená jen „bez červeného
+ * příhozu", proto se ptáme na variantu.
+ */
+export function trumplessChoicePending(
+  config: RulesConfig,
+  st: { mode: GameMode | null; trump: Suit | null; bid: BidLevel | null },
+): boolean {
+  return config.variant === 'voleny' && st.bid === null && st.mode === null && st.trump === null;
+}
+
 /** Všechny závazky licitačního žebříčku (bez nelegálních kombinací). */
 const ALL_BIDS: BidLevel[] = (
   [
@@ -236,6 +251,19 @@ export function legalActions(v: PlayerView): PlayerAction[] {
       }
 
       /*
+       * Volený: obránce „sebral odložený talon" a po odhozu jiného talonu
+       * „ohlásí Betl či Durch" (čl. VII/1) — volí teprve TEĎ, s dvanácti
+       * kartami před očima. Barevná hra tu není: zvedl talon právě proto,
+       * že barvu neschválil.
+       */
+      if (trumplessChoicePending(v.config, st)) {
+        for (const mode of ['betl', 'durch'] as const) {
+          out.push({ type: 'declare', seat: me, mode, sedma: false, kilo: false });
+        }
+        break;
+      }
+
+      /*
        * Licitovaný: ohlášený závazek „nesmí být v dané posloupnosti níže, než
        * jej zavazuje výška ukončené licitace, může se však jednat o JAKÝKOLIV
        * VYŠŠÍ druh závazku" (Obecná pravidla čl. VII/3). Neporovnává se tedy
@@ -295,13 +323,30 @@ export function legalActions(v: PlayerView): PlayerAction[] {
        * VII/1): aktér po odhozu nabídne soupeřům hru bez trumfů, a teprve po
        * jejich souhlasu hlásí závazek. Ptát se má ale jen ten, kdo barevnou
        * hru opravdu HRÁT MŮŽE — s esem nebo desítkou v talonu (odhodit je smí,
-       * počítá-li s betlem/durchem) mu zbývá právě betl a durch.
+       * počítá-li s betlem/durchem) mu zbývá právě betl a durch, a ty hlásí
+       * rovnou (talon už odhodil).
        */
-      const askable = me !== stT.declarer || stT.mode !== null || colourDeclarationPossible(v, stT);
-      if (askable) out.push({ type: 'takeover', seat: me, claim: 'good' });
-      const currentRank = MODE_RANK[stT.mode ?? 'hra'];
-      if (MODE_RANK.betl > currentRank) out.push({ type: 'takeover', seat: me, claim: 'betl' });
-      if (MODE_RANK.durch > currentRank) out.push({ type: 'takeover', seat: me, claim: 'durch' });
+      if (stT.mode === null) {
+        if (me === stT.declarer) {
+          if (colourDeclarationPossible(v, stT)) out.push({ type: 'takeover', seat: me, claim: 'good' });
+          out.push({ type: 'takeover', seat: me, claim: 'betl' });
+          out.push({ type: 'takeover', seat: me, claim: 'durch' });
+        } else {
+          /*
+           * Obránce barvu buď schválí, nebo „sebere odložený talon a následně
+           * po odhozu jiného talonu ohlásí Betl či Durch" (čl. VII/1). Druh hry
+           * tedy NEHLÁSÍ teď — vybere ho až s talonem v ruce (fáze `declare`).
+           * Dřív musel nárokovat betl/durch naslepo a volba se mu zamkla.
+           */
+          out.push({ type: 'takeover', seat: me, claim: 'good' });
+          out.push({ type: 'takeover', seat: me, claim: 'take' });
+        }
+        break;
+      }
+      // hru bez trumfů už někdo ohlásil: „z ohlášeného Betla mohou zbývající
+      // dva hráči přebrat hru ještě na Durcha" (čl. VII/1), durch je konečný
+      out.push({ type: 'takeover', seat: me, claim: 'good' });
+      if (MODE_RANK.durch > MODE_RANK[stT.mode]) out.push({ type: 'takeover', seat: me, claim: 'durch' });
       break;
     }
 

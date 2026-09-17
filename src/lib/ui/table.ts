@@ -7,7 +7,7 @@
  */
 
 import { sortHand, suitOf, card as mkCard, KRAL, SVRSEK, type Card, type OrderMode, type Suit } from '../cards';
-import { legalActions, passSettlesWithoutPlay } from '../rules/legal';
+import { legalActions, passSettlesWithoutPlay, trumplessChoicePending } from '../rules/legal';
 import { orderMode, trickWinner } from '../rules/tricks';
 import type { Contract, GameMode, GameState, PlayerAction, PlayerView, Seat } from '../rules/types';
 import { forhont } from '../rules/types';
@@ -479,8 +479,8 @@ export class TableUI {
   /**
    * Trumf odložený stranou na stole (jako v originále).
    *
-   * Ve VOLENÉM leží konkrétní ukázaná karta (`revealedTrump` — veřejná i u volby
-   * „z lidu"). V LICITOVANÉM se žádná karta neukazuje, trumf je jen barva
+   * Ve VOLENÉM leží konkrétní zvolená karta lícem dolů (`revealedTrump` — vidí
+   * ji jen volící, Čl. VII/1, i u volby „z lidu"). V LICITOVANÉM se žádná karta neodkládá, trumf je jen barva
    * z deklarace — pak leží destička se symbolem barvy, aby se nepředstíralo,
    * že padla karta, která nepadla.
    */
@@ -981,7 +981,8 @@ export class TableUI {
             );
             if (!action) return;
             // rizikové odhozy potvrdit popupem vestavěným do stolu
-            const warns = discardWarnings(v.hand, cards, knownMode(v)).map((w) =>
+            // hra bez trumfů (i když druh ještě nepadl): varování nemají o čem být (§27)
+            const warns = discardWarnings(v.hand, cards, knownTrumpless(v) ? 'betl' : knownMode(v)).map((w) =>
               w.kind === 'valuable' ? t('talonWarn') : marriageWarn(w.suit),
             );
             if (warns.length > 0) this.showConfirmPopup(warns, t('discardConfirm'), () => this.cb.onAction(action));
@@ -1067,7 +1068,8 @@ export class TableUI {
     } else if (iAct) {
       const hint: Partial<Record<string, string>> = {
         'choose-trump': t('chooseTrump'),
-        'discard-talon': t('discard'),
+        // kdo sebral talon, odhazuje na hru bez trumfů a druh vybere až pak
+        'discard-talon': knownTrumpless(v) && knownMode(v) === null ? t('takeHint') : t('discard'),
         declare: t('declare'),
         bidding: t('bidding'),
         takeover:
@@ -1436,8 +1438,24 @@ export function trumpAsideOf(
  * tím neprozradí — příhozy i nároky jsou veřejné.
  */
 export function handOrderMode(v: PlayerView): OrderMode {
+  if (knownTrumpless(v)) return 'natural';
   const mode = knownMode(v);
   return mode === null ? 'trump' : orderMode(mode);
+}
+
+/**
+ * Hraje se (nebo se bude hrát) bez trumfů? Platí pro betl a durch — a taky
+ * pro obránce, který ve voleném sebral talon a druh hry bez trumfů teprve
+ * vybere (čl. VII/1): desítka mu už teď klesá pod spodka a eso v talonu ho
+ * nemá o čem varovat.
+ */
+export function knownTrumpless(v: PlayerView): boolean {
+  const mode = knownMode(v);
+  if (mode === 'betl' || mode === 'durch') return true;
+  const p = v.phase;
+  const standing =
+    p.name === 'discard-talon' || p.name === 'declare' || p.name === 'takeover' ? p.standing : null;
+  return standing !== null && trumplessChoicePending(v.config, standing);
 }
 
 /**
@@ -1542,6 +1560,7 @@ export function bubbleText(a: PlayerAction, state: GameState): string | null {
        */
       return declareLabel(a, state.contract?.trump ?? standingTrumpOf(state));
     case 'takeover':
+      if (a.claim === 'take') return t('take');
       if (a.claim !== 'good') return `${t(a.claim)}!`;
       return t(isColourQuestion(a, state) ? 'askColour' : 'good');
     case 'flek': {
