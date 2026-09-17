@@ -877,7 +877,7 @@ const KULE = 2 as const;
   type Act = ReturnType<typeof legalActions>[number];
   const nap = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
-  // ── i6: nečervený sedmový závazek vyžaduje NEČERVENOU sedmu ──────────────
+  // ── sedmový závazek: nečervený stačí JAKÁKOLI sedma, červený jen červená ─
   {
     const base = defaultConfig('licitovany');
     const mkView = (hand: number[]): Parameters<typeof legalActions>[0] => ({
@@ -889,19 +889,62 @@ const KULE = 2 as const;
     // ruka, kde JEDINÁ sedma je červená
     const onlyRedSeven = [mk2(CE, S7b), mk2(1, Ab), mk2(1, Tb), mk2(2, Kb), mk2(2, SVb),
       mk2(3, Ab), mk2(3, Tb), mk2(1, Kb), mk2(2, Ab), mk2(3, Kb)];
-    const bids = legalActions(mkView(onlyRedSeven)).filter((a) => a.type === 'bid' && a.bid !== 'pass');
-    const kinds = bids.map((a) => (a.type === 'bid' && a.bid !== 'pass' ? `${a.bid.kind}${a.bid.cervena ? '-č' : ''}` : ''));
-    assert.ok(!kinds.includes('sedma'), `nečervená sedma nabídnuta jen s červenou sedmou: ${kinds.join(',')}`);
-    assert.ok(!kinds.includes('sto-sedma'), 'nečervené sto a sedma nabídnuto bez nečervené sedmy');
+    const bidKinds = (hand: number[]): string[] =>
+      legalActions(mkView(hand))
+        .flatMap((a) => (a.type === 'bid' && a.bid !== 'pass' ? [`${a.bid.kind}${a.bid.cervena ? '-č' : ''}`] : []));
+    const kinds = bidKinds(onlyRedSeven);
+    /*
+     * Vysoutěžený stupeň je MINIMUM (Obecná pravidla čl. VII/3, §25), a červená
+     * sedma stojí v žebříčku NAD nečervenou (licitovaný čl. I). Kdo drží červenou
+     * sedmu, umí tedy pokrýt i nečervený sedmový závazek — ohlásí červenou
+     * variantu. Dřív se mu nenabízel a hráč s červenou sedmou nemohl začít
+     * licitaci nejnižším stupněm.
+     */
+    assert.ok(kinds.includes('sedma'), `s červenou sedmou má jít licitovat i nečervená sedma: ${kinds.join(',')}`);
+    assert.ok(kinds.includes('sto-sedma'), 's červenou sedmou má jít licitovat i nečervené sto a sedma');
     assert.ok(kinds.includes('sedma-č'), 'červená sedma se s červenou sedmou nabídnout má');
+    // …a bez jakékoli sedmy se sedmový závazek nenabízí vůbec (omyl neúčtujeme)
+    const noSeven = [mk2(CE, Ab), mk2(CE, Tb), mk2(1, Ab), mk2(1, Tb), mk2(2, Kb), mk2(2, SVb),
+      mk2(3, Ab), mk2(3, Tb), mk2(1, Kb), mk2(3, Kb)];
+    const kindsNoSeven = bidKinds(noSeven);
+    for (const forbidden of ['sedma', 'sedma-č', 'sto-sedma', 'sto-sedma-č']) {
+      assert.ok(!kindsNoSeven.includes(forbidden), `bez sedmy se „${forbidden}" licitovat nesmí`);
+    }
+    assert.ok(kindsNoSeven.includes('sto'), 'sto bez sedmy licitovat lze');
     // „dvě sedmy" se nesmí nabízet vůbec (scoring je neumí)
     assert.ok(!kinds.some((k) => k.startsWith('dve-sedmy')), 'dvě sedmy se nesmí licitovat');
     const twoSevens = [mk2(CE, S7b), mk2(1, S7b), ...onlyRedSeven.slice(1, 9)];
-    const kinds2 = legalActions(mkView(twoSevens))
-      .flatMap((a) => (a.type === 'bid' && a.bid !== 'pass' ? [`${a.bid.kind}${a.bid.cervena ? '-č' : ''}`] : []));
+    const kinds2 = bidKinds(twoSevens);
     assert.ok(kinds2.includes('sedma'), 's nečervenou sedmou se nečervená sedma nabídnout má');
     assert.ok(!kinds2.some((k) => k.startsWith('dve-sedmy')), 'dvě sedmy se nesmí licitovat ani se dvěma sedmami');
-    console.log('PASS regrese i6/i2 — sedmový závazek podle barvy sedmy, dvě sedmy nenabízeny');
+    // a nečervená sedma na červený závazek nestačí — ten chce právě tu červenou
+    const onlyGreenSeven = [mk2(1, S7b), ...onlyRedSeven.slice(1, 10)];
+    const kinds3 = bidKinds(onlyGreenSeven);
+    assert.ok(kinds3.includes('sedma'), 's nečervenou sedmou jde nečervená sedma');
+    assert.ok(!kinds3.includes('sedma-č'), 'červenou sedmu bez červené sedmy licitovat nelze');
+    assert.ok(!kinds3.includes('sto-sedma-č'), 'červené sto a sedma bez červené sedmy licitovat nelze');
+
+    /*
+     * A hlavně: vysoutěžená nečervená sedma JDE s červenou sedmou pokrýt —
+     * deklarace nabídne sedmu v červené. Bez toho by nová větev vedla na
+     * zaseknutou hru bez legální akce.
+     */
+    const declareView = {
+      ...mkView([mk2(CE, S7b), mk2(CE, Kb), mk2(CE, SVb), mk2(1, Ab), mk2(1, Tb),
+        mk2(2, Kb), mk2(2, SVb), mk2(3, Ab), mk2(3, Kb), mk2(3, SVb)]),
+      talon: [mk2(1, Kb), mk2(2, S7b)],
+      phase: {
+        name: 'declare' as const,
+        standing: { declarer: 0 as const, mode: null, trump: null, bid: { kind: 'sedma' as const, cervena: false } },
+      },
+    } as Parameters<typeof legalActions>[0];
+    const declares = legalActions(declareView).flatMap((a) => (a.type === 'declare' ? [a] : []));
+    assert.ok(declares.length > 0, 'vysoutěžená sedma musí jít deklarovat');
+    assert.ok(
+      declares.some((a) => a.sedma && a.trump === CE),
+      'pokrytí nečervené sedmy = ohlásit sedmu v červené',
+    );
+    console.log('PASS licitace — sedmový závazek podle sedem v ruce (nečervený i z červené)');
   }
 
   // ── i19: house rule talonForbidsTrump — filtr odhozu ho musí respektovat ──

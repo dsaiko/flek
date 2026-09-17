@@ -160,20 +160,26 @@ export function legalActions(v: PlayerView): PlayerAction[] {
       const mayHoldEqual =
         phase.best !== null && holder !== undefined && order.indexOf(me) < order.indexOf(holder);
       /*
-       * Sedmový závazek smí slíbit jen ten, kdo drží sedmu v barvě, která se
-       * pak SMÍ stát trumfem: u červeného závazku výhradně červenou, u ostatních
-       * jen nečervenou (trumf tam červená být nemůže). Jinak by závazek nešlo
-       * ve fázi `declare` pokrýt a hra by se zasekla bez legální akce.
+       * Sedmový závazek smí slíbit jen ten, kdo ho pak dokáže deklarací pokrýt —
+       * jinak by se hra zasekla bez legální akce (omyl podle licitovaných pravidel
+       * čl. 17 neúčtujeme, viz README).
+       *
+       * Pozor na past: vysoutěžený stupeň je MINIMUM, ne přesný předpis (Obecná
+       * pravidla čl. VII/3, viz §25). Kdo drží ČERVENOU sedmu, umí pokrýt i
+       * nečervený sedmový závazek — ohlásí červenou variantu, která je v žebříčku
+       * o stupeň výš (licitovaný čl. I: 1 sedma, 2 sedma červená; 4 sto a sedma,
+       * 6 sto a sedma červených). Nečervený závazek proto stačí JAKÁKOLI sedma,
+       * červený výhradně ta červená.
        */
       const hasCervenaSeven = v.hand.includes(card(CERVENE, R7));
-      const hasNonCervenaSeven = v.hand.some((c) => rankOf(c) === R7 && suitOf(c) !== CERVENE);
+      const hasAnySeven = v.hand.some((c) => rankOf(c) === R7);
       for (const b of ALL_BIDS) {
         const rank = bidRank(b);
         if (rank < minRank || (rank === minRank && !mayHoldEqual)) continue;
         // „dvě sedmy" scoring neumí (viz §10) — nenabízí se ani se zapnutým configem
         if (b.kind === 'dve-sedmy' || b.kind === 'dve-sedmy-sto') continue;
         const needsSeven = b.kind === 'sedma' || b.kind === 'sto-sedma';
-        if (needsSeven && !(b.cervena ? hasCervenaSeven : hasNonCervenaSeven)) continue;
+        if (needsSeven && !(b.cervena ? hasCervenaSeven : hasAnySeven)) continue;
         out.push({ type: 'bid', seat: me, bid: b });
       }
       break;
