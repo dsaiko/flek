@@ -43,7 +43,9 @@ independently through the _flek_ ladder — flek, re, tutti, boty, kalhoty — a
 red trump doubles the colour contracts again.
 
 The UI speaks Czech, English, German and French, and the money is kept across
-hands in a running account.
+hands in a running account. The question mark at the bottom left opens an
+in-game help with the rules in plain language, links to the official ones, the
+tributes and the card attribution — in all four languages.
 
 ### Rules
 

@@ -824,6 +824,40 @@ if (!fromPeopleCancelled) {
 }
 
 /*
+ * Nápověda: otazník vlevo v liště ji otevře, Esc zavře. Jazykové bloky leží
+ * v DOM všechny čtyři vedle sebe, takže rozbité přepínání by je ukázalo pod
+ * sebou — kontroluje se proto, že vidět je právě jeden a ten správný.
+ */
+{
+  await page.click('#btn-help');
+  await page.waitForSelector('#help-float:not([hidden])', { timeout: 3000 });
+  const visibleBlocks = await page.locator('#help-body > div:visible').count();
+  // `innerText` vrací text tak, jak se VYKRESLÍ — nadpisy mají text-transform,
+  // takže se porovnává bez ohledu na velikost písmen
+  const helpCs = (await page.locator('#help-body').innerText()).trim().toLowerCase();
+  await setLang('en');
+  const helpEn = (await page.locator('#help-body').innerText()).trim().toLowerCase();
+  await setLang('cs');
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(150);
+  const closed = (await page.locator('#help-float:not([hidden])').count()) === 0;
+  const problems: string[] = [];
+  if (visibleBlocks !== 1) problems.push(`viditelných jazykových bloků ${visibleBlocks}, má být 1`);
+  for (const must of ['jak se hraje', 'volený', 'licitovaný', 'pivoňka', 'saikovi', 'kratochvíl']) {
+    if (!helpCs.includes(must)) problems.push(`v české nápovědě chybí „${must}"`);
+  }
+  if (!helpEn.includes('how it is played')) problems.push('anglická nápověda se nepřepnula');
+  if (helpEn.includes('jak se hraje')) problems.push('v anglické nápovědě zůstal český text');
+  if (!closed) problems.push('Esc nápovědu nezavřel');
+  if (problems.length > 0) {
+    console.error(`CHYBA: nápověda — ${problems.join('; ')}`);
+    await browser.close();
+    process.exit(1);
+  }
+  console.log(`Nápověda: otevře se, přepíná jazyk (${helpCs.length} znaků česky) a Esc ji zavře`);
+}
+
+/*
  * Stůl se musí vejít do okna BEZ scrollování. Rám má pevný poměr 1400/900, tak
  * že v širokém okně roste i do výšky — 1440×900 (MacBook s prohlížečem přes
  * celou obrazovku) je přesně ten případ, kdy spodek stolu utekl pod okraj.

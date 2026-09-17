@@ -1619,3 +1619,61 @@ Smoke otevře stránku v okně **1440×900** — přesně tom, kde to selhávalo
 `scrollHeight` s `innerHeight`. Negativní kontrolou ověřeno: se starou šířkou smoke spadne
 („obsah 934 px, okno 900 px"). Ručně proměřeno osm velikostí od 820×1180 po 2560×1440, všechny
 se vejdou bez scrollování.
+
+## 31. Nápověda za otazníkem (2026-09-17)
+
+Uživatelovo zadání: *„ve stavovém řádku dole máme vpravo nastavení atd. Doleva bych chtěl otazník,
+který by vedl na nápovědu. Tam dáme v lidském jazyku pravidla mariáše, odkazy na oficiální pravidla,
+tribute Jaroslavu Pivoňkovi a otci Josefu Saikovi."*
+
+Tím se zavírají tři položky z TODO najednou: **pravidla vlastními slovy ve čtyřech jazycích**,
+dialog **„O aplikaci"** a s ním **atribuce licence karetních sad**, která zmizela, když padla
+patička.
+
+### Jak je to udělané
+
+- **Otazník vlevo** v liště (`#btn-help`); lišta má nově `justify-content: space-between`, vpravo
+  zůstává všechno ostatní.
+- **Panel `#help-float`** je stejný modální vzor jako nastavení: překrytí přes sukno, zavírá křížek,
+  „Hotovo", klik mimo i Esc. Textu je na jednu obrazovku moc, takže tělo scrolluje uvnitř panelu
+  a velikost písma jde z `cqh` jako zbytek stolu.
+- **Čtyři jazyky vedle sebe** jako bloky `div.cs / .en / .de / .fr`; skrývá je pravidlo
+  `.lang-xx .yy { display: none }`, které na stránce už existovalo. Žádný nový i18n mechanismus.
+- Obsah: jak se hraje → **volený vs. licitovaný** (na vyžádání doplněno: kdo volí trumf, „z lidu",
+  otázka „Barva?", převzetí jen betlem/durchem × dražba, vysoutěžený stupeň jako minimum) → závazky
+  → flekování a peníze → odkazy na ČSM → pocta Pivoňkovi a otci → licence karetních sad.
+- V patičce panelu je **verze** (`package.json` se importuje v Astro frontmatteru) a odkaz na repo.
+
+### Dvě věci, které to odhalilo
+
+**Z-index.** Závazek uprostřed sukna (§29) má `z-index: 12`, ale oba modální panely měly 8 a 6 —
+takže se přes otevřenou nápovědu i nastavení prokreslovala destička se závazkem. Modály jsou teď
+na 24.
+
+**Jazyk za otevřeným panelem.** Dropdown vlajek vyjíždí nahoru přes sukno, takže ho překrytí
+nápovědy zakrývalo a jazyk nešlo přepnout — zrovna v nápovědě, kde to člověk potřebuje nejvíc.
+`.langpill` je proto na 26, nad modály.
+
+### Testy
+
+Smoke otevře nápovědu, ověří, že je vidět **právě jeden** jazykový blok a že obsahuje pravidla,
+obě varianty, Pivoňku, věnování i atribuci karet; přepne jazyk a zkontroluje, že se text opravdu
+vyměnil; zavře ji Esc. Negativní kontrolou ověřeno — když jazykový blok přestane být jazykový
+(`class="cs-broken"`), smoke spadne na tom, že v anglické nápovědě zůstal český text.
+
+## 32. Víc hlášek, delší paměť (2026-09-17)
+
+Uživatel: *„hlášky jsou dobrý, ale dost se opakují."*
+
+Hlášek bylo 664 — ale to je součet přes tři sady a čtyři jazyky. Hráč slyší jen **jednu buňku**:
+svou sadu, svůj jazyk, jednu situaci, a tam jich bylo osm. `accept` přitom v jednom rozdání padne
+klidně šestkrát. K tomu se paměť „nedávno řečených" držela jen **šesti** posledních hlášek, takže
+vyhýbání se vyčerpalo a repertoár se zúžil ještě víc.
+
+- Každá buňka je zhruba **dvojnásobná** (14–18 hlášek), celkem **1304** textů.
+- `RECENT_TALK` je **14** a je exportovaný, aby na něj mohl sáhnout test.
+- Test hlídá minimum 14 hlášek na buňku a hlavně invariant: **okno nedávných musí být menší než
+  nejkratší tabulka**, jinak se vyhýbání vyčerpá a je to zase tam, kde to bylo.
+
+Hygiena zůstává: bez HTML, do 46 znaků, vulgární sada dál bez nadávek na skupiny lidí a bez
+sexuálně ponižujících hlášek.

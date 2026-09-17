@@ -236,6 +236,28 @@ const openSettings = (open: boolean): void => {
   if (open) nameInput.placeholder = t('you');
 };
 $('btn-settings').addEventListener('click', () => openSettings(settingsFloat.hidden === true));
+
+/*
+ * Nápověda: stejný modální vzor jako nastavení. Otevřená nápověda zavírá
+ * nastavení a naopak — dva průhledné panely přes sebe by se nedaly číst.
+ */
+const helpFloat = $<HTMLElement>('help-float');
+const openHelp = (open: boolean): void => {
+  helpFloat.hidden = !open;
+  if (open) {
+    openSettings(false);
+    $('help-body').scrollTop = 0; // otevřít vždy od začátku, ne tam, kde se minule skončilo
+  }
+};
+$('btn-help').addEventListener('click', () => openHelp(helpFloat.hidden === true));
+$('help-close').addEventListener('click', () => openHelp(false));
+$('help-close-x').addEventListener('click', () => openHelp(false));
+helpFloat.addEventListener('click', (ev) => {
+  if (ev.target === helpFloat) openHelp(false); // klik mimo panel zavírá
+});
+document.addEventListener('keydown', (ev) => {
+  if (ev.key === 'Escape' && helpFloat.hidden !== true) openHelp(false);
+});
 $('settings-close').addEventListener('click', () => openSettings(false));
 settingsFloat.addEventListener('click', (ev) => {
   if (ev.target === settingsFloat) openSettings(false); // klik mimo panel zavírá
