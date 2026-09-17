@@ -25,13 +25,15 @@ The declarer takes the talon, discards two cards and commits to a contract; the
 defenders may double it. Ten tricks are played, aces and tens are worth ten
 points each, the last trick another ten, and a king with the ober of the same
 suit is worth 20 (40 in trumps) when its holder announces it while playing the
-first card of the pair.
+first card of the pair. The ten sits just below the ace **only in games with a
+trump**; in betl and durch it is a lower card than the unter of the same suit,
+and the hand is sorted the way the tricks are judged.
 
 Two variants ship, both playable from the opening screen:
 
 | Variant                  | Original | How the contract is decided                                                                                                    |
 | ------------------------ | -------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| **Chosen** (volený)      | FLEK!    | Forehand picks the trump from their first seven cards and announces the game. Opponents may only take over with betl or durch. |
+| **Chosen** (volený)      | FLEK!    | Forehand picks the trump from their first seven cards (or blind, from the second five), asks the defenders whether a colour game stands, and announces the contract only after they answer. They may take it over with betl or durch. |
 | **Auction** (licitovaný) | RE!      | Players bid for the contract; a higher commitment beats a lower one, and the winner takes the talon.                           |
 
 Beyond the plain game, players commit to **seven** (winning the last trick with
@@ -107,7 +109,8 @@ make dev
 Checks and build:
 
 ```bash
-make verify        # engine tests, no browser (76 blocks of assertions)
+make verify        # engine tests, no browser (91 blocks of assertions)
+make build         # typecheck + static build into dist/
 make smoke         # browser tests (Playwright: Chromium + WebKit)
 make all           # verify + build + smoke
 make preview
@@ -152,7 +155,10 @@ and the same redacted object is what a server would send to a remote client.
 The table is sized from the **height of the felt** (`container-type: size` plus
 `cqh` units), because the layout is height-constrained: the opponents, the trick
 and your hand have to fit above each other. The proportions therefore hold in a
-window, in fullscreen and at other aspect ratios.
+window, in fullscreen and at other aspect ratios. The frame keeps a fixed
+1400/900 ratio, so its width is capped by the window height as well — the whole
+table has to fit on screen without scrolling, and a smoke test checks exactly
+that at 1440x900.
 
 ## Cards
 
