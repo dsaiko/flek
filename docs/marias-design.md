@@ -834,7 +834,7 @@ Před deployem `make build && make preview` + `make deploy-s3-dryrun`.
 - Talon při převzetí betlem/durchem: kdo viděl co — `talonKnown` per hráč, ne jeden flag
 - Tichá sedma/kilo se nedají flekovat (vznikají až při zúčtování); flek na sedmu jen byla-li hlášena
 - Červený násobek jen pro barevné hry (červený betl neexistuje — nemá trumf)
-- Forhont = hráč po rozdávajícím; všechna pořadí mluvení (takeover, fleky) začínají od forhonta
+- Forhont = hráč po rozdávajícím; pořadí mluvení (převzetí, fleky) jde **ve směru hraní od toho, kdo hlásil** (aktér, resp. kdo vznesl nárok). U aktéra-forhonta je to totéž jako „od forhonta“, jinde ne (§34)
 - Determinizátor nikdy nesmí dostat `GameState` — typově vynuceno (`PlayerView` only)
 
 ## 10. Otevřené otázky k revizi
@@ -1716,3 +1716,55 @@ s nečervenou sedmou naopak červené varianty ne, a **bez jakékoli sedmy žád
 Navíc se ověřuje pointa — že vysoutěžená nečervená sedma opravdu JDE pokrýt: deklarace nabídne
 sedmu v červené. Negativní kontrolou ověřeno; se starým filtrem test vypíše přesně tu nabídku
 ze screenshotu (`sedma-č, sto, sto-č, sto-sedma-č, betl, durch`).
+
+## 34. Review pravidel a férovosti AI — třetí kolo (2026-09-18)
+
+Dvě nezávislá review (Codex a Claude) nad celým enginem proti třem dokumentům ČSM a nad tokem
+dat do AI. **Férovost AI potvrzena oběma**: worker dostává jen `PlayerView`, `phase` nenese nic
+skrytého, simulace v ISMCTS volá totéž `view()` nad determinizovaným stavem, seedy hledání jsou
+nezávislé na seedu rozdání. Nálezy se validovaly proti kódu i PDF; závažnost od Codexu se dvakrát
+snížila s citací.
+
+### Zapracováno
+
+| # | Zdroj | Nález | Pravidlo | Oprava |
+|---|---|---|---|---|
+| 1 | oba | `maxFlekLevel: 5` v obou variantách. V licitovaném je čtvrtý flek (boty) poslední platný. Codex dal „vysoká" pro obě varianty — pro volený to z PDF **neplyne** (C/3 odkazuje na bodovací tabulku v příloze, kterou text nemá), takže volený drží kalhoty | licitovaný čl. IV „flek nad rámec posledního platného fleku (čtvrtého)" | `defaultConfig('licitovany')` dává `maxFlekLevel: 4`; `SAZBY_CSM` (peníze) sdílený dál |
+| 2 | Claude | **Převzetí ve voleném běželo obráceně**: obránce nárokoval betl/durch naslepo a po zvednutí talonu měl volbu zamčenou. ČSM: obránce „sebere odložený talon a následně po odhozu jiného talonu ohlásí Betl či Durch" — volí s dvanácti kartami | Obecná VII/1 | Nový nárok `take`: obránce zvedne talon (`talonKnowledge`), odhodí, a ve fázi `declare` vybírá betl/durch (`trumplessChoicePending`). Po ohlášeném betlu se převzetí otevře znovu, „zbývající dva hráči" mohou na durch; durch jde rovnou do fleků. Aktér sám hlásí betl/durch dál rovnou (talon už odhodil). House rule `keep` talon nechává ležet |
+| 3 | Claude | Pořadí mluvení začínalo vždy u forhonta (§9). Ve voleném s aktérem-forhontem shoda; v licitovaném s aktérem-prostředním mluvil první forhont místo zadáka, a po nároku prostředního při převzetí taky | Obecná V/4 „v pořadí ve směru hraní", volený B/11 „sled hodinových ručiček" | `speakingOrder(after)` = dvě sedadla po levici toho, kdo hlásil; užívá se u fleků i převzetí |
+| 4 | Claude | Zastaralé komentáře tvrdily, že zvolená trumfová karta je „veřejná (i z lidu)" — v `engine.ts`, `types.ts` i `table.ts`; přesně ten typ komentáře, který dřív schovával únik (§24) | Obecná VII/1 | Přepsány: karta leží lícem dolů, vidí ji jen volící |
+| 5 | Codex | Test úniku chodil jen po vyjmenovaných klíčích; nové pole s kartami by proklouzlo | — | Nový blok „tvar pohledu": **přísný allowlist klíčů** na každé úrovni `PlayerView` (view, config, contract, standing, každá fáze, každý typ akce v historii, výsledky) a **non-interference**: prohození skrytých karet mezi soupeři a s talonem nesmí pohled změnit ani o bit (3 849 pohledů) |
+| 6 | Claude | Vyúčtování ukazovalo talon po každé hře | licitovaný čl. II/11 „při betlu a durchu však nelze do talonu nahlédnout ani po hře"; volený B/8 to po hře dovoluje | `replayHtml` v licitovaném betlu/durchu talon nevykreslí |
+
+Vzdání se sebraným talonem (před volbou betl/durch) platí **aspoň betl** — zvednutý talon
+nesmí být levným únikem za sazbu hry (`contractToSettle`). AI: obránce bere talon, když má na
+betl nebo durch už s deseti kartami; odhazuje podle toho, kam se s dvanácti spíš vejde.
+
+### Zamítnuto / odloženo (s odůvodněním)
+
+| Nález | Proč |
+|---|---|
+| Codex: betl/durch — výnosová karta má ležet lícem dolů **před** ohlášením (Obecná IV/6–7) | Platí, ale volený B/7 to formuluje jako možnost („pokud … položí"), striktní „musí" je jen v Obecných. Vyžaduje nový krok UI (výběr karty před tlačítkem Betl/Durch), skrytý payload v akci `declare` a jeho redakci; zisk informace proti AI zanedbatelný. **Odloženo**, není součástí tohoto kola |
+| Claude: „sto proti" proti hlášenému stu nejde (`kilo: Seat \| null`) | B/20 to nezakazuje, ale model by potřeboval dva držitele kila a dvojznačný flek `kilo`. Vzácné; **odloženo** |
+| Codex: `autoSettlePlainHra` default | Domácí pravidlo podle FLEK!, potvrzené uživatelem („dobrá hra se nehraje"). Návrh „striktní ČSM" presetu je k zvážení, ne oprava |
+| Codex: README odkazuje na licitovaná pravidla 2014, ČSM má 2023 | Dokument 2023 je pro **míchaný** bodovaný licitovaný mariáš (jiný soutěžní formát); bod o čtvrtém fleku v něm zůstává. Reference se nemění |
+| Codex: rozsah (dvě sedmy, omyl, ložené hry, renonce, jedno zvýšení na tah) | Vědomě mimo rozsah, přiznané v §25 a README |
+| Codex: AI po převzetí nevyužívá znalost vlastního odhozu | Síla AI, ne férovost. Beze změny |
+
+### Testy
+
+Nové bloky ve `scripts/verify.ts` (každý s negativní kontrolou — vrácení opravy test shodí):
+
+- **převzetí**: obránce má jen `good`/`take`, po `take` drží 12 karet a talon vidí jen on; po odhozu
+  je k volbě právě betl a durch; po betlu se převzetí otevře znovu u hráče po levici, nabízí se jen
+  `good`/`durch`; durch z betla zvedá talon, odhazuje a má nárok zamčený; ohlášený durch jde rovnou do
+  fleků; aktér sám hlásí betl/durch rovnou
+- **pořadí**: aktér-prostřední v licitovaném → první komentuje zadák, pak forhont, kola se střídají
+- **strop fleků**: v licitovaném po botách pátý flek není, ve voleném kalhoty ano a nad ně ne
+- **tvar pohledu**: allowlist klíčů + non-interference (viz výš)
+- **vyúčtování**: talon v licitovaném betlu/durchu chybí, v hře i ve voleném je
+
+Upravené: i1 a i50 (převzetí jde přes `take` → odhoz → deklarace), i12 (driver AI bere talon a
+hlásí betl), vzdání po převzetí (dvě větve: se sebraným talonem platí betl, nárok na durch platí
+durch), i7 (peněžní sazebník sdílený, strop fleků ne), vějíř (standing bez trumfu ve voleném =
+hra bez trumfů, v licitovaném ne).

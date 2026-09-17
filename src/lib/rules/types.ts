@@ -186,8 +186,15 @@ export type PlayerAction =
   | { type: 'declare'; seat: Seat; mode: GameMode; sedma: boolean; kilo: boolean; dveSedmy?: boolean;
       /** Licitovaný s nefixovaným trumfem: volba trumfu při deklaraci. */
       trump?: Suit }
-  /** Volený: reakce obránců — dobrá, nebo převzetí betlem/durchem. */
-  | { type: 'takeover'; seat: Seat; claim: 'betl' | 'durch' | 'good' }
+  /**
+   * Volený, fáze převzetí (Obecná pravidla čl. VII/1):
+   *  - `good`  — aktér se ptá „Barva?", obránce barvu schvaluje
+   *  - `take`  — obránce „sebere odložený talon": zvedne ho, odhodí jiný a
+   *              TEPRVE PAK ohlásí betl či durch (volí s dvanácti kartami)
+   *  - `betl`/`durch` — aktér hlásí hru bez trumfů rovnou (talon už odhodil);
+   *              `durch` je i nárok, kterým se „z ohlášeného Betla" přebírá dál
+   */
+  | { type: 'takeover'; seat: Seat; claim: 'betl' | 'durch' | 'good' | 'take' }
   | { type: 'flek'; seat: Seat; target: FlekTarget }
   | { type: 'good'; seat: Seat }
   /** Obránce během flekování hlásí sedmu/sto PROTI (než na komponentu padne flek). */
@@ -251,9 +258,11 @@ export interface GameState {
   unseen: Card[];
   talon: Card[]; // aktuálně odložené karty (0 nebo 2)
   /**
-   * Trumfová karta, kterou aktér VEŘEJNĚ ukázal (volený mariáš). U volby
-   * „z lidu" je otočená karta veřejná, ale v akci je jen `'from-people'` —
-   * proto se konkrétní karta drží ve stavu, aby ji viděla i AI.
+   * Trumfová karta, kterou forhont zvolil (volený mariáš). Leží stranou
+   * LÍCEM DOLŮ (ČSM, Obecná pravidla Čl. VII/1) — i u volby „z lidu" —, takže
+   * je to SKRYTÁ informace: `view()` ji dává jen volícímu a `redact()` ji
+   * z historie vynechává. Ve stavu se drží, protože u „z lidu" ji akce nenese
+   * (jen `'from-people'`) a volící ji potřebuje vidět.
    */
   revealedTrump: Card | null;
   /** Kdo aktuální talon odložil (vidí ho); null = nikdo neodložil / leží z rozdání. */
@@ -276,7 +285,7 @@ export interface PlayerView {
   dealer: Seat;
   hand: Card[];
   handCounts: [number, number, number];
-  /** Veřejně ukázaná trumfová karta (viz GameState.revealedTrump). */
+  /** Zvolená trumfová karta — jen ve VLASTNÍM pohledu volícího, jinak null (viz GameState.revealedTrump). */
   revealedTrump: Card | null;
   /** Kolik karet leží v neprohlédnutém balíčku („z lidu") — veřejná informace. */
   unseenCount: number;

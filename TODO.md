@@ -18,7 +18,12 @@ do ruky; soupercova karta rubem (CSM Cl. VII/1). Do talonu nesmi (B/7). Jine
 trumfy do talonu legalni jsou. Pri tom se naslo, ze view() posilal zvolenou
 kartu vsem — AI znala forhontovu kartu. Opraveno. (docs/marias-design.md §24)
 
-overeni funkcnosti podle pravidel + overeni nekoukani do karet
+~~overeni funkcnosti podle pravidel + overeni nekoukani do karet~~ ✅ dve nezavisla review
+(Codex + Claude, design doc §34): AI do karet nevidi (potvrzeno obema, novy test „tvar pohledu“
+s allowlistem klicu a non-interference); opraveno prevzeti ve volenem podle VII/1 (obrance sebere
+talon, odhodi, pak hlasi betl/durch), poradi mluveni ve smeru hry od aktera, strop fleku v
+licitovanem na botach, talon ve vyuctovani licitovaneho betlu/durchu rubem. Odlozeno: vynosova
+karta betlu/durchu licem dolu pred ohlasenim (IV/6–7), „sto proti“ proti hlasenemu stu.
 
 "vse za mnou"
 

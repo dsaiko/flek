@@ -116,7 +116,14 @@ export function replayHtml(state: GameState, r: HandResult, deps: HtmlDeps): str
     </div>`);
   }
 
-  const talon = state.talon.length > 0
+  /*
+   * Talon po hře: ve voleném do něj lze po sehrávce nahlédnout (B/8), v
+   * licitovaném „při betlu a durchu však nelze do talonu nahlédnout ani po
+   * hře" (licitovaný čl. II/11) — tam zůstane rubem.
+   */
+  const talonSecret =
+    state.config.variant === 'licitovany' && (r.contract.mode === 'betl' || r.contract.mode === 'durch');
+  const talon = state.talon.length > 0 && !talonSecret
     ? `<span class="rtalon">${esc(t('talon'))}: ${state.talon.map((c) => cardImg(c)).join('')}</span>`
     : '';
   const pts = r.contract.mode === 'hra'

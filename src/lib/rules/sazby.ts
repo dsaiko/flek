@@ -28,6 +28,13 @@ export const SAZBY_CSM: Sazby = {
   dveSedmy: 40, // ve voleném se nehraje (enableDveSedmy=false), hodnota jen pro úplnost
   kiloScaling: 'linear', // oficiální ČSM; 'double' = hospodská varianta
   cervenyMultiplier: 2,
+  /**
+   * Volený: pravidla odkazují na „bodovací tabulku" (C/3: „flek nad rámec
+   * bodovací tabulky … platí ten, který je ještě v tabulce uveden"), kterou
+   * text nemá, takže zůstává tradiční strop kalhoty (5). Licitovaný má strop
+   * napsaný přímo: „flek nad rámec posledního platného fleku (ČTVRTÉHO)"
+   * (čl. IV, Renoncem není) — viz `defaultConfig`.
+   */
   maxFlekLevel: 5, // kalhoty
   limit: 500, // čl. V/8; volený i licitovaný sazebník shodně 500× základ
   limitRaised: 750, // zvýšený limit, když flekovali oba obránci
@@ -36,7 +43,8 @@ export const SAZBY_CSM: Sazby = {
 export function defaultConfig(variant: Variant): RulesConfig {
   return {
     variant,
-    sazby: SAZBY_CSM,
+    // licitovaný: poslední platný flek je čtvrtý — boty (licitovaný čl. IV)
+    sazby: variant === 'licitovany' ? { ...SAZBY_CSM, maxFlekLevel: 4 } : SAZBY_CSM,
     talonForbidsTrump: false, // ČSM zakazuje jen esa/desítky (a hlášenou sedmu) — viz renonce
     talonOnTakeover: 'retake',
     enableDveSedmy: false, // v1 vypnuto i v licitovaném; typy a žebříček připraveny

@@ -158,7 +158,7 @@ function isHistoryAction(x: unknown): boolean {
       return (a.mode === 'hra' || a.mode === 'betl' || a.mode === 'durch') &&
         typeof a.sedma === 'boolean' && typeof a.kilo === 'boolean';
     case 'takeover':
-      return a.claim === 'betl' || a.claim === 'durch' || a.claim === 'good';
+      return a.claim === 'betl' || a.claim === 'durch' || a.claim === 'good' || a.claim === 'take';
     case 'flek':
       return isFlekTarget(a.target);
     case 'play':
