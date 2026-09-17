@@ -2762,6 +2762,55 @@ const KULE = 2 as const;
     console.log('PASS odložený trumf — stranou místo ruky, lícem dolů u soupeře, do talonu nesmí');
   }
 
+  // ── vějíř v betlu/durchu: desítka patří pod spodka, ne vedle esa ────────
+  {
+    const { handAside, handOrderMode } = await import('../src/lib/ui/table');
+    type HandView = Parameters<typeof handAside>[0];
+    const baseV: HandView = {
+      seat: 0, config: defaultConfig('voleny'), dealer: 2,
+      hand: [ESO, R10, KRAL, SVRSEK, SPODEK, R9].map((r) => card(CERVENE, r)),
+      handCounts: [6, 6, 6], revealedTrump: null, unseenCount: 0,
+      talonKnown: [], talon: null, contract: null,
+      phase: { name: 'tricks', trickNo: 0, leader: 0, toAct: 0, trick: [], played: [],
+        won: [[], [], []], marriages: [] },
+      publicHistory: [], handResults: [], ledger: [0, 0, 0], handNo: 1,
+    };
+    const ranksOf = (v: HandView): number[] => handAside(v).map((c) => rankOf(c));
+    const mkContract = (mode: 'hra' | 'betl' | 'durch'): NonNullable<HandView['contract']> =>
+      ({ mode, trump: null, declarer: 0, sedma: null, kilo: null, dveSedmy: false });
+
+    assert.deepEqual(
+      ranksOf({ ...baseV, contract: mkContract('hra') }),
+      [ESO, R10, KRAL, SVRSEK, SPODEK, R9], 'v barevné hře je desítka hned za esem',
+    );
+    for (const mode of ['betl', 'durch'] as const) {
+      assert.deepEqual(
+        ranksOf({ ...baseV, contract: mkContract(mode) }),
+        [ESO, KRAL, SVRSEK, SPODEK, R10, R9], `${mode}: desítka patří mezi spodka a devítku`,
+      );
+    }
+
+    // vysoutěžený betl platí už při odhozu do talonu, ne až po deklaraci
+    const discarding = (mode: 'betl' | null): HandView['phase'] =>
+      ({ name: 'discard-talon', standing: { declarer: 0, mode, trump: null, bid: null } });
+    assert.equal(handOrderMode({ ...baseV, phase: discarding('betl') }), 'natural');
+    assert.equal(
+      handOrderMode({ ...baseV, phase: discarding(null) }), 'trump',
+      'dokud závazek není znám, řadí se jako do barevné hry',
+    );
+
+    // převzetí: stojící nárok je novější než už překonaná deklarace v `contract`
+    assert.equal(
+      handOrderMode({
+        ...baseV, contract: mkContract('hra'),
+        phase: { name: 'takeover', toAct: 1, passed: [],
+          standing: { declarer: 1, mode: 'betl', trump: null, bid: null } },
+      }),
+      'natural', 'nárok na betl přebíjí překonanou deklaraci hry',
+    );
+    console.log('PASS vějíř — v betlu/durchu klesá desítka pod spodka (přirozené pořadí)');
+  }
+
   // ── i2: seed musí být celé číslo v rozsahu 32 bitů ─────────────────────
   {
     const { parseSeedParam, createSeedSequence } = await import('../src/lib/match/seedSequence');
