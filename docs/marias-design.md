@@ -1677,3 +1677,42 @@ vyhýbání se vyčerpalo a repertoár se zúžil ještě víc.
 
 Hygiena zůstává: bez HTML, do 46 znaků, vulgární sada dál bez nadávek na skupiny lidí a bez
 sexuálně ponižujících hlášek.
+
+## 33. Nečervený sedmový závazek jde licitovat i s červenou sedmou (2026-09-17)
+
+Uživatelova otázka nad licitací: *„v licitovaném RE není volba normální sedmy a normálního
+100 + sedm?"* — s červenou sedmou v ruce nabízela hra jen `Sedma ♥`, `Sto`, `Sto ♥`,
+`Sto a sedma ♥`, `Betl`, `Durch`. Nečervená sedma a nečervené sto a sedma chyběly.
+
+### Co říkají pravidla
+
+| | |
+|---|---|
+| **Licitovaný, čl. I** | žebříček: 1 sedma, **2 sedma červená**, 3 sto, **4 sto a sedma**, 5 sto červených, **6 sto a sedma červených**, 7 betl, 8 durch |
+| **Obecná pravidla, čl. VII/3** | aktér ohlásí „závazek, který ohlásil, nebo **vyšší druh závazku**" — vysoutěžený stupeň je minimum (§25) |
+| **Licitovaný, čl. 17** | „Hru **Sedma** nelze hrát bez sedmy trumfové v ruce." Kdo vylicituje obyčejnou sedmu a nehraje, platí **omyl**; kdo vylicituje červenou sedmu a nemá ji, „musí hrát jakoukoliv vyšší hru" |
+
+Filtr v `legal.ts` vycházel z domněnky, že u nečerveného závazku „trumf červená být nemůže" —
+jenže **červená sedma je v žebříčku VÝŠ** (stupeň 2 proti 1, 6 proti 4). Kdo ji drží, pokryje
+nečervený závazek tím, že ohlásí červenou variantu. Nenabízet mu nejnižší stupeň znamenalo, že
+hráč s červenou sedmou nemohl otevřít licitaci nejlevnějším závazkem, přestože ho umí uhrát.
+
+### Oprava
+
+Nečervený sedmový závazek nově stačí **jakákoli** sedma, červený dál výhradně ta červená:
+
+```ts
+if (needsSeven && !(b.cervena ? hasCervenaSeven : hasAnySeven)) continue;
+```
+
+Zůstává vědomá odchylka: čl. 16 dovoluje licitovat cokoli **nad** obyčejnou sedmu bez ohledu na
+karty a čl. 17 z toho dělá omyl nebo útěk do vyšší hry. Omyl neúčtujeme (README), takže sedmové
+závazky, které by aktér neuměl deklarovat, se dál nenabízejí.
+
+### Testy
+
+Blok v `scripts/verify.ts`: s červenou sedmou se nabízí `sedma` i `sto-sedma` (a `sedma-č`),
+s nečervenou sedmou naopak červené varianty ne, a **bez jakékoli sedmy žádný sedmový závazek**.
+Navíc se ověřuje pointa — že vysoutěžená nečervená sedma opravdu JDE pokrýt: deklarace nabídne
+sedmu v červené. Negativní kontrolou ověřeno; se starým filtrem test vypíše přesně tu nabídku
+ze screenshotu (`sedma-č, sto, sto-č, sto-sedma-č, betl, durch`).
