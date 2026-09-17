@@ -1586,3 +1586,36 @@ informace, podle které se hráč rozhoduje mezi „Dobrá" a flekem — a lež�
   #contract-center { display: none }`, bez jediného řádku v JS.
 
 Vše v `cqh` podle sazby stolu (§5.2), takže to drží v okně i ve fullscreenu.
+
+## 30. Stůl se musí vejít do okna (2026-09-17)
+
+Uživatelovo hlášení: *„když dám fullscreen browser (ne mariáš, ale browser), tak se mi spodek
+mariáše nevejde na obrazovku a musím scrollovat."*
+
+Rám stolu má pevný poměr **1400/900** (§5.2 — deska z mockupu i s lištou), takže jeho výška plyne
+ze šířky: `width: min(94vw, 1500px)`. V širokém okně tedy roste i do výšky, ale o výšku okna se
+nikdo nestaral. Na typickém MacBooku (1440×900) vyšel rám 1353×870 a s odsazením `<main>` (24 + 40)
+to dělalo 934 px do 900px okna — spodek stolu utekl pod dolní hranu.
+
+### Oprava
+
+Šířka počítá i s výškou okna, protože poměr je pevný a jedno z druhého plyne:
+
+```css
+.game-section {
+  --page-gap: 64px; /* svislé odsazení <main> */
+  width: min(94vw, 1500px, calc((100vh  - var(--page-gap)) * 1400 / 900));
+  width: min(94vw, 1500px, calc((100dvh - var(--page-gap)) * 1400 / 900));
+}
+```
+
+Dvakrát schválně: `dvh` (skutečná výška okna i s mizející lištou na mobilu) přebije `vh` tam, kde
+ho prohlížeč umí, a kde ne, platí `vh`. Ve fullscreenu samotného stolu poměr neplatí a šířku
+přepisuje pravidlo `:fullscreen` níž.
+
+### Testy
+
+Smoke otevře stránku v okně **1440×900** — přesně tom, kde to selhávalo — a porovná
+`scrollHeight` s `innerHeight`. Negativní kontrolou ověřeno: se starou šířkou smoke spadne
+(„obsah 934 px, okno 900 px"). Ručně proměřeno osm velikostí od 820×1180 po 2560×1440, všechny
+se vejdou bez scrollování.

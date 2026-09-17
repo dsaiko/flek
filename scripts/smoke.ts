@@ -823,6 +823,30 @@ if (!fromPeopleCancelled) {
   process.exit(1);
 }
 
+/*
+ * Stůl se musí vejít do okna BEZ scrollování. Rám má pevný poměr 1400/900, tak
+ * že v širokém okně roste i do výšky — 1440×900 (MacBook s prohlížečem přes
+ * celou obrazovku) je přesně ten případ, kdy spodek stolu utekl pod okraj.
+ */
+{
+  const fit = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+  await fit.goto(url);
+  await fit.waitForTimeout(600);
+  const page1440 = await fit.evaluate(() => ({
+    content: document.documentElement.scrollHeight,
+    window: window.innerHeight,
+  }));
+  await fit.close();
+  if (page1440.content > page1440.window + 1) {
+    console.error(
+      `CHYBA: v okně 1440×900 stránka scrolluje (obsah ${page1440.content} px, okno ${page1440.window} px) — stůl se nevejde`,
+    );
+    await browser.close();
+    process.exit(1);
+  }
+  console.log(`Stůl se vejde do 1440×900 bez scrollování (obsah ${page1440.content} px)`);
+}
+
 const thrown = [...pageErrors, ...appErrors];
 if (thrown.length > 0) {
   console.error(`CHYBA: stránka vyhodila ${thrown.length} výjimek:`);
