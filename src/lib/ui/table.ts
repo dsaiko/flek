@@ -6,9 +6,9 @@
  * karty. Žádný přístup ke GameState mimo humanView + veřejné části.
  */
 
-import { suitOf, card as mkCard, KRAL, SVRSEK, type Card, type Suit } from '../cards';
+import { sortHand, suitOf, card as mkCard, KRAL, SVRSEK, type Card, type OrderMode, type Suit } from '../cards';
 import { legalActions, passSettlesWithoutPlay } from '../rules/legal';
-import { trickWinner } from '../rules/tricks';
+import { orderMode, trickWinner } from '../rules/tricks';
 import type { GameState, PlayerAction, PlayerView, Seat } from '../rules/types';
 import { forhont } from '../rules/types';
 import { view } from '../rules/view';
@@ -1417,11 +1417,30 @@ export function trumpAsideOf(
   return { card: null, suit, faceDown: false };
 }
 
+/**
+ * Podle čeho se skládá vějíř. Desítka se posouvá pod eso jen ve hrách s
+ * trumfem (ČSM, Obecná pravidla Čl. II/1); v betlu a durchu je „nižší kartou
+ * než spodek stejné barvy" (Čl. IV/6 a 7). Ruka srovnaná jako do barevné hry
+ * ji tam ukazuje hned vedle esa — o dvě místa výš, než jak doopravdy bere.
+ *
+ * Režim se bere z toho, co je v danou chvíli veřejně známo: stojící závazek
+ * (vysoutěžený betl/durch, nárok při převzetí) má přednost před `contract`,
+ * protože ten ve fázi převzetí drží už překonanou deklaraci. Nic tajného se
+ * tím neprozradí — příhozy i nároky jsou veřejné.
+ */
+export function handOrderMode(v: PlayerView): OrderMode {
+  const p = v.phase;
+  const standing =
+    p.name === 'discard-talon' || p.name === 'declare' || p.name === 'takeover' ? p.standing : null;
+  const mode = standing?.mode ?? v.contract?.mode ?? null;
+  return mode === null ? 'trump' : orderMode(mode);
+}
+
 /** Ruka tak, jak ji vidí hráč: bez karty, která leží stranou na stole. */
 export function handAside(v: PlayerView): readonly Card[] {
   const aside = trumpAsideOf(v);
-  if (aside === null || aside.card === null) return v.hand;
-  return v.hand.filter((c) => c !== aside.card);
+  const hand = aside === null || aside.card === null ? v.hand : v.hand.filter((c) => c !== aside.card);
+  return sortHand(hand, handOrderMode(v));
 }
 
 /**

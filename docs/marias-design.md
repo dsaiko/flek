@@ -1461,3 +1461,39 @@ Nové bloky ve `scripts/verify.ts`:
 
 Negativními kontrolami ověřeno u obou úniků: vrácení redakce `choose-trump` i vrácení starého
 odvození seedu shodí nový test.
+
+## 26. Řazení vějíře podle režimu hry (2026-09-17)
+
+Uživatelova otázka: *„při betlu/durchu — neměla by být v ruce desítka řazena jinak?"*
+
+### Co říkají pravidla
+
+| | |
+|---|---|
+| **Obecná pravidla, Čl. II/1** | „Sedma je v barvě nejnižší, eso nejvyšší. **Při hrách, ve kterých je stanovena barva trumfů, se desítka v každé barvě posouvá hodnotou hned pod eso** a stává se tak vyšší kartou než král příslušné barvy." |
+| **Obecná pravidla, Čl. IV/6 a 7** | betl i durch: „Trumfovní barva se nestanovuje. **Desítka je nižší kartou než spodek stejné barvy.**" |
+
+Engine to respektoval od začátku (`TRUMP_ORDER` vs. `NATURAL_ORDER` v `cards.ts`, výběr přes
+`orderMode(mode)` v `tricks.ts`) — přebíjení i legalita byly správně. Špatně bylo jen **zobrazení**:
+`sortHand()` řadila vždycky podle barevné hry, takže v betlu ležela desítka ve vějíři hned vedle
+esa, i když ve skutečnosti bere až pod spodkem. Hráč se tak díval na ruku srovnanou podle jiného
+žebříčku, než jakým se zdvihy vyhodnocovaly.
+
+### Oprava
+
+- `sortHand(cards, mode)` přijímá režim; výchozí `'trump'` drží **stav enginu** v jednom
+  kanonickém pořadí (savy a replaye se nemění, řadí se jen to, co se kreslí)
+- `handOrderMode(v)` v `ui/table.ts` odvodí režim z toho, co je veřejně známo, a `handAside()`
+  podle něj vějíř setřídí — jedno místo pro stůl i pro ruku, stejně jako u odložené trumfové
+  karty (§24)
+- pořadí se srovná **už při odhozu do talonu na vysoutěžený betl** a při **převzetí betlem**, ne
+  až po deklaraci: `phase.standing` má přednost před `state.contract`, který ve fázi převzetí drží
+  už překonanou deklaraci (totéž poučení jako u vzdání, §21)
+- nic se tím neprozradí: příhozy i nároky na převzetí jsou veřejné
+
+### Testy
+
+Nový blok ve `scripts/verify.ts`: v barevné hře zůstává desítka za esem, v betlu i durchu klesá
+mezi spodka a devítku, vysoutěžený betl platí už při odhozu a nárok při převzetí přebíjí
+překonanou deklaraci. Negativní kontrolou ověřeno — s natvrdo vráceným `'trump'` test spadne
+(`actual [7,3,6,5,4,2]` proti `expected [7,6,5,4,3,2]`).

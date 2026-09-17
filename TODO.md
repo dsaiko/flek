@@ -21,4 +21,9 @@ overeni funkcnosti podle pravidel + overeni nekoukani do karet
 
 "vse za mnou"
 
-pri betlu/durchu - nemela by byt ruka desitka razena jinak?
+~~pri betlu/durchu - nemela by byt ruka desitka razena jinak?~~ ✅ vejir se ted
+radi podle rezimu hry: v betlu/durchu klesa desitka mezi spodka a devitku
+(prirozene poradi), v barevne hre zustava hned za esem. Poradi se srovna uz
+pri odhozu do talonu na vysoutezeny betl i pri prevzeti betlem.
+
+hlasim betl - odhazuji - vybiram eso - dostanu hlasku, ze s odhozenymi trumfy se muze hrat jen betl

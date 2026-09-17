@@ -58,9 +58,13 @@ export const pointsOf = (c: Card): number => {
 export const pointsOfCards = (cards: readonly Card[]): number =>
   cards.reduce((sum, c) => sum + pointsOf(c), 0);
 
-/** Setřídění ruky pro stabilní stav (barva, pak sestupně síla v barevné hře). */
-export const sortHand = (cards: readonly Card[]): Card[] =>
-  cards.slice().sort((a, b) => suitOf(a) - suitOf(b) || strength(b, 'trump') - strength(a, 'trump'));
+/**
+ * Setřídění ruky (barva, pak sestupně síla). Výchozí je barevná hra — stav
+ * enginu se drží v jednom kanonickém pořadí, ať se hraje cokoli. Vějíř si o
+ * `'natural'` řekne sám, jakmile je znám betl/durch (viz ui/table.ts).
+ */
+export const sortHand = (cards: readonly Card[], mode: OrderMode = 'trump'): Card[] =>
+  cards.slice().sort((a, b) => suitOf(a) - suitOf(b) || strength(b, mode) - strength(a, mode));
 
 // ── bitové masky (interní rychlá reprezentace pro AI) ────────────────────────
 
