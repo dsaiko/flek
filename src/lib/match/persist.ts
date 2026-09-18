@@ -82,7 +82,9 @@ function isValidPhase(p: Record<string, unknown>): boolean {
       // mód teče přes resolveTakeover do contract.mode a odtud do t() —
       // neznámý klíč by shodil render a poškozený stav se autosavem zvěční
       (st.mode === null || st.mode === 'hra' || st.mode === 'betl' || st.mode === 'durch') &&
-      (st.trump === null || inRange(st.trump, 0, 3)) && (st.bid === null || isRecord(st.bid));
+      // příhoz se ověřuje stejně jako v licitaci: `bidRank` na cizím tvaru vrátí
+      // undefined a porovnání s minimem licitace tiše přestane platit
+      (st.trump === null || inRange(st.trump, 0, 3)) && (st.bid === null || isBid(st.bid));
   };
   switch (p.name) {
     case 'idle':

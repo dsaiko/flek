@@ -849,12 +849,41 @@ if (!fromPeopleCancelled) {
   if (!helpEn.includes('how it is played')) problems.push('anglická nápověda se nepřepnula');
   if (helpEn.includes('jak se hraje')) problems.push('v anglické nápovědě zůstal český text');
   if (!closed) problems.push('Esc nápovědu nezavřel');
+
+  /*
+   * Nápověda a nastavení se vylučují V OBOU SMĚRECH. Nápověda leží uvnitř
+   * #table, kdežto ozubené kolo je jeho soused — otevřená nápověda ho tedy
+   * nepřekrývá a kliknout na něj jde. Oba panely mají stejný z-index, takže
+   * kdyby se nezavřel ten druhý, prosvítaly by přes sebe a nešly by číst.
+   */
+  await page.click('#btn-help');
+  await page.waitForSelector('#help-float:not([hidden])', { timeout: 3000 });
+  await page.click('#btn-settings');
+  await page.waitForTimeout(150);
+  if ((await page.locator('#settings-float:not([hidden])').count()) !== 1) {
+    problems.push('ozubené kolo přes otevřenou nápovědu nastavení neotevřelo');
+  }
+  if ((await page.locator('#help-float:not([hidden])').count()) !== 0) {
+    problems.push('otevřené nastavení nezavřelo nápovědu (dva panely přes sebe)');
+  }
+  // a opačně: otazník přes otevřené nastavení
+  await page.click('#btn-help');
+  await page.waitForTimeout(150);
+  if ((await page.locator('#help-float:not([hidden])').count()) !== 1) {
+    problems.push('otazník přes otevřené nastavení nápovědu neotevřel');
+  }
+  if ((await page.locator('#settings-float:not([hidden])').count()) !== 0) {
+    problems.push('otevřená nápověda nezavřela nastavení');
+  }
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(150);
+
   if (problems.length > 0) {
     console.error(`CHYBA: nápověda — ${problems.join('; ')}`);
     await browser.close();
     process.exit(1);
   }
-  console.log(`Nápověda: otevře se, přepíná jazyk (${helpCs.length} znaků česky) a Esc ji zavře`);
+  console.log(`Nápověda: otevře se, přepíná jazyk (${helpCs.length} znaků česky), Esc ji zavře a s nastavením se vylučují oboustranně`);
 }
 
 /*

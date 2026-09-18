@@ -22,8 +22,14 @@ export type SoundName =
 export interface Sounds {
   play: (name: SoundName) => void;
   setEnabled: (on: boolean) => void;
-  /** Zavolat z prvního gesta uživatele (klik na „Rozdat"). */
-  unlock: () => void;
+  /**
+   * Zavolat z prvního gesta uživatele (klik na „Rozdat").
+   *
+   * Vrací příslib, který dojde, až je kontext opravdu probuzený. `resume()` je
+   * asynchronní, takže `play()` hned po `unlock()` by ještě narazilo na uspaný
+   * kontext a zvuk by tiše zahodilo — kdo chce hrát rovnou z gesta, počká si.
+   */
+  unlock: () => Promise<void>;
 }
 
 type Ctor = new () => AudioContext;
@@ -32,7 +38,7 @@ type Ctor = new () => AudioContext;
 export const silentSounds: Sounds = {
   play: () => {},
   setEnabled: () => {},
-  unlock: () => {},
+  unlock: () => Promise.resolve(),
 };
 
 /** Hlasitost je schválně nízko: „jemné, tiché, bez hudby" (§5.7). */
@@ -127,11 +133,16 @@ export function createSounds(enabled = true): Sounds {
     unlock: () => {
       // Vypnutý zvuk nesmí otevřít AudioContext: na mobilu tím probouzí zvukovou
       // relaci zařízení uživateli, který si zvuk výslovně vypnul.
-      if (!on) return;
+      if (!on) return Promise.resolve();
       unlocked = true;
       const c = ensure();
-      if (c === null) return;
-      if (c.state !== 'running') void c.resume().catch(() => {});
+      if (c === null) return Promise.resolve();
+      /*
+       * Příslib se jen zapamatuje a vrátí na konci — čekat se na něj tady nesmí:
+       * odemykací ťuknutí níž musí zaznít PŘÍMO v gestu uživatele, a po `await`
+       * už by běželo v jiném úkolu, kde ho Safari neuzná.
+       */
+      const resumed = c.state !== 'running' ? c.resume().catch(() => {}) : Promise.resolve();
       /*
        * Safari (a starší iOS) kontext neodemkne samotným `resume()` — dokud
        * v něm PŘÍMO v gestu něco nezahraje, zůstane potichu, i když hlásí
@@ -149,6 +160,7 @@ export function createSounds(enabled = true): Sounds {
           /* nevadí — zvuk se zkusí znovu při dalším gestu */
         }
       }
+      return resumed;
     },
     play: (name) => {
       /*

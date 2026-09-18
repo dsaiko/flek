@@ -49,7 +49,13 @@ jobs:
           SMOKE_RESTART_MS: 9000
         run: make all
 
+      # Titulek jde přes proměnnou prostředí, ne přes `${{ }}` v těle `run:`.
+      # Výraz se dosazuje do skriptu JEŠTĚ PŘED tím, než ho shell rozebere, a
+      # titulek pochází z nadpisu v CHANGELOG.md (scripts/release-notes.ts bere
+      # `(.*)` doslova) — uvozovka v nadpisu by tak spustila cizí příkaz s
+      # GH_TOKEN a právem `contents: write`. V proměnné je to jen text.
       - name: Vydání
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" --title "${{ steps.notes.outputs.title }}" --notes-file release-notes.md
+          RELEASE_TITLE: ${{ steps.notes.outputs.title }}
+        run: gh release create "$GITHUB_REF_NAME" --title "$RELEASE_TITLE" --notes-file release-notes.md

@@ -87,10 +87,10 @@ const sounds = createSounds(settings.sounds);
  * `unlock()` je idempotentní a při vypnutém zvuku neudělá nic.
  */
 for (const event of ['pointerdown', 'keydown'] as const) {
-  document.addEventListener(event, () => sounds.unlock());
+  document.addEventListener(event, () => void sounds.unlock());
 }
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible') sounds.unlock();
+  if (document.visibilityState === 'visible') void sounds.unlock();
 });
 
 // ?seed=NNN → deterministická rozdání (testy, sdílení zajímavých rozdání);
@@ -233,7 +233,13 @@ soundsBtn.setAttribute('aria-checked', String(settings.sounds));
 
 const openSettings = (open: boolean): void => {
   settingsFloat.hidden = !open;
-  if (open) nameInput.placeholder = t('you');
+  if (open) {
+    // nápověda leží uvnitř #table, tlačítko ozubeného kola je jeho soused —
+    // otevřenou nápovědou tedy jde na nastavení kliknout (a oba panely mají
+    // stejný z-index); zavírá se tu, aby se neslepily přes sebe
+    openHelp(false);
+    nameInput.placeholder = t('you');
+  }
 };
 $('btn-settings').addEventListener('click', () => openSettings(settingsFloat.hidden === true));
 
@@ -316,8 +322,9 @@ soundsBtn.addEventListener('click', () => {
   saveSettings(settings);
   sounds.setEnabled(settings.sounds);
   if (settings.sounds) {
-    sounds.unlock();
-    sounds.play('deal'); // slyšitelné potvrzení, že se zvuk zapnul
+    // až PO probuzení kontextu: `unlock()` jen spustí `resume()`, a zvuk
+    // poslaný hned za ním by narazil na ještě uspaný kontext a zahodil se
+    void sounds.unlock().then(() => sounds.play('deal')); // slyšitelné potvrzení
   }
 });
 

@@ -1786,3 +1786,44 @@ sedm sedí a je opravených:
 
 Negativní kontroly: cizí klíč v `HandResult`, vyhozené `take` z validace savu, vyhozená větev
 `take` i odhozový režim v heuristice a `deal` bez configu — každé shodí právě svůj test.
+
+## 35. Fixpoint review kódu — desáté kolo (2026-09-18, po `774cecd`)
+
+Panel (claude, codex, glm-5.3-flash) nad celým stromem po vydání v0.0.6: 21 nálezů, soudce nechal
+sedm (zbytek duplikáty nebo zamítnuto). Všech sedm se ověřilo proti kódu a proti PDF — **žádný
+falešný poplach**, všechny opravené.
+
+### Zapracováno
+
+| # | Závažnost | Nález | Pravidlo | Oprava |
+|---|---|---|---|---|
+| 1 | high | `release.yml` skládal příkaz `gh release create --title "${{ steps.notes.outputs.title }}"`. Výraz se dosazuje do textu skriptu **dřív, než ho shell rozebere**, takže titulek se stává syntaxí. Titulek přitom není konstanta — `release-notes.ts` ho bere doslova z nadpisu v `CHANGELOG.md` (`(.*)`). Uvozovka v nadpisu tedy spustí cizí příkaz na runneru, a to v kroku s `GH_TOKEN` a právem `contents: write` | — | Titulek jde přes `env: RELEASE_TITLE`, kde je pro shell jen text. `release-notes.ts` navíc odmítne nadpis s řídicími znaky, ať se překlep pozná hlasitě |
+| 2 | medium | **Na každý flek šlo odpovědět jen jednou za kolo.** `advanceFleks` uzavíralo kolo, jakmile sedadlo jednou promluvilo, a další kolo otevřelo jen `[...new Set(f.raised)]`. Flekla-li obrana dvě komponenty (A hru, B sedmu), aktér zvedl jednu a **druhá zůstala zamrzlá na fleku** — sedma se vyúčtovala za 2× místo 4×. V UI se to projevilo dvěma tlačítky „Re!", z nichž jedno po kliknutí na druhé zmizelo | Obecná V/4: „**U kombinovaných závazků lze flekovat každý z nich samostatně**" | Sedadlo drží slovo, dokud mu zbývá otevřená komponenta, kterou smí zvýšit. Eligibilitu počítá nová `raisableFleks()` v `legal.ts` — jeden zdroj pravdy pro nabídku akcí i pro posun kola |
+| 3 | medium | Odložený trumf se u soupeře **počítal dvakrát**: ve stavu karta pořád leží v ruce, takže `handCounts` ji zahrnuje, a `renderOpponents` kreslila rub za každou. AI-forhont tak ukazoval o kartu víc a při sehrávce jedna nevysvětlitelně zmizela (dvě hry ze tří) | — | `trumpAsideOf()` vrací i `holder` (z čí ruky karta odešla); `renderOpponents` o ni vějíř zkrátí. Vlastní ruku řeší `handAside()` jako dosud |
+| 4 | medium | `standingOk` v savu ověřovalo `standing.bid` jen jako „nějaký objekt". `bidRank` na cizím tvaru vrací `undefined`, každé porovnání s ním je `false` — a **minimum z licitace tiše přestane platit** | Obecná VII/3 (vysoutěžený stupeň je minimum) | `isBid`, stejně jako všude jinde v souboru |
+| 5 | medium | Nápověda a nastavení se vylučovaly **jen jedním směrem**: `openHelp` zavíral nastavení, `openSettings` nápovědu ne — přestože komentář sliboval „a naopak". Nápověda leží uvnitř `#table`, ozubené kolo je jeho soused, takže kliknout jde; oba panely mají `z-index: 24` a prosvítaly přes sebe | — | `openSettings(true)` zavře nápovědu; smoke to hlídá v obou směrech |
+| 6 | low | `hideThinkingBubble()` se vracelo na `thinkShown === null` dřív, než se podívalo na frontu, takže **čekající** „Momentíček…" zrušit nešlo — a naskočil nad sedadlem, které už dávno táhlo. Doc komentář o řádek výš tvrdil opak | — | Fronta se eviduje zvlášť (`thinkQueued`) a ruší se i tehdy, když nic nevisí |
+| 7 | low | `unlock()` jen spustí `resume()` a vrátí se; `play('deal')` hned za ním narazí na ještě uspaný kontext a potvrzení zapnutí zvuku se **nikdy neozve** | — | `unlock()` vrací příslib; tlačítko zvuků hraje potvrzení až z něj. Odemykací ticháč pro Safari zůstává **synchronně v gestu** (po `await` by ho už neuznalo) |
+| 8 | low | Název testu i24 („odpovědi obrany od forhonta") popisoval pravidlo, které §34 nahradilo. Procházel jen proto, že jeho fixtura (aktér = forhont) obě pořadí slučuje | Obecná V/4, volený B/11 | Přejmenováno na „ve směru hraní"; komentář říká, že rozlišující případ hlídá test níž |
+
+### Testy
+
+Nové a rozšířené bloky ve `scripts/verify.ts` a `scripts/smoke.ts`:
+
+- **fleky — na každou flekovanou komponentu se odpovídá zvlášť**: obrana flekne hru i sedmu, aktér
+  musí dostat slovo na **obě**; po dvou „re" jsou obě úrovně na 2 a teprve pak se kolo posune
+- **workflow — tělo `run:` je bez dosazovaných výrazů**: statická kontrola všech workflow souborů
+  (parsuje i víceřádkové `run: |`), aby se `${{ }}` do skriptu nevrátilo jiným krokem
+- **sav — cizí příhoz**: `{}`, neznámý `kind` i chybějící `cervena` se musí odmítnout, platný durch projít
+- **odložený trumf**: `holder` u volícího i u obránce a shoda „rubů minus odložená karta" s vějířem
+- **zvuky**: podvržený `resume()` se probouzí **až s příslibem** (jako prohlížeč) — zvuk hned po
+  `unlock()` se zahodí, po `await` se ozvat musí
+- **nápověda** (smoke): ozubené kolo přes otevřenou nápovědu a otazník přes otevřené nastavení —
+  v obou směrech smí zůstat otevřený právě jeden panel
+
+Negativní kontroly (vrácení opravy shodí právě svůj test): `done = true` v `flek` větvi,
+`isRecord` místo `isBid`, `${{ }}` zpátky do `run:`, vyhozené `openHelp(false)`.
+
+**Bez testu zůstal nález 6** (čekající bublina): je to čistě časování uvnitř `TableUI`, kde se
+jediný spolehlivý scénář opírá o dvě souběžné lhůty (700 ms a 1100 ms). Takový smoke test by byl
+vratký a podle zásady projektu je lepší žádný než mrtvý — chování hlídá komentář u `thinkQueued`.

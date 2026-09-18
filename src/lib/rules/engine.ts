@@ -9,7 +9,9 @@
 
 import { CERVENE, DECK, sortHand, suitOf, type Card } from '../cards';
 import { Random } from '../random';
-import { actionMatchesLegal, flekEnding, legalActions, trumplessChoicePending } from './legal';
+import {
+  actionMatchesLegal, flekEnding, legalActions, raisableFleks, trumplessChoicePending,
+} from './legal';
 import { settle } from './scoring';
 import { trickWinner } from './tricks';
 import type {
@@ -519,11 +521,18 @@ function reduce(state: GameState, action: PlayerAction): GameState {
         ...f,
         levels: { ...f.levels, [action.target]: (f.levels[action.target] ?? 0) + 1 },
         lastRaiser: { ...f.lastRaiser, [action.target]: action.seat },
-        spoke: [...f.spoke, action.seat],
         raised: [...f.raised, action.target],
       };
+      /*
+       * Na každou otevřenou komponentu se odpovídá zvlášť (čl. V/4): kdo zvýšil
+       * jednu, drží slovo, dokud mu zbývá další, kterou smí zvýšit. Bez toho by
+       * jediné „re" uzavřelo aktérovo kolo a druhý flek obrany (např. na sedmu)
+       * by zůstal bez odpovědi — komponenta by se vyúčtovala o stupeň níž.
+       */
+      const done = raisableFleks(state.config, state.contract, raised, action.seat).length === 0;
+      const spoken: FlekState = done ? { ...raised, spoke: [...f.spoke, action.seat] } : raised;
       // kolo se zvýšením nemůže skončit fází, jen předá slovo protistraně
-      const next = advanceFleks(state, state.contract, raised) as FlekState;
+      const next = advanceFleks(state, state.contract, spoken) as FlekState;
       return { ...state, phase: { name: 'fleks', fleks: next } };
     }
 
