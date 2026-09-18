@@ -6,7 +6,8 @@
  */
 
 import { assertValid } from '../rules/engine';
-import type { GameState } from '../rules/types';
+import type { BidLevel, GameState } from '../rules/types';
+import { bidRank } from '../rules/types';
 
 const KEY = 'flek.match.v1';
 /**
@@ -177,10 +178,24 @@ function isHistoryAction(x: unknown): boolean {
 
 const BID_KINDS = ['sedma', 'sto', 'sto-sedma', 'betl', 'durch', 'dve-sedmy', 'dve-sedmy-sto'];
 
-/** Závazek z licitace — `kind` se používá jako klíč popisků, `cervena` v sazbách. */
-const isBid = (x: unknown): boolean =>
-  isRecord(x) && BID_KINDS.includes(String((x as Record<string, unknown>).kind)) &&
-  typeof (x as Record<string, unknown>).cervena === 'boolean';
+/**
+ * Závazek z licitace — `kind` se používá jako klíč popisků, `cervena` v sazbách.
+ *
+ * Porovnává se SYROVÁ hodnota, ne `String(...)`: `String(['durch'])` je taky
+ * `'durch'`, a pole `JSON.parse` vyrobí přímo. Takový `kind` by prošel kolem
+ * `switch`e v `bidRank`, ten by vrátil `undefined` a každé porovnání s minimem
+ * licitace by bylo `false` — po vylicitovaném durchu by šlo ohlásit holou hru.
+ *
+ * A protože `bidRank` vrací -1 i pro kombinace, které licitace nikdy nevydá
+ * (červený betl, červený durch), ověřuje se rovnou výsledek: co nemá kladné
+ * místo v žebříčku, do savu nepatří.
+ */
+const isBid = (x: unknown): boolean => {
+  if (!isRecord(x)) return false;
+  const b = x as Record<string, unknown>;
+  return typeof b.kind === 'string' && BID_KINDS.includes(b.kind) &&
+    typeof b.cervena === 'boolean' && bidRank(b as unknown as BidLevel) > 0;
+};
 
 /** Záznam licitace: `legal.ts` i reducer z něj čtou `.seat` a `.bid`. */
 const isBidEntry = (x: unknown): boolean => {

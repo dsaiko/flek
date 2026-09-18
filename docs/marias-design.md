@@ -1851,22 +1851,41 @@ nálezů, všech osm sedí; sedm opravených, jeden zamítnutý.
 
 ## 36. Kolik toho hráč řekne v jednom tahu (2026-09-18)
 
-Otevřená otázka, kterou §35 odkryl a tenhle commit **vědomě nerozhoduje** ve prospěch změny.
-
-Model fleků dává sedadlu jednu akci za tah. Od §35 z toho platí výjimka: kdo zvýšil jednu
+Model fleků dával sedadlu jednu akci za tah. Od §35 z toho platí výjimka: kdo zvýšil jednu
 z několika otevřených komponent, drží slovo dál (čl. V/4 „u kombinovaných závazků lze flekovat
-každý z nich samostatně"). Otázka je, jestli táž výjimka platí i pro sedmu/sto proti — jinými
-slovy jestli obránce smí v jednom tahu říct „**flek a sto proti**".
+každý z nich samostatně"). Otevřená otázka byla, jestli táž výjimka platí i pro sedmu/sto proti —
+jinými slovy jestli obránce smí v jednom tahu říct „**flek a sto proti**".
 
 Text to nerozhoduje: čl. VII/1 říká jen, že „Závazky Sedma a Sto mohou hlásit i hráči obrany
 v prvním kole komentování ohlášeného trumfového závazku" — tedy v tom kole, ne nutně v témž tahu.
-Obě čtení jsou obhajitelná.
 
-Zvoleno **užší**: ohlášení proti tah uzavírá, stejně jako flek bez zbylých komponent. Důvod je
-UX, ne pravidla — ve voleném je „sto proti" v kole 0 dostupné pořád, takže při širším čtení by
-po každém fleku naskočila ještě jedna otázka a hráč by musel potvrdit „Dobrá". To je klikání
-navíc na nejčastější interakci ve hře (viz zásada „žádné klikání bez volby", §5.5).
+**Rozhodnuto (uživatel, 2026-09-18): ano, smí.** Sedadlo drží slovo, dokud má co říct nad rámec
+„Dobrá"; tah uzavře až schválení. Predikát je `stillHasSay()` v `engine.ts` a ptá se rovnou
+`legalActions` — ne vlastního seznamu. To je na tom to podstatné: kdyby se nabídka a posun kola
+rozešly, propadla by hráči možnost, kterou mu UI o akci dřív samo nabízelo.
 
-Kdyby se to mělo otevřít, správná cesta není další kolo otázek, ale **sdružené akce** — tak, jak
-to `legalActions` už dělá pro „sedma proti + sto proti" jedním tlačítkem. Do té doby platí užší
-čtení a drží ho test „proti — … tah uzavírá stejně jako flek".
+Nejdřív bylo zvoleno užší čtení (ohlášení tah uzavírá) s odůvodněním, že širší by přidalo klikání.
+Panel ukázal, že užší čtení **nedrží**: jakmile je otevřených komponent víc, obránce po fleku pořád
+zůstává na tahu, takže „flek a pak sto proti" projde, kdežto „sto proti a pak flek" ne — a ohlášení
+navíc zahodí flek, který byl o akci dřív nabízený. Symetrie šla zachránit jen zrušením výjimky
+z §35, tedy návratem původní chyby. Argument o klikání navíc taky neobstál: po fleku naskočí
+skutečná volba („Dobrá / Flek! na sedmu / Sto proti"), ne potvrzovací klik bez obsahu — zásada
+„žádné klikání bez volby" (§5.5) tím porušená není.
+
+Cena je jedno kliknutí navíc ve voleném kole 0, kdy je „sto proti" dostupné pořád. Kdyby vadilo,
+cesta nejsou další otázky, ale **sdružené akce** — tak, jak to `legalActions` už dělá pro „sedma
+proti + sto proti" jedním tlačítkem.
+
+Drží to test „proti — … nezávisle na pořadí v tahu": obě pořadí musí dát tentýž závazek, tytéž
+úrovně fleků i totéž `toAct`.
+
+### Fixpoint review PR #10, druhé kolo (2026-09-18, po `a615d25`)
+
+| Závažnost | Nález | Oprava |
+|---|---|---|
+| high | Nový test `release-notes.ts` pouštěl `npx tsx` s cwd v dočasném adresáři. Tam `npx` lockfilem nainstalovaný `tsx` nenajde a v CI si ho **stáhne z registru** — cizí nepřipnutý kód v release jobu, který má `contents: write` a token z checkoutu | Volá se rovnou `process.execPath` s `node_modules/tsx/dist/cli.mjs`; když CLI chybí, test spadne, místo aby se cokoli tahalo |
+| medium | `announce-proti` pořád obcházelo pravidlo předávání slova — §36 tvrdil symetrii, kterou kód při více otevřených komponentách neměl | Viz §36: širší čtení, `stillHasSay()` pro obě větve |
+| medium | `isBid` porovnávalo `String(x.kind)`, jenže `String(['durch'])` je taky `'durch'` — a takové pole `JSON.parse` vyrobí přímo. `bidRank` na něm propadne `switch`em, vrátí `undefined` a minimum z licitace přestane platit. Týmž koncem procházel červený betl/durch, kde `bidRank` vrací -1 | Porovnává se syrová hodnota a navíc se ověřuje `bidRank(...) > 0`, což odřízne obě cesty najednou. Test o tři podvržené příhozy bohatší |
+
+Negativní kontroly: `String()` zpět do `isBid`, neexistující cesta k `tsx`, a obě větve
+`stillHasSay` zvlášť — každá shodí právě svůj test.

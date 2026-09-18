@@ -9,9 +9,7 @@
 
 import { CERVENE, DECK, sortHand, suitOf, type Card } from '../cards';
 import { Random } from '../random';
-import {
-  actionMatchesLegal, flekEnding, legalActions, raisableFleks, trumplessChoicePending,
-} from './legal';
+import { actionMatchesLegal, flekEnding, legalActions, trumplessChoicePending } from './legal';
 import { settle } from './scoring';
 import { trickWinner } from './tricks';
 import type {
@@ -148,6 +146,28 @@ function flekSideMembers(contract: Contract, seat: Seat): Seat[] {
   return seat === contract.declarer
     ? [contract.declarer]
     : speakingOrder(contract.declarer);
+}
+
+/**
+ * Domluvilo sedadlo v tomhle kole, nebo drží slovo dál?
+ *
+ * Drží ho, dokud má co říct nad rámec „dobrá". Každý z kombinovaných závazků se
+ * komentuje samostatně (čl. V/4) a sedmu/sto proti smí obrana hlásit „v prvním
+ * kole komentování" (čl. VII/1) — obojí je řeč téhož tahu, takže na pořadí
+ * uvnitř něj nesmí záležet.
+ *
+ * Ptáme se `legalActions`, ne vlastního seznamu: kdyby se nabídka a posun kola
+ * rozešly, propadla by hráči možnost, kterou mu UI o akci dřív samo nabízelo.
+ * (Přesně to se stalo, když tah uzavíralo jen vyčerpání fleků: „flek a sto
+ * proti" prošlo, „sto proti a flek" ne — viz §36.)
+ *
+ * Množina toho, co sedadlo smí říct, se každou akcí zmenšuje: zvýšená
+ * komponenta patří protistraně a ohlášený závazek už má držitele. Kolo se tedy
+ * vždycky posune dál.
+ */
+function stillHasSay(state: GameState, fleks: FlekState, seat: Seat): boolean {
+  const probe: GameState = { ...state, phase: { name: 'fleks', fleks: { ...fleks, toAct: seat } } };
+  return legalActions(view(probe, seat)).some((a) => a.type !== 'good');
 }
 
 /**
@@ -526,16 +546,12 @@ function reduce(state: GameState, action: PlayerAction): GameState {
       /*
        * Na každou otevřenou komponentu se odpovídá zvlášť (čl. V/4: „u
        * kombinovaných závazků lze flekovat každý z nich samostatně"), takže kdo
-       * zvýšil jednu, drží slovo, dokud mu zbývá další, kterou smí zvýšit. Bez
-       * toho by jediné „re" uzavřelo aktérovo kolo a druhý flek obrany (např. na
-       * sedmu) by zůstal bez odpovědi — komponenta by se vyúčtovala o stupeň níž,
-       * než jak se u stolu mluvilo.
-       *
-       * Ohlášení sedmy/sta proti tah naopak uzavírá (viz větev níž), takže na
-       * pořadí uvnitř tahu nezáleží: ani „flek a sto proti", ani „sto proti
-       * a flek" nejde — obojí je jedno vyjádření. Viz §36 v design docu.
+       * zvýšil jednu, drží slovo, dokud má co říct. Bez toho by jediné „re"
+       * uzavřelo aktérovo kolo a druhý flek obrany (např. na sedmu) by zůstal
+       * bez odpovědi — komponenta by se vyúčtovala o stupeň níž, než jak se
+       * u stolu mluvilo.
        */
-      const spoken: FlekState = raisableFleks(state.config, state.contract, raised, action.seat).length > 0
+      const spoken: FlekState = stillHasSay(state, raised, action.seat)
         ? raised
         : { ...raised, spoke: [...f.spoke, action.seat] };
       // kolo se zvýšením nemůže skončit fází, jen předá slovo protistraně
@@ -564,13 +580,14 @@ function reduce(state: GameState, action: PlayerAction): GameState {
         ],
       };
       /*
-       * Ohlášením sedadlo domluvilo: „Sedma a Sto mohou hlásit i hráči obrany
-       * v prvním kole komentování" (čl. VII/1) je JEDNO vyjádření, ne přídavek
-       * k fleku. Drží to v symetrii s větví `flek`, která po vyčerpání zvýšení
-       * tah uzavírá taky — kdyby ohlášení slovo nechávalo, prošlo by „sto proti
-       * a flek", ale ne „flek a sto proti", a na pořadí uvnitř tahu by záleželo.
+       * Slovo se předává stejným pravidlem jako u fleku — ohlášení je řeč téhož
+       * tahu, ne jeho konec. Ptá se nad UŽ ohlášeným závazkem: ohlášená sedma
+       * proti mění jejího držitele, a tím i to, co smí kdo zvýšit.
        */
-      const announcedSpoken: FlekState = { ...announced, spoke: [...f.spoke, action.seat] };
+      const withContract: GameState = { ...state, contract };
+      const announcedSpoken: FlekState = stillHasSay(withContract, announced, action.seat)
+        ? announced
+        : { ...announced, spoke: [...f.spoke, action.seat] };
       const next = advanceFleks(state, contract, announcedSpoken) as FlekState;
       return { ...state, contract, phase: { name: 'fleks', fleks: next } };
     }

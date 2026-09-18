@@ -4050,7 +4050,15 @@ console.log('PASS vzdání — platí se celý stojící závazek, mimo legalAct
    * aktér smí z vydraženého durchu ohlásit holou hru.
    */
   const dealt = ap2(init2(c, 2), { type: 'deal', seed: 4 });
-  for (const bid of [{}, { kind: 'hra', cervena: false }, { kind: 'sedma' }, { kind: 'sedma', cervena: 'ano' }]) {
+  const badBids: unknown[] = [
+    {}, { kind: 'hra', cervena: false }, { kind: 'sedma' }, { kind: 'sedma', cervena: 'ano' },
+    // `String(['durch'])` je taky 'durch' — pole `JSON.parse` vyrobí přímo
+    { kind: ['durch'], cervena: false },
+    // kombinace, které licitace nikdy nevydá: `bidRank` na nich vrací -1, tedy
+    // míň než každá deklarace, takže by minimum z licitace přestalo platit
+    { kind: 'betl', cervena: true }, { kind: 'durch', cervena: true },
+  ];
+  for (const bid of badBids) {
     const bad = JSON.parse(JSON.stringify({ v: 2, state: dealt })) as { v: number; state: { phase: Record<string, unknown> } };
     bad.state.phase = { name: 'discard-talon', standing: { declarer: 0, mode: null, trump: null, bid } };
     store.set('flek.match.v1', JSON.stringify(bad));
@@ -4411,10 +4419,10 @@ console.log('PASS sav — vzdaná hra v archivu projde, živý kontrakt bez trum
       /nelegální/, 'reducer musí sto proti v licitovaném odmítnout',
     );
     /*
-     * Ohlášení i flek jsou JEDNO vyjádření, takže obojí tah uzavírá a na pořadí
-     * uvnitř tahu nezáleží. Kdyby jedno z nich slovo nechávalo a druhé ne,
-     * prošlo by „sto proti a flek", ale ne „flek a sto proti" — táž řeč u stolu
-     * by dopadla dvakrát jinak podle toho, co hráč klikne dřív.
+     * Na pořadí uvnitř tahu nesmí záležet: „flek a sto proti" i „sto proti
+     * a flek" je táž řeč u stolu (§36). Sedadlo proto drží slovo, dokud má co
+     * říct — a obě cesty musí skončit v témže stavu, jinak by hráči propadlo
+     * to, co mu UI o akci dřív samo nabízelo.
      */
     const roundZero: StF = {
       ...stL,
@@ -4422,19 +4430,35 @@ console.log('PASS sav — vzdaná hra v archivu projde, živý kontrakt bez trum
       contract: { mode: 'hra', trump: 2, declarer: 0, sedma: null, kilo: null, dveSedmy: false },
       phase: { name: 'fleks', fleks: { levels: {}, lastRaiser: {}, toAct: 1, spoke: [], open: ['hra'], raised: [], round: 0 } },
     } as StF;
-    const toActAfter = (a: ActF): unknown => {
-      const out = apF(roundZero, a);
-      return out.phase.name === 'fleks' ? out.phase.fleks.toAct : null;
-    };
-    assert.equal(
-      toActAfter({ type: 'announce-proti', seat: 1, sedma: false, kilo: true }), 2,
-      'ohlášením sta proti obránce domluvil — slovo jde dál (čl. VII/1)',
+    const flekHra: ActF = { type: 'flek', seat: 1, target: 'hra' };
+    const stoProti: ActF = { type: 'announce-proti', seat: 1, sedma: false, kilo: true };
+    const fleksOf = (st: StF) => (st.phase.name === 'fleks' ? st.phase.fleks : null);
+
+    const afterFlek = apF(roundZero, flekHra);
+    assert.equal(fleksOf(afterFlek)?.toAct, 1, 'po fleku drží slovo dál — sto proti má pořád na jazyku');
+    assert.ok(
+      legalF(viewF(afterFlek, 1)).some((a) => a.type === 'announce-proti' && a.kilo),
+      'a sto proti mu zůstalo nabídnuté',
     );
-    assert.equal(
-      toActAfter({ type: 'flek', seat: 1, target: 'hra' }), 2,
-      'a flekem na jedinou otevřenou komponentu taky — obojí stejně, ať klikne cokoli dřív',
+    const afterProti = apF(roundZero, stoProti);
+    assert.equal(fleksOf(afterProti)?.toAct, 1, 'po ohlášení taky — flek na hru mu zbývá');
+    assert.ok(
+      legalF(viewF(afterProti, 1)).some((a) => a.type === 'flek' && a.target === 'hra'),
+      'a flek na hru mu zůstal nabídnutý',
     );
-    console.log('PASS proti — jen volený a jen v prvním kole, a tah uzavírá stejně jako flek (čl. VII/1, V/4, II/23)');
+
+    // obě pořadí musí dát tentýž závazek i tytéž úrovně
+    const viaFlek = apF(afterFlek, stoProti);
+    const viaProti = apF(afterProti, flekHra);
+    assert.deepEqual(viaFlek.contract, viaProti.contract, 'závazek nesmí záviset na pořadí kliknutí');
+    assert.deepEqual(fleksOf(viaFlek)?.levels, fleksOf(viaProti)?.levels, 'ani úrovně fleků');
+    assert.deepEqual(fleksOf(viaFlek)?.toAct, fleksOf(viaProti)?.toAct, 'ani to, kdo mluví dál');
+    // a jakmile domluví (buď mu nic nezbylo, nebo řekne „dobrá"), mluví druhý
+    const settled = fleksOf(viaFlek)?.toAct === 1
+      ? apF(viaFlek, { type: 'good', seat: 1 })
+      : viaFlek;
+    assert.equal(fleksOf(settled)?.toAct, 2, 'po domluvení jde slovo druhému obránci');
+    console.log('PASS proti — jen volený a jen v prvním kole, a nezávisle na pořadí v tahu (čl. VII/1, V/4, II/23)');
   }
 
   /*
@@ -4538,7 +4562,17 @@ console.log('PASS sav — vzdaná hra v archivu projde, živý kontrakt bez trum
     assert.notEqual(fB.toAct, d0, 'po vyjádření k oběma komponentám mluví druhý obránce');
     const sedma = legalF(viewF(s, fB.toAct)).find((a) => a.type === 'flek' && a.target === 'sedma');
     assert.ok(sedma, 'druhý obránce smí flekovat sedmu');
+    const d1 = fB.toAct;
     s = apF(s, sedma);
+    /*
+     * Ve voleném kole 0 má i po fleku pořád na jazyku „sto proti" (čl. VII/1),
+     * takže tah uzavře až „dobrá" — viz §36. V licitovaném by skončil hned.
+     */
+    assert.equal(
+      s.phase.name === 'fleks' ? s.phase.fleks.toAct : null, d1,
+      'dokud má co říct, drží slovo',
+    );
+    s = apF(s, actsF(s).find((a) => a.type === 'good') as ActF);
 
     const fC = s.phase.name === 'fleks' ? s.phase.fleks : null;
     assert.ok(fC);
@@ -5008,7 +5042,16 @@ console.log('PASS sav — vzdaná hra v archivu projde, živý kontrakt bez trum
       const raise = (seat: SeatV): void => {
         assert.ok(canFlek(st, seat), `${variant}: sedadlo ${seat} musí smět zvýšit`);
         st = apV(st, { type: 'flek', seat, target: 'hra' });
-        if (seat !== 0) st = apV(st, { type: 'good', seat: 2 });
+        /*
+         * Obrana dořekne kolo. Ve voleném kole 0 drží slovo i ten, kdo právě
+         * flekl — „sto proti" má pořád na jazyku (§36) — takže „dobrá" řekne
+         * nejdřív on a teprve pak jeho spoluhráč.
+         */
+        if (seat === 0) return;
+        let guard = 0;
+        while (st.phase.name === 'fleks' && st.phase.fleks.toAct !== 0 && (guard += 1) < 5) {
+          st = apV(st, { type: 'good', seat: st.phase.fleks.toAct });
+        }
       };
       raise(1); raise(0); raise(1); raise(0);
       // strop se měří u hráče NA TAHU — `legalActions` dá jinak prázdno každému, kdo na tahu není
@@ -5291,9 +5334,17 @@ console.log('PASS sav — vzdaná hra v archivu projde, živý kontrakt bez trum
 {
   const tmp = mkdtempSync(join(tmpdir(), 'flek-notes-'));
   const script = join(ROOT, 'scripts/release-notes.ts');
+  /*
+   * Ne `npx`: cwd je mimo repozitář, takže by `tsx` z `node_modules` nenašel
+   * a v CI by si ho STÁHL z registru — cizí nevypnutý kód v release jobu,
+   * který má `contents: write` a token z checkoutu. Voláme rovnou node
+   * s CLI z lockfilu; když tam není, test radši spadne, než aby něco tahal.
+   */
+  const tsxCli = join(ROOT, 'node_modules/tsx/dist/cli.mjs');
+  assert.ok(existsSync(tsxCli), 'tsx z node_modules nenalezen — `npm ci` neproběhl?');
   const run = (heading: string): { status: number | null; out: string; err: string } => {
     writeFileSync(join(tmp, 'CHANGELOG.md'), `${heading}\n\nTělo vydání.\n`);
-    const r = spawnSync('npx', ['tsx', script, 'v9.9.9', join(tmp, 'notes.md')], {
+    const r = spawnSync(process.execPath, [tsxCli, script, 'v9.9.9', join(tmp, 'notes.md')], {
       cwd: tmp, encoding: 'utf8',
     });
     return { status: r.status, out: (r.stdout ?? '').trim(), err: (r.stderr ?? '').trim() };
