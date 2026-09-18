@@ -9,7 +9,9 @@
 
 import { CERVENE, DECK, sortHand, suitOf, type Card } from '../cards';
 import { Random } from '../random';
-import { actionMatchesLegal, flekEnding, legalActions, trumplessChoicePending } from './legal';
+import {
+  actionMatchesLegal, flekEnding, legalActions, protiPossible, raisableFleks, trumplessChoicePending,
+} from './legal';
 import { settle } from './scoring';
 import { trickWinner } from './tricks';
 import type {
@@ -154,20 +156,21 @@ function flekSideMembers(contract: Contract, seat: Seat): Seat[] {
  * Drží ho, dokud má co říct nad rámec „dobrá". Každý z kombinovaných závazků se
  * komentuje samostatně (čl. V/4) a sedmu/sto proti smí obrana hlásit „v prvním
  * kole komentování" (čl. VII/1) — obojí je řeč téhož tahu, takže na pořadí
- * uvnitř něj nesmí záležet.
+ * uvnitř něj nesmí záležet (§36).
  *
- * Ptáme se `legalActions`, ne vlastního seznamu: kdyby se nabídka a posun kola
- * rozešly, propadla by hráči možnost, kterou mu UI o akci dřív samo nabízelo.
- * (Přesně to se stalo, když tah uzavíralo jen vyčerpání fleků: „flek a sto
- * proti" prošlo, „sto proti a flek" ne — viz §36.)
+ * POZOR, čte se jen z VEŘEJNÉHO stavu, a to je podmínka, ne pohodlí: výsledek
+ * se zapisuje do `spoke` a `toAct`, které `view()` posílá všem i workeru. Dřív
+ * se tenhle predikát ptal `legalActions`, jenže ta u sedmy proti sahá do RUKY —
+ * a z toho, jestli obránci zůstalo slovo, pak šlo vyčíst, že drží trumfovou
+ * sedmu. Tedy právě tu kartu, podle níž se aktér rozhoduje o sedmě.
  *
- * Množina toho, co sedadlo smí říct, se každou akcí zmenšuje: zvýšená
- * komponenta patří protistraně a ohlášený závazek už má držitele. Kolo se tedy
- * vždycky posune dál.
+ * Cena je nanejvýš jedno „dobrá" navíc u obránce, který by proti stejně hlásit
+ * nemohl — a to za hráče odklikne `maybeAutoGood`, protože je to jediná
+ * legální akce.
  */
-function stillHasSay(state: GameState, fleks: FlekState, seat: Seat): boolean {
-  const probe: GameState = { ...state, phase: { name: 'fleks', fleks: { ...fleks, toAct: seat } } };
-  return legalActions(view(probe, seat)).some((a) => a.type !== 'good');
+function stillHasSay(state: GameState, contract: Contract, f: FlekState, seat: Seat): boolean {
+  return raisableFleks(state.config, contract, f, seat).length > 0
+    || protiPossible(state.config, contract, f, seat);
 }
 
 /**
@@ -551,7 +554,7 @@ function reduce(state: GameState, action: PlayerAction): GameState {
        * bez odpovědi — komponenta by se vyúčtovala o stupeň níž, než jak se
        * u stolu mluvilo.
        */
-      const spoken: FlekState = stillHasSay(state, raised, action.seat)
+      const spoken: FlekState = stillHasSay(state, state.contract, raised, action.seat)
         ? raised
         : { ...raised, spoke: [...f.spoke, action.seat] };
       // kolo se zvýšením nemůže skončit fází, jen předá slovo protistraně
@@ -584,8 +587,7 @@ function reduce(state: GameState, action: PlayerAction): GameState {
        * tahu, ne jeho konec. Ptá se nad UŽ ohlášeným závazkem: ohlášená sedma
        * proti mění jejího držitele, a tím i to, co smí kdo zvýšit.
        */
-      const withContract: GameState = { ...state, contract };
-      const announcedSpoken: FlekState = stillHasSay(withContract, announced, action.seat)
+      const announcedSpoken: FlekState = stillHasSay(state, contract, announced, action.seat)
         ? announced
         : { ...announced, spoke: [...f.spoke, action.seat] };
       const next = advanceFleks(state, contract, announcedSpoken) as FlekState;

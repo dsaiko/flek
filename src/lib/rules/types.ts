@@ -87,10 +87,11 @@ export interface FlekState {
   lastRaiser: Partial<Record<FlekTarget, Seat>>;
   toAct: Seat;
   /**
-   * Kdo v TOMTO kole domluvil: buď schválil („dobrá"), nebo zvýšil a nezbyla
-   * mu otevřená komponenta, kterou by ještě směl zvýšit (`raisableFleks`).
-   * Kdo zvýšil jednu ze dvou otevřených, tady schválně NENÍ — drží slovo dál
-   * (čl. V/4: každý z kombinovaných závazků se flekuje samostatně).
+   * Kdo v TOMTO kole domluvil: buď schválil („dobrá"), nebo po zvýšení či
+   * ohlášení už nemá co říct — rozhoduje `stillHasSay` v `engine.ts` (§36).
+   * Nejde jen o zbylé otevřené komponenty: ve voleném kole 0 drží slovo i ten,
+   * kdo flekl a komu zbývá sedma/sto proti. Kdo tedy zvýšil a pořád má co
+   * dodat, tady schválně NENÍ.
    */
   spoke: Seat[];
   /** Co smí strana na tahu v tomhle kole zvyšovat (co zvýšila protistrana). */

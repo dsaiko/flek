@@ -10,6 +10,11 @@
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { chromium, webkit } from 'playwright';
+import { apply, initialState } from '../src/lib/rules/engine';
+import { legalActions } from '../src/lib/rules/legal';
+import { defaultConfig } from '../src/lib/rules/sazby';
+import { view } from '../src/lib/rules/view';
+import { VERSION as SAVE_VERSION } from '../src/lib/match/persist';
 import { TALK_TABLES } from '../src/lib/ui/tableTalk';
 
 // Pevný seed: smoke musí být reprodukovatelný. Se seedem 10 vede odhoz, který
@@ -328,6 +333,7 @@ for (let i = 0; i < 400; i += 1) {
   }
 
   const status = await page.textContent('#status');
+
 
   /*
    * Zvolený trumf leží stranou na stole (ČSM Čl. VII/1) a ve VĚJÍŘI v tu dobu
@@ -923,6 +929,42 @@ if (cspViolations.length > 0) {
   process.exit(1);
 }
 
+/*
+ * Odložený trumf u SOUPEŘE: ve stavu leží pořád v jeho ruce (`handCounts` ho
+ * počítá), takže kdo kreslí cizí vějíř, musí ho odečíst — jinak má forhont
+ * o rub víc a při sehrávce mu jedna karta nevysvětlitelně zmizí. Čistou funkci
+ * `opponentBacks()` hlídá verify; tohle je o tom, že ji `renderOpponents` taky
+ * VOLÁ.
+ *
+ * Stav se staví deterministicky a podává stránce savem — čekat, až na tenhle
+ * případ dojde herní smyčka, nejde: člověk je v pozorovaném rozdání forhont,
+ * takže odložená karta patří jemu. (Ověřeno: s kontrolou uvnitř smyčky nenastal
+ * ten případ ani jednou, a mrtvá kontrola je horší než žádná.)
+ */
+{
+  const seeded = await browser.newPage({ viewport: { width: 1400, height: 900 } });
+  seeded.on('dialog', (d) => void d.accept());
+  await seeded.goto(url);
+  await seeded.evaluate((payload) => localStorage.setItem('flek.match.v1', payload), asideSave());
+  await seeded.reload();
+  await seeded.waitForTimeout(1200);
+  const backs = [
+    await seeded.locator('#seat-left .backs img').count(),
+    await seeded.locator('#seat-right .backs img').count(),
+  ];
+  const asideShown = await seeded.locator('#trump-aside:not([hidden])').count();
+  await seeded.close();
+  // forhont je soupeř vlevo (sedadlo 1): 9 rubů + karta stranou = 10 v ruce
+  if (asideShown !== 1 || backs[0] !== 9 || backs[1] !== 10) {
+    console.error(
+      `CHYBA: soupeřův odložený trumf se počítá dvakrát — ruby ${backs.join(' a ')}, karta stranou ${asideShown}; čekáno 9 a 10 s kartou stranou`,
+    );
+    await browser.close();
+    process.exit(1);
+  }
+  console.log(`Soupeřův odložený trumf: ${backs[0]} rubů + karta stranou (ruka má ${backs[1]})`);
+}
+
 await browser.close();
 
 // vyčerpání smyčky NENÍ úspěch — jinak by test procházel, i když hra uvízne
@@ -999,6 +1041,37 @@ if (!trumpBackInHand) {
     `WebKit: úvodní obrazovka drží poměry (karta varianty ${windowed.toFixed(1)} % / ${full.toFixed(1)} % výšky sukna)`,
   );
   await wk.close();
+}
+
+/**
+ * Sav s rozehranou hrou, kde trumf volil SOUPEŘ (forhont = sedadlo 1, tedy
+ * vlevo od člověka) a odložená karta tak leží v jeho ruce. Staví se enginem,
+ * ne klikáním — jen tak je stav v každém běhu stejný.
+ */
+function asideSave(): string {
+  // dealer 0 → forhont 1, tedy soupeř VLEVO: trumf volí on a karta zůstává jemu
+  let st = apply(initialState(defaultConfig('voleny'), 0), { type: 'deal', seed: 1 });
+  const acts = (): ReturnType<typeof legalActions> => {
+    for (const seat of [0, 1, 2] as const) {
+      const a = legalActions(view(st, seat));
+      if (a.length > 0) return a;
+    }
+    return [];
+  };
+  let guard = 0;
+  while (st.phase.name !== 'fleks' && st.phase.name !== 'scored' && (guard += 1) < 60) {
+    const a = acts();
+    st = apply(st,
+      a.find((x) => x.type === 'choose-trump' && x.card !== 'from-people') ??
+      // talon bez es a desítek, jinak aktérovi zbude jen betl/durch (C/13)
+      a.find((x) => x.type === 'discard' && x.cards.every((c) => c % 8 !== 3 && c % 8 !== 7)) ??
+      a.find((x) => x.type === 'declare' && x.mode === 'hra') ??
+      a.find((x) => x.type === 'takeover' && x.claim === 'good') ?? a[0]);
+  }
+  if (st.phase.name !== 'fleks' || st.contract?.mode !== 'hra' || st.contract.declarer !== 1) {
+    throw new Error('scénář pro odložený trumf neskončil barevnou hrou soupeře vlevo');
+  }
+  return JSON.stringify({ v: SAVE_VERSION, state: st });
 }
 
 async function tableClip(): Promise<{ x: number; y: number; width: number; height: number }> {
