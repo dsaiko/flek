@@ -4174,6 +4174,65 @@ console.log('PASS sav — vzdaná hra v archivu projde, živý kontrakt bez trum
   console.log(`PASS únik — pohled hráče neobsahuje cizí karty ani seed rozdání (${checkedStates} stavů)`);
 }
 
+/*
+ * Únik druhým kanálem: přes REDUKTOR, ne přes `view()`.
+ *
+ * Testy výš hlídají, že pohled na DANÝ stav neprozradí cizí karty. Neřeknou ale
+ * nic o tom, jak stav vzniká — a fáze fleků se do pohledu posílá celá. Když
+ * o předání slova rozhodne cokoli z ruky, stačí se dívat na `toAct`: aktér
+ * (i heuristika ve workeru) si přečte, co vidět neměl.
+ *
+ * Konkrétně: aktér hlásí hru a sto, obránce oba flekne. Tím vyčerpá zvýšení
+ * i sto proti a zbývá jediná otázka — jestli má čím hlásit SEDMU proti, tedy
+ * jestli drží trumfovou sedmu. Přesně tu kartu, podle níž se aktér rozhoduje,
+ * jestli hrát na sedmu. Dvě rozdání, která se liší jen jejím držitelem, proto
+ * musí po TÉŽE veřejné sekvenci skončit ve shodné veřejné fázi.
+ */
+{
+  const { initialState: initX, apply: apX } = await import('../src/lib/rules/engine');
+  const { view: viewX } = await import('../src/lib/rules/view');
+  const { defaultConfig: cfgX } = await import('../src/lib/rules/sazby');
+  const { card: mkX, R7: R7X } = await import('../src/lib/cards');
+  type StX = ReturnType<typeof initX>;
+
+  const TRUMP = 2 as const;
+  const seven = mkX(TRUMP, R7X);
+  const base = apX(initX(cfgX('voleny'), 2), { type: 'deal', seed: 5 });
+
+  /** Aktér 0 hlásil hru + sto; trumfovou sedmu drží zadaný obránce. */
+  const withSevenAt = (holder: 1 | 2): StX => {
+    const hands = base.hands.map((h) => h.filter((c) => c !== seven)) as StX['hands'];
+    hands[holder] = [...hands[holder], seven];
+    return {
+      ...base,
+      hands,
+      contract: { mode: 'hra', trump: TRUMP, declarer: 0, sedma: null, kilo: 0, dveSedmy: false },
+      phase: {
+        name: 'fleks',
+        fleks: { levels: {}, lastRaiser: {}, toAct: 1, spoke: [], open: ['hra', 'kilo'], raised: [], round: 0 },
+      },
+    } as StX;
+  };
+
+  const publicAfterFleks = (holder: 1 | 2): string => {
+    let st = withSevenAt(holder);
+    st = apX(st, { type: 'flek', seat: 1, target: 'hra' });
+    st = apX(st, { type: 'flek', seat: 1, target: 'kilo' });
+    // co o stavu ví AKTÉR — tedy přesně to, co jde ze stolu vyčíst
+    return JSON.stringify(viewX(st, 0).phase);
+  };
+
+  assert.equal(
+    publicAfterFleks(1), publicAfterFleks(2),
+    'veřejná fáze po flecích nesmí záviset na tom, který obránce drží trumfovou sedmu',
+  );
+
+  // a fixtura musí být taková, že je co rozlišovat (jinak by test procházel naprázdno)
+  const holdsSeven = (holder: 1 | 2): boolean => withSevenAt(holder).hands[1].includes(seven);
+  assert.ok(holdsSeven(1) && !holdsSeven(2), 'fixtura: sedmu má mít jednou obránce 1, podruhé ne');
+  console.log('PASS únik — předání slova ve flecích nezávisí na cizí ruce (reduktor, ne jen view)');
+}
+
 // seed AI: nesmí jít odvodit ze seedu rozdání (a naopak)
 {
   const { MatchController: MCL } = await import('../src/lib/match/controller');
@@ -5277,7 +5336,12 @@ console.log('PASS sav — vzdaná hra v archivu projde, živý kontrakt bez trum
         if (line.search(/\S/) > blockIndent) { body.push(line); continue; }
         blockIndent = null;
       }
-      const m = /^(\s*)(- )?run:\s*(.*)$/.exec(line);
+      /*
+       * YAML klíč se dá napsat víc způsoby: `run:`, `run :`, `"run":`, `'run':`.
+       * Guard, který zná jen ten první, by ostatní tiše přeskočil — a přeskočený
+       * krok je přesně to, kvůli čemu tenhle test existuje.
+       */
+      const m = /^(\s*)(- )?(?:run|"run"|'run')\s*:\s*(.*)$/.exec(line);
       if (m === null) continue;
       if (m[3] === '' || m[3].startsWith('|') || m[3].startsWith('>')) {
         blockIndent = m[1].length + (m[2]?.length ?? 0); // tělo přijde hlouběji než klíč
@@ -5303,18 +5367,51 @@ console.log('PASS sav — vzdaná hra v archivu projde, živý kontrakt bez trum
   const unsafe = runLines(['      - name: x', '        run: |', '          gh x --title "${{ y }}"'].join('\n'));
   assert.ok(unsafe.body.some((l) => l.includes('${{')), 'parser musí výraz v těle bloku najít');
 
+  // ostatní platné zápisy klíče `run` nesmí guardu proklouznout
+  for (const key of ['run :', '"run":', "'run':"]) {
+    const inline = runLines(`      - ${key} gh x --title "\${{ y }}"`);
+    assert.ok(
+      inline.body.some((l) => l.includes('${{')),
+      `jednořádkový \`${key}\` se musí prohledat taky`,
+    );
+    const block = runLines([`      - ${key} |`, '          gh x --title "${{ y }}"'].join('\n'));
+    assert.equal(block.blocks, 1, `\`${key} |\` se musí poznat jako blok`);
+    assert.ok(
+      block.body.some((l) => l.includes('${{')),
+      `a jeho tělo se musí prohledat`,
+    );
+  }
+
   const dir = join(ROOT, '.github/workflows');
   const files = readdirSync(dir).filter((f) => f.endsWith('.yml') || f.endsWith('.yaml'));
   assert.ok(files.length > 0, 'nenašel se žádný workflow — test by nic nehlídal');
   let checked = 0;
   let blocksSeen = 0;
   for (const file of files) {
-    const { body, blocks } = runLines(readFileSync(join(dir, file), 'utf8'));
-    assert.ok(body.length > 0, `${file}: parser nenašel jediný řádek run: — asi přestal rozumět formátu`);
+    const raw = readFileSync(join(dir, file), 'utf8');
+    const { body, blocks } = runLines(raw);
+    /*
+     * Parser se ověřuje jen proti souborům, které nějaké `run:` opravdu mají —
+     * workflow složené ze samých `uses:` je legitimní a nesmí shodit sadu
+     * hláškou o rozbitém parseru (táž past jako dřívější `checked > 10`).
+     */
+    if (/^\s*(- )?(?:run|"run"|'run')\s*:/m.test(raw)) {
+      assert.ok(body.length > 0, `${file}: soubor má run:, ale parser žádný nenašel — rozumí ještě formátu?`);
+    }
     for (const line of body) {
       assert.ok(
         !line.includes('${{'),
         `.github/workflows/${file}: „${line.trim()}" — výraz se dosadí do skriptu před shellem, předej ho přes env:`,
+      );
+      /*
+       * `echo "x=$(cmd)" >> $GITHUB_OUTPUT` SPOLKNE návratový kód: substituce
+       * uvnitř argumentu ho nepropustí a `echo` vrátí 0, takže `set -e` nezabere
+       * a krok pokračuje s prázdnou hodnotou. Strážci v `release-notes.ts`
+       * (chybějící sekce, prázdné tělo, řídicí znak) by tím ztratili účinek.
+       */
+      assert.ok(
+        !(line.includes('GITHUB_OUTPUT') && line.includes('$(')),
+        `.github/workflows/${file}: „${line.trim()}" — návratový kód substituce se ztratí, přiřaď do proměnné`,
       );
     }
     checked += body.length;

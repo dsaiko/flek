@@ -1262,8 +1262,15 @@ function syncChildren<T extends HTMLElement>(
   count: number,
   create: () => T,
 ): T[] {
-  while (parent.children.length > count) parent.lastElementChild?.remove();
-  while (parent.children.length < count) parent.appendChild(create());
+  /*
+   * Záporný (nebo neceločíselný) počet by první smyčku zacyklil: `0 > -1` platí
+   * dál, ale `lastElementChild` je už `null`, takže se nic neubere a karta
+   * zamrzne. Radši nakreslit prázdno než ztuhnout — podvržený sav se sem dostat
+   * může (`assertValid` hlídá 32 karet celkem, ne po rukou).
+   */
+  const n = Number.isFinite(count) ? Math.max(0, Math.floor(count)) : 0;
+  while (parent.children.length > n) parent.lastElementChild?.remove();
+  while (parent.children.length < n) parent.appendChild(create());
   return Array.from(parent.children) as T[];
 }
 
@@ -1514,7 +1521,8 @@ export function opponentBacks(v: PlayerView, seat: Seat, unseenCount = 0): numbe
   // volba trumfu „z lidu": karty ještě nikdo neviděl, ale u forhonta už leží
   const extraUnseen =
     v.phase.name === 'choose-trump' && seat === forhont(v.dealer) ? unseenCount : 0;
-  return v.handCounts[seat] + extraUnseen - aside;
+  // u podvrženého savu (prázdná ruka s odloženým trumfem) by vyšlo -1
+  return Math.max(0, v.handCounts[seat] + extraUnseen - aside);
 }
 
 /** Ruka tak, jak ji vidí hráč: bez karty, která leží stranou na stole. */

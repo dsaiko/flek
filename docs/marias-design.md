@@ -1889,3 +1889,27 @@ Drží to test „proti — … nezávisle na pořadí v tahu": obě pořadí mu
 
 Negativní kontroly: `String()` zpět do `isBid`, neexistující cesta k `tsx`, a obě větve
 `stillHasSay` zvlášť — každá shodí právě svůj test.
+
+### Fixpoint review PR #10, třetí kolo (2026-09-18, po `c3559a2`)
+
+Osm nálezů, všechny sedí, všechny opravené. Dva blokující — a ten první je nejdražší chyba
+celého PR, protože porušil vlastnost, kterou projekt inzeruje v README.
+
+| Závažnost | Nález | Oprava |
+|---|---|---|
+| high | **`stillHasSay` prozrazovala trumfovou sedmu obránce.** Ptala se `legalActions`, a ta u sedmy proti sahá do RUKY (`v.hand.includes(card(trump, R7))`). Výsledek se zapisuje do `spoke`/`toAct`, což `view()` posílá všem i workeru. Sekvence: aktér hlásí hru a sto, obránce oba flekne → vyčerpá zvýšení i sto proti a zbývá jediná otázka, jestli má čím hlásit sedmu proti. Z toho, jestli mu zůstalo slovo, si aktér (i heuristika) přečte, kdo drží trumfovou sedmu — přesně tu kartu, podle níž se rozhoduje o sedmě. Ověřeno reprodukcí: dvě rozdání lišící se jen držitelem sedmy dala po TÉŽE veřejné sekvenci různé `toAct` | Predikát čte jen VEŘEJNÝ stav: `raisableFleks(...)` nebo nová `protiPossible(...)` (veřejná polovina čl. VII/1, kterou teď sdílí i `legalActions`). Obránce, který by proti hlásit nemohl, drží slovo taky — jedinou legální akci „dobrá" za něj odklikne `maybeAutoGood` |
+| high | Strážce workflow znal jen zápis `run:`. YAML dovoluje i `run :`, `"run":` a `'run':` — a per-file kontrola se dala nasytit jiným, správně napsaným krokem, takže by injekce v přeskočeném kroku prošla | Regex pokrývá všechny čtyři zápisy, syntetické případy je hlídají v obou podobách (jednořádkové i blokové) |
+| medium | `opponentBacks` mohla u podvrženého savu (prázdná ruka s odloženou kartou) vrátit -1 a `syncChildren` by se zacyklil: `0 > -1` platí, ale `lastElementChild` je `null`, takže se nic neubere — karta ztuhne | Obojí se ořezává na nezáporné celé číslo. Radši nakreslit prázdno než ztuhnout (`assertValid` hlídá 32 karet celkem, ne po rukou) |
+| low | `FlekState.spoke` popisoval `raisableFleks`, jenže reduktor jede přes `stillHasSay` — už podruhé tentýž komentář zastaral rychleji než kód | Popisuje `stillHasSay` a odkazuje na §36 |
+| low | Doc u `raisableFleks` sliboval volajícího v enginu, který po `c3559a2` neexistoval | Ukazuje na `stillHasSay` (teď je to zase pravda) |
+| low | Per-file podmínka „parser nenašel jediný `run:`" by shodila sadu na legitimním workflow složeném ze samých `uses:` — táž past jako dřívější `checked > 10` | Kontroluje se jen u souborů, které nějaké `run:` opravdu obsahují |
+| low | Oprava návratového kódu do `GITHUB_OUTPUT` byla **jediná změna bez negativní kontroly** — návrat k `echo "title=$(…)"` prošel vším | Strážce workflow navíc odmítne řádek, který zapisuje do `$GITHUB_OUTPUT` a obsahuje `$(` |
+| low | Pinnutá byla jen čistá `opponentBacks()`, ne její jediné volání: vrácení inline výpočtu vrátí původní chybu a nic nespadne | Smoke staví stav savem (dealer 0 → forhont je soupeř vlevo) a počítá ruby: 9 + karta stranou. Uvnitř herní smyčky to nešlo — v pozorovaném rozdání je forhontem člověk, takže kontrola by nikdy nenastala (ověřeno měřením, ne odhadem) |
+
+Negativní kontroly: `legalActions` zpět do `stillHasSay`, zúžený regex klíče `run`, `echo "$(…)"`
+zpět do release.yml, inline výpočet zpět do `renderOpponents` — každá shodí právě svůj test.
+
+**Poučení:** `legalActions` je jediný zdroj pravdy o tom, co smí hráč udělat — ale právě proto
+sahá do ruky, a **nesmí se jí ptát nic, co se zapisuje do veřejného stavu**. Testy úniku hlídaly
+`view()` nad daným stavem; tudy unikal REDUKTOR, tedy to, jak stav vzniká. Nový blok „únik —
+předání slova ve flecích nezávisí na cizí ruce" kontroluje právě tohle.
