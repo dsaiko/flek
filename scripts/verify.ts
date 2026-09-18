@@ -10,6 +10,7 @@ import { existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } fro
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { parse as parseYaml } from 'yaml';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -2784,7 +2785,7 @@ const KULE = 2 as const;
 
   // ── odložený trumf: co leží na stole, není v ruce (a do talonu nesmí) ───
   {
-    const { trumpAsideOf, handAside, opponentBacks } = await import('../src/lib/ui/table');
+    const { trumpAsideOf, handAside, opponentBacks, syncChildren } = await import('../src/lib/ui/table');
     let st: StA = initialState(defaultConfig('voleny'), 2); // forhont = 0
     st = apply(st, { type: 'deal', seed: 4 });
     assert.equal(trumpAsideOf(view(st, 0)), null, 'před volbou stranou nic neleží');
@@ -2838,6 +2839,16 @@ const KULE = 2 as const;
     }
 
     /*
+     * Pojistka proti ZAMRZNUTÍ. Podvržený sav (prázdná ruka, a přesto odložená
+     * karta) dal dřív -1; `syncChildren` pak v odebírací smyčce točil donekonečna,
+     * protože `0 > -1` platí dál, ale `lastElementChild` je už `null` — karta
+     * ztuhne. `assertValid` to nechytí, hlídá 32 karet celkem, ne po rukou.
+     */
+    const broken = { ...view(st, 1), handCounts: [0, 0, 0] as [number, number, number] };
+    assert.ok(trumpAsideOf(broken), 'fixtura: odložená karta musí ležet, jinak se clamp neprojeví');
+    assert.equal(opponentBacks(broken, 0), 0, 'záporný počet rubů se nesmí vrátit');
+
+    /*
      * Do talonu zvolená karta nesmí (ČSM volený, B/7: dvě karty „odděleně od
      * zvolené karty"). Kdyby směla, hráč by ji odhodil a UI by mu ji ukazovalo
      * ležet na stole, i když je pryč.
@@ -2884,6 +2895,43 @@ const KULE = 2 as const;
       assert.equal(trumpAsideOf(view(st, seat)), null, `sedadlo ${seat}: při sehrávce stranou nic neleží`);
     }
     assert.deepEqual(handAside(view(st, 0)), view(st, 0).hand, 've hře je vějíř zase celá ruka');
+    /*
+     * Pojistka proti ZAMRZNUTÍ. Podvržený sav (prázdná ruka, a přesto odložená
+     * karta) dal dřív -1; `syncChildren` pak v odebírací smyčce točil donekonečna,
+     * protože `0 > -1` platí dál, ale `lastElementChild` je už `null`. Karta
+     * ztuhne — a `assertValid` tohle nechytí, hlídá 32 karet celkem, ne po rukou.
+     */
+
+    /*
+     * Kontejner s POJISTKOU: bez ořezu se odebírací smyčka točí donekonečna
+     * a `make verify` by jen visel (ověřeno: běh skončí až timeoutem). Getter
+     * se v každé otáčce ptá na poslední dítě, takže se počítá — a po tisícovce
+     * radši spadne, aby test selhal hlasitě a hned, ne zamrznutím CI.
+     */
+    let spins = 0;
+    const fakeParent = {
+      children: [] as unknown[],
+      get lastElementChild() {
+        if ((spins += 1) > 1000) throw new Error('syncChildren se zacyklil — chybí ořez na nezáporný počet');
+        return this.children.length ? this.children[this.children.length - 1] : null;
+      },
+      appendChild(c: unknown) { this.children.push(c); return c; },
+    };
+    const mkChild = () => {
+      const child = { remove: () => { fakeParent.children.splice(fakeParent.children.indexOf(child), 1); } };
+      return child as unknown as HTMLElement;
+    };
+    syncChildren(fakeParent as unknown as HTMLElement, 3, mkChild);
+    assert.equal(fakeParent.children.length, 3, 'kladný počet se naplní');
+    for (const bad of [-1, Number.NaN, 1.5]) {
+      spins = 0;
+      syncChildren(fakeParent as unknown as HTMLElement, bad, mkChild);
+      assert.ok(
+        fakeParent.children.length >= 0 && Number.isInteger(fakeParent.children.length),
+        `syncChildren(${String(bad)}) musí skončit s rozumným počtem`,
+      );
+    }
+    assert.equal(fakeParent.children.length, 1, '1.5 se má chovat jako 1, záporné a NaN jako 0');
     console.log('PASS odložený trumf — stranou místo ruky, lícem dolů u soupeře, do talonu nesmí');
   }
 
@@ -4017,7 +4065,7 @@ console.log('PASS vzdání — platí se celý stojící závazek, mimo legalAct
     setItem: (k: string, val: string) => void store.set(k, val),
     removeItem: (k: string) => void store.delete(k),
   };
-  const { saveMatch: save, loadMatch: load } = await import('../src/lib/match/persist');
+  const { saveMatch: save, loadMatch: load, VERSION: SAV_V } = await import('../src/lib/match/persist');
   const { initialState: init2, apply: ap2 } = await import('../src/lib/rules/engine');
   const { defaultConfig: cfg2 } = await import('../src/lib/rules/sazby');
 
@@ -4059,19 +4107,29 @@ console.log('PASS vzdání — platí se celý stojící závazek, mimo legalAct
     { kind: 'betl', cervena: true }, { kind: 'durch', cervena: true },
   ];
   for (const bid of badBids) {
-    const bad = JSON.parse(JSON.stringify({ v: 2, state: dealt })) as { v: number; state: { phase: Record<string, unknown> } };
+    const bad = JSON.parse(JSON.stringify({ v: SAV_V, state: dealt })) as { v: number; state: { phase: Record<string, unknown> } };
     bad.state.phase = { name: 'discard-talon', standing: { declarer: 0, mode: null, trump: null, bid } };
     store.set('flek.match.v1', JSON.stringify(bad));
     assert.equal(load(), null, `sav s příhozem ${JSON.stringify(bid)} se musí odmítnout`);
   }
   // a korektní příhoz projít musí — jinak by test procházel i s `() => false`
-  const okSave = JSON.parse(JSON.stringify({ v: 2, state: dealt })) as { v: number; state: { phase: Record<string, unknown> } };
+  const okSave = JSON.parse(JSON.stringify({ v: SAV_V, state: dealt })) as { v: number; state: { phase: Record<string, unknown> } };
   okSave.state.phase = {
     name: 'discard-talon',
     standing: { declarer: 0, mode: null, trump: null, bid: { kind: 'durch', cervena: false } },
   };
   store.set('flek.match.v1', JSON.stringify(okSave));
   assert.notEqual(load(), null, 'platný vysoutěžený závazek se načíst musí');
+
+  /*
+   * Starší obálka se odmítá. Není to formalita: `FlekState.spoke` změnil význam
+   * (§36), takže rozehraná hra z v2 nese sedadlo, které „domluvilo" po jediném
+   * fleku — nový reduktor by mu slovo nevrátil a komponenta by se vyúčtovala
+   * o stupeň níž. Dopočítat, co by hráč řekl, nejde, proto se sav nenačte.
+   */
+  store.set('flek.match.v1', JSON.stringify({ ...okSave, v: 2 }));
+  assert.equal(load(), null, 'sav verze 2 (starý význam `spoke`) se načíst nesmí');
+  assert.ok(SAV_V > 2, 'a verze obálky se kvůli tomu musela zvednout');
 }
 console.log('PASS sav — vzdaná hra v archivu projde, živý kontrakt bez trumfu ani cizí příhoz ne');
 
@@ -4191,6 +4249,7 @@ console.log('PASS sav — vzdaná hra v archivu projde, živý kontrakt bez trum
 {
   const { initialState: initX, apply: apX } = await import('../src/lib/rules/engine');
   const { view: viewX } = await import('../src/lib/rules/view');
+  const { legalActions: legalX } = await import('../src/lib/rules/legal');
   const { defaultConfig: cfgX } = await import('../src/lib/rules/sazby');
   const { card: mkX, R7: R7X } = await import('../src/lib/cards');
   type StX = ReturnType<typeof initX>;
@@ -4226,6 +4285,28 @@ console.log('PASS sav — vzdaná hra v archivu projde, živý kontrakt bez trum
     publicAfterFleks(1), publicAfterFleks(2),
     'veřejná fáze po flecích nesmí záviset na tom, který obránce drží trumfovou sedmu',
   );
+
+  /*
+   * Shoda sama nestačí: kdyby se sedmová větev `protiPossible` ztratila, obě
+   * varianty by slovo předaly dál — taky shodně, a test by mlčel. Musí se proto
+   * ověřit i to, CO má být: obránce drží slovo, protože sedma proti je ještě ve
+   * hře. Nabídka se pak liší podle ruky (to je v pořádku — ta je soukromá),
+   * ale veřejný stav ne.
+   */
+  for (const holder of [1, 2] as const) {
+    let st = withSevenAt(holder);
+    st = apX(st, { type: 'flek', seat: 1, target: 'hra' });
+    st = apX(st, { type: 'flek', seat: 1, target: 'kilo' });
+    const f = st.phase.name === 'fleks' ? st.phase.fleks : null;
+    assert.equal(f?.toAct, 1, `sedma proti je pořád ve hře, obránce 1 drží slovo (sedmu drží ${holder})`);
+    assert.deepEqual(f?.spoke, [], 'a do „domluvil" ho to nezapisuje');
+    const mine = legalX(viewX(st, 1));
+    assert.equal(
+      mine.some((a) => a.type === 'announce-proti' && a.sedma), holder === 1,
+      'sedmu proti smí hlásit jen ten, kdo ji opravdu drží (nabídka je soukromá)',
+    );
+    assert.ok(mine.some((a) => a.type === 'good'), 'druhý má aspoň „dobrá" — kolo se nezasekne');
+  }
 
   // a fixtura musí být taková, že je co rozlišovat (jinak by test procházel naprázdno)
   const holdsSeven = (holder: 1 | 2): boolean => withSevenAt(holder).hands[1].includes(seven);
@@ -5318,147 +5399,94 @@ console.log('PASS sav — vzdaná hra v archivu projde, živý kontrakt bez trum
  */
 {
   /**
-   * Řádky těla `run:` v jednom souboru. Vrací je, aby šlo parser ověřit i na
-   * vymyšlených úryvcích — kdyby se rozbil, mlčel by a guard by nic nehlídal.
+   * Všechny `run:` skripty ve workflow — přes skutečný YAML parser.
    *
-   * Sloupec KLÍČE `run`, ne prvního nebílého znaku: u kompaktního zápisu
-   * `- run: |` je tím prvním znakem pomlčka, a sourozenecké `env:` o dva
-   * sloupce dál by pak spadlo do těla — guard by shodil právě ten zápis,
-   * který sám doporučuje.
+   * Tohle si vlastní parser třikrát nezasloužil: postupně mu unikl kompaktní
+   * `- run: |` (odsazení od pomlčky), zapisy `run :` a `"run":`, a nakonec
+   * `-    run:` s víc mezerami a kotva `run: &script |`, u níž se tělo tvářilo
+   * jako hodnota. Strážce, který tiše přeskočí krok, je horší než žádný —
+   * budí dojem, že je hlídáno i to, co není. YAML umí spoustu zápisů téhož;
+   * rozplétat je regulárním výrazem je prohraná bitva, tak to dělá knihovna
+   * (`yaml`, kotvy a flow mapy vyřeší sama).
    */
-  const runLines = (yaml: string): { body: string[]; blocks: number } => {
-    const body: string[] = [];
-    let blocks = 0;
-    let blockIndent: number | null = null;
-    for (const line of yaml.split('\n')) {
-      if (blockIndent !== null) {
-        if (line.trim() === '') continue;
-        if (line.search(/\S/) > blockIndent) { body.push(line); continue; }
-        blockIndent = null;
+  const runScripts = (yamlText: string): string[] => {
+    const doc = parseYaml(yamlText) as { jobs?: Record<string, { steps?: { run?: unknown }[] }> } | null;
+    const out: string[] = [];
+    for (const job of Object.values(doc?.jobs ?? {})) {
+      for (const step of job?.steps ?? []) {
+        if (typeof step?.run === 'string') out.push(step.run);
       }
-      /*
-       * YAML klíč se dá napsat víc způsoby: `run:`, `run :`, `"run":`, `'run':`.
-       * Guard, který zná jen ten první, by ostatní tiše přeskočil — a přeskočený
-       * krok je přesně to, kvůli čemu tenhle test existuje.
-       */
-      const m = /^(\s*)(- )?(?:run|"run"|'run')\s*:\s*(.*)$/.exec(line);
-      if (m === null) continue;
-      if (m[3] === '' || m[3].startsWith('|') || m[3].startsWith('>')) {
-        blockIndent = m[1].length + (m[2]?.length ?? 0); // tělo přijde hlouběji než klíč
-        blocks += 1;
-        continue;
-      }
-      body.push(line);
     }
-    return { body, blocks };
+    return out;
   };
 
-  // parser napřed na úryvcích, ať se pozná, že mlčení znamená čistotu, ne slepotu
-  const compact = [
-    'jobs:', '  j:', '    steps:', '      - run: |', '          echo ahoj',
-    '        env:', '          FOO: ${{ secrets.BAR }}', '      - run: echo konec',
-  ].join('\n');
-  const c = runLines(compact);
-  assert.equal(c.blocks, 1, 'kompaktní `- run: |` se musí poznat jako blok');
-  assert.deepEqual(
-    c.body.map((l) => l.trim()), ['echo ahoj', '- run: echo konec'],
-    'sourozenecké `env:` do těla `run:` nepatří — jinak guard shodí správně napsaný krok',
-  );
-  const unsafe = runLines(['      - name: x', '        run: |', '          gh x --title "${{ y }}"'].join('\n'));
-  assert.ok(unsafe.body.some((l) => l.includes('${{')), 'parser musí výraz v těle bloku najít');
+  /** Co se ve skriptu nesmí objevit, s vysvětlením proč. */
+  const complaints = (script: string, where: string): string[] => {
+    const out: string[] = [];
+    for (const line of script.split('\n')) {
+      /*
+       * `${{ }}` se dosadí do TEXTU skriptu dřív, než ho shell rozebere —
+       * hodnota se tím stává syntaxí. Předává se proto přes `env:`.
+       */
+      if (line.includes('${{')) out.push(`${where}: „${line.trim()}" — výraz se dosadí před shellem, předej ho přes env:`);
+      /*
+       * `echo "x=$(cmd)" >> $GITHUB_OUTPUT` SPOLKNE návratový kód: substituce
+       * uvnitř argumentu ho nepropustí a `echo` vrátí 0, takže `set -e` nezabere
+       * a krok pokračuje s prázdnou hodnotou.
+       */
+      if (line.includes('GITHUB_OUTPUT') && line.includes('$(')) {
+        out.push(`${where}: „${line.trim()}" — návratový kód substituce se ztratí, přiřaď do proměnné`);
+      }
+    }
+    return out;
+  };
 
-  // ostatní platné zápisy klíče `run` nesmí guardu proklouznout
-  for (const key of ['run :', '"run":', "'run':"]) {
-    const inline = runLines(`      - ${key} gh x --title "\${{ y }}"`);
-    assert.ok(
-      inline.body.some((l) => l.includes('${{')),
-      `jednořádkový \`${key}\` se musí prohledat taky`,
-    );
-    const block = runLines([`      - ${key} |`, '          gh x --title "${{ y }}"'].join('\n'));
-    assert.equal(block.blocks, 1, `\`${key} |\` se musí poznat jako blok`);
-    assert.ok(
-      block.body.some((l) => l.includes('${{')),
-      `a jeho tělo se musí prohledat`,
-    );
-  }
+  // parser napřed na zápisech, které vlastnímu regexu postupně unikly
+  const tricky = [
+    'jobs:',
+    '  a:',
+    '    steps:',
+    '      - run: |',                       // kompaktní blok
+    '          echo "${{ github.event.issue.title }}"',
+    '        env:',
+    '          SAFE: ${{ secrets.TOKEN }}', // sourozenec, ne tělo
+    '      -    run: echo "${{ inputs.x }}"', // víc mezer za pomlčkou
+    '      - name: kotva',
+    '        run: &script |',               // kotva: tělo se tvářilo jako hodnota
+    '          echo "${{ inputs.y }}"',
+    '      - { name: flow, run: \'echo "${{ inputs.z }}"\' }', // flow mapa
+    '      - uses: actions/checkout@v4',    // krok bez run:
+  ].join('\n');
+  const found = runScripts(tricky);
+  assert.equal(found.length, 4, `parser má najít čtyři skripty, našel ${found.length}`);
+  assert.equal(
+    found.filter((r) => r.includes('${{')).length, 4,
+    'a ve všech čtyřech musí ten výraz vidět — každý z těchhle zápisů už jednou proklouzl',
+  );
+  assert.equal(
+    complaints(found.join('\n'), 'x').length, 4, 'každý z nich musí vyvolat stížnost',
+  );
+  // sourozenecké `env:` do těla nepatří — jinak by guard shodil správný krok
+  assert.ok(
+    found.every((r) => !r.includes('SAFE')),
+    '`env:` vedle `run:` není jeho tělo',
+  );
+  // a čistý workflow ze samých `uses:` projde bez řečí (žádný `run:` neznamená v pořádku)
+  assert.deepEqual(runScripts('jobs:\n  a:\n    steps:\n      - uses: x/y@v1'), []);
 
   const dir = join(ROOT, '.github/workflows');
   const files = readdirSync(dir).filter((f) => f.endsWith('.yml') || f.endsWith('.yaml'));
   assert.ok(files.length > 0, 'nenašel se žádný workflow — test by nic nehlídal');
-  let checked = 0;
-  let blocksSeen = 0;
+  let scripts = 0;
   for (const file of files) {
-    const raw = readFileSync(join(dir, file), 'utf8');
-    const { body, blocks } = runLines(raw);
-    /*
-     * Parser se ověřuje jen proti souborům, které nějaké `run:` opravdu mají —
-     * workflow složené ze samých `uses:` je legitimní a nesmí shodit sadu
-     * hláškou o rozbitém parseru (táž past jako dřívější `checked > 10`).
-     */
-    if (/^\s*(- )?(?:run|"run"|'run')\s*:/m.test(raw)) {
-      assert.ok(body.length > 0, `${file}: soubor má run:, ale parser žádný nenašel — rozumí ještě formátu?`);
+    for (const script of runScripts(readFileSync(join(dir, file), 'utf8'))) {
+      scripts += 1;
+      const found2 = complaints(script, `.github/workflows/${file}`);
+      assert.equal(found2.length, 0, found2[0]);
     }
-    for (const line of body) {
-      assert.ok(
-        !line.includes('${{'),
-        `.github/workflows/${file}: „${line.trim()}" — výraz se dosadí do skriptu před shellem, předej ho přes env:`,
-      );
-      /*
-       * `echo "x=$(cmd)" >> $GITHUB_OUTPUT` SPOLKNE návratový kód: substituce
-       * uvnitř argumentu ho nepropustí a `echo` vrátí 0, takže `set -e` nezabere
-       * a krok pokračuje s prázdnou hodnotou. Strážci v `release-notes.ts`
-       * (chybějící sekce, prázdné tělo, řídicí znak) by tím ztratili účinek.
-       */
-      assert.ok(
-        !(line.includes('GITHUB_OUTPUT') && line.includes('$(')),
-        `.github/workflows/${file}: „${line.trim()}" — návratový kód substituce se ztratí, přiřaď do proměnné`,
-      );
-    }
-    checked += body.length;
-    blocksSeen += blocks;
   }
-  assert.ok(blocksSeen > 0, 'parser nepotkal žádné víceřádkové `run: |` — ta větev se neověřila');
-  console.log(`PASS workflow — tělo run: je bez dosazovaných výrazů (${checked} řádků, ${blocksSeen} bloků)`);
-}
-
-/*
- * Nadpis sekce z CHANGELOG.md teče do `gh release create --title`, a cestou se
- * píše do GITHUB_OUTPUT jako `title=…`. Řídicí znak by ten řádek rozbil, takže
- * `release-notes.ts` takový nadpis odmítá — a protože se skript v `make all`
- * jinak vůbec nespouští, hlídá ho až tenhle test. Jede jako podproces nad
- * dočasným CHANGELOGem (skript čte `CHANGELOG.md` relativně ke cwd).
- */
-{
-  const tmp = mkdtempSync(join(tmpdir(), 'flek-notes-'));
-  const script = join(ROOT, 'scripts/release-notes.ts');
-  /*
-   * Ne `npx`: cwd je mimo repozitář, takže by `tsx` z `node_modules` nenašel
-   * a v CI by si ho STÁHL z registru — cizí nevypnutý kód v release jobu,
-   * který má `contents: write` a token z checkoutu. Voláme rovnou node
-   * s CLI z lockfilu; když tam není, test radši spadne, než aby něco tahal.
-   */
-  const tsxCli = join(ROOT, 'node_modules/tsx/dist/cli.mjs');
-  assert.ok(existsSync(tsxCli), 'tsx z node_modules nenalezen — `npm ci` neproběhl?');
-  const run = (heading: string): { status: number | null; out: string; err: string } => {
-    writeFileSync(join(tmp, 'CHANGELOG.md'), `${heading}\n\nTělo vydání.\n`);
-    const r = spawnSync(process.execPath, [tsxCli, script, 'v9.9.9', join(tmp, 'notes.md')], {
-      cwd: tmp, encoding: 'utf8',
-    });
-    return { status: r.status, out: (r.stdout ?? '').trim(), err: (r.stderr ?? '').trim() };
-  };
-
-  const good = run('## v9.9.9 — Čistý název vydání');
-  assert.equal(good.status, 0, `čistý nadpis musí projít (stderr: ${good.err})`);
-  assert.equal(good.out, 'v9.9.9 — Čistý název vydání', 'název se vypisuje na stdout beze změny');
-
-  const bell = String.fromCharCode(7);
-  const bad = run(`## v9.9.9 — Název s${bell}řídicím znakem`);
-  assert.equal(bad.status, 2, 'nadpis s řídicím znakem musí vydání zastavit');
-  assert.match(bad.err, /řídicí znaky/, 'a říct proč');
-
-  // chybějící sekce zůstává chybou i nadále (starší strážce, tentýž kód)
-  assert.equal(run('## v0.0.1 — Jiná verze').status, 2, 'chybějící sekce pro tag musí skončit dvojkou');
-  console.log('PASS vydání — nadpis s řídicím znakem release zastaví, čistý projde');
+  assert.ok(scripts > 0, 'v žádném workflow se nenašel `run:` — parser asi nedošel k `jobs`');
+  console.log(`PASS workflow — skripty run: jsou bez dosazovaných výrazů (${scripts} skriptů)`);
 }
 
 console.log('OK: vše prošlo');

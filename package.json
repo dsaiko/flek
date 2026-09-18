@@ -27,7 +27,8 @@
     "playwright": "^1.62.1",
     "sharp": "^0.35.3",
     "tsx": "^4.23.12",
-    "typescript": "^6.0.3"
+    "typescript": "^6.0.3",
+    "yaml": "^2.9.1"
   },
   "dependencies": {
     "astro": "^7.2.4"
