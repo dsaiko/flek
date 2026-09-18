@@ -4,6 +4,26 @@ Poznámky k vydání. Sekci pro daný tag z tohohle souboru vytáhne CI a použi
 jako text releasu na GitHubu (`.github/workflows/release.yml`) — nadpis sekce se
 stane názvem vydání. Nová verze = **přidat sekci sem** a až pak tagovat.
 
+## v0.0.6 — převzetí podle pravidel a dvě review, která AI prohlédla do karet
+
+Třetí kolo review pravidel proti dokumentům ČSM, tentokrát dvěma nezávislými recenzenty. Oba potvrdili to hlavní: **AI do cizích karet nevidí** — dostává jen redigovaný pohled, simulace uvnitř hledání běží nad tímtéž pohledem a seed hledání nemá se seedem rozdání nic společného. Zbytek jsou opravy toho, kde se engine od pravidel odchýlil.
+
+### Obránce si napřed vezme talon
+
+Podle Obecných pravidel VII/1 obránce, který nechce hrát barvu, „sebere odložený talon a následně po odhozu jiného talonu ohlásí Betl či Durch". Hra ho dřív nutila hlásit betl nebo durch naslepo a volbu mu zamkla. Teď má tlačítko **Beru talon**: zvedne ho, odhodí dvě karty a s dvanácti kartami v ruce si vybere. Po ohlášeném betlu se převzetí otevře znovu a zbývající dva hráči mohou přebrat durchem; durch jde rovnou do flekování. Aktér sám hlásí betl nebo durch dál rovnou, talon už odhodil. Vzdání se sebraným talonem platí aspoň betl, aby zvednutý talon nebyl levný únik.
+
+### Mluví se ve směru hry od toho, kdo hlásil
+
+Komentování závazku i odpovědi na převzetí začínaly vždy u forhonta. U aktéra-forhonta je to totéž, ale v licitovaném s aktérem-prostředním mluvil první forhont místo zadáka, a druhý mluvčí zná názor prvního. Teď jde kruh ve směru hry od toho, kdo hlásil (V/4, volený B/11).
+
+### Strop fleků podle varianty
+
+Licitovaná pravidla končí čtvrtým flekem, botami (čl. IV); hra dovolovala i kalhoty. Volený kalhoty drží, jeho text strop neuvádí. Nápověda to říká ve všech čtyřech jazycích. Obnovený zápas ze savu hraje další rozdání už podle aktuálních pravidel, ne podle těch z doby uložení.
+
+### Drobnosti
+
+Vyúčtování licitovaného betlu a durchu nechává talon rubem (čl. II/11). Tři komentáře v kódu tvrdící, že zvolená trumfová karta je veřejná, jsou přepsané — leží lícem dolů. Test úniku informací má nově přísný seznam povolených položek pohledu na každé úrovni včetně zúčtování a kontrolu, že prohození skrytých karet mezi soupeři pohled nezmění ani o bit. Každá oprava má regresní test ověřený negativní kontrolou.
+
 ## v0.0.5 — desítka v betlu, čitelný závazek a stůl, co se vejde do okna
 
 Pět věcí, které vyplavaly při hraní. Čtyři z nich jsou o tom, že hra ukazovala něco jiného, než co se doopravdy dělo.
