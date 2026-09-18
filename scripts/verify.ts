@@ -5,7 +5,9 @@
  */
 
 import assert from 'node:assert/strict';
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -2782,7 +2784,7 @@ const KULE = 2 as const;
 
   // ── odložený trumf: co leží na stole, není v ruce (a do talonu nesmí) ───
   {
-    const { trumpAsideOf, handAside } = await import('../src/lib/ui/table');
+    const { trumpAsideOf, handAside, opponentBacks } = await import('../src/lib/ui/table');
     let st: StA = initialState(defaultConfig('voleny'), 2); // forhont = 0
     st = apply(st, { type: 'deal', seed: 4 });
     assert.equal(trumpAsideOf(view(st, 0)), null, 'před volbou stranou nic neleží');
@@ -2814,10 +2816,26 @@ const KULE = 2 as const;
      */
     assert.equal(mine?.holder, 0, 'volícímu karta odešla z ruky');
     assert.equal(theirs?.holder, 0, 'a obránce ví KOMU, i když neví KTEROU');
-    assert.equal(
-      view(st, 1).handCounts[0] - 1, handAside(view(st, 0)).length,
-      'počet rubů protihráče po odečtení odložené karty sedí s jeho vějířem',
-    );
+
+    /*
+     * `opponentBacks` je druhá půlka opravy — ta, která se opravdu kreslí.
+     * Protihráč, kterému karta leží stranou, má mít o rub MÍŇ; ostatní sedadla
+     * se nemění. Kontroluje se z pohledu OBOU obránců, ať se nespleteme
+     * v sedadle, a proti `handAside()` téhož hráče, ať obě půlky drží pohromadě.
+     */
+    for (const watcher of [1, 2] as const) {
+      const vw = view(st, watcher);
+      assert.equal(
+        opponentBacks(vw, 0), handAside(view(st, 0)).length,
+        `sedadlo ${watcher}: rubů u volícího musí být tolik, kolik má karet ve vějíři`,
+      );
+      assert.equal(opponentBacks(vw, 0), vw.handCounts[0] - 1, 'tj. o odloženou kartu míň');
+      const other = watcher === 1 ? 2 : 1;
+      assert.equal(
+        opponentBacks(vw, other), vw.handCounts[other],
+        'komu nic stranou neleží, tomu se nic neodečítá',
+      );
+    }
 
     /*
      * Do talonu zvolená karta nesmí (ČSM volený, B/7: dvě karty „odděleně od
@@ -4392,7 +4410,31 @@ console.log('PASS sav — vzdaná hra v archivu projde, živý kontrakt bez trum
         { type: 'announce-proti', seat: 1, sedma: false, kilo: true }),
       /nelegální/, 'reducer musí sto proti v licitovaném odmítnout',
     );
-    console.log('PASS proti — jen volený a jen v prvním kole (čl. VII/1, II/23)');
+    /*
+     * Ohlášení i flek jsou JEDNO vyjádření, takže obojí tah uzavírá a na pořadí
+     * uvnitř tahu nezáleží. Kdyby jedno z nich slovo nechávalo a druhé ne,
+     * prošlo by „sto proti a flek", ale ne „flek a sto proti" — táž řeč u stolu
+     * by dopadla dvakrát jinak podle toho, co hráč klikne dřív.
+     */
+    const roundZero: StF = {
+      ...stL,
+      config: cfgF('voleny'),
+      contract: { mode: 'hra', trump: 2, declarer: 0, sedma: null, kilo: null, dveSedmy: false },
+      phase: { name: 'fleks', fleks: { levels: {}, lastRaiser: {}, toAct: 1, spoke: [], open: ['hra'], raised: [], round: 0 } },
+    } as StF;
+    const toActAfter = (a: ActF): unknown => {
+      const out = apF(roundZero, a);
+      return out.phase.name === 'fleks' ? out.phase.fleks.toAct : null;
+    };
+    assert.equal(
+      toActAfter({ type: 'announce-proti', seat: 1, sedma: false, kilo: true }), 2,
+      'ohlášením sta proti obránce domluvil — slovo jde dál (čl. VII/1)',
+    );
+    assert.equal(
+      toActAfter({ type: 'flek', seat: 1, target: 'hra' }), 2,
+      'a flekem na jedinou otevřenou komponentu taky — obojí stejně, ať klikne cokoli dřív',
+    );
+    console.log('PASS proti — jen volený a jen v prvním kole, a tah uzavírá stejně jako flek (čl. VII/1, V/4, II/23)');
   }
 
   /*
@@ -5173,39 +5215,102 @@ console.log('PASS sav — vzdaná hra v archivu projde, živý kontrakt bez trum
  * předávají přes `env:`, kde jsou pro shell jen text.
  */
 {
+  /**
+   * Řádky těla `run:` v jednom souboru. Vrací je, aby šlo parser ověřit i na
+   * vymyšlených úryvcích — kdyby se rozbil, mlčel by a guard by nic nehlídal.
+   *
+   * Sloupec KLÍČE `run`, ne prvního nebílého znaku: u kompaktního zápisu
+   * `- run: |` je tím prvním znakem pomlčka, a sourozenecké `env:` o dva
+   * sloupce dál by pak spadlo do těla — guard by shodil právě ten zápis,
+   * který sám doporučuje.
+   */
+  const runLines = (yaml: string): { body: string[]; blocks: number } => {
+    const body: string[] = [];
+    let blocks = 0;
+    let blockIndent: number | null = null;
+    for (const line of yaml.split('\n')) {
+      if (blockIndent !== null) {
+        if (line.trim() === '') continue;
+        if (line.search(/\S/) > blockIndent) { body.push(line); continue; }
+        blockIndent = null;
+      }
+      const m = /^(\s*)(- )?run:\s*(.*)$/.exec(line);
+      if (m === null) continue;
+      if (m[3] === '' || m[3].startsWith('|') || m[3].startsWith('>')) {
+        blockIndent = m[1].length + (m[2]?.length ?? 0); // tělo přijde hlouběji než klíč
+        blocks += 1;
+        continue;
+      }
+      body.push(line);
+    }
+    return { body, blocks };
+  };
+
+  // parser napřed na úryvcích, ať se pozná, že mlčení znamená čistotu, ne slepotu
+  const compact = [
+    'jobs:', '  j:', '    steps:', '      - run: |', '          echo ahoj',
+    '        env:', '          FOO: ${{ secrets.BAR }}', '      - run: echo konec',
+  ].join('\n');
+  const c = runLines(compact);
+  assert.equal(c.blocks, 1, 'kompaktní `- run: |` se musí poznat jako blok');
+  assert.deepEqual(
+    c.body.map((l) => l.trim()), ['echo ahoj', '- run: echo konec'],
+    'sourozenecké `env:` do těla `run:` nepatří — jinak guard shodí správně napsaný krok',
+  );
+  const unsafe = runLines(['      - name: x', '        run: |', '          gh x --title "${{ y }}"'].join('\n'));
+  assert.ok(unsafe.body.some((l) => l.includes('${{')), 'parser musí výraz v těle bloku najít');
+
   const dir = join(ROOT, '.github/workflows');
   const files = readdirSync(dir).filter((f) => f.endsWith('.yml') || f.endsWith('.yaml'));
   assert.ok(files.length > 0, 'nenašel se žádný workflow — test by nic nehlídal');
   let checked = 0;
+  let blocksSeen = 0;
   for (const file of files) {
-    const lines = readFileSync(join(dir, file), 'utf8').split('\n');
-    let blockIndent: number | null = null;
-    for (const [i, line] of lines.entries()) {
-      const at = `.github/workflows/${file}:${i + 1}`;
-      const complain = `${at} — výraz se dosadí do skriptu před shellem, předej ho přes env:`;
-      const indent = line.search(/\S/);
-      // pokračování víceřádkového `run: |`
-      if (blockIndent !== null) {
-        if (line.trim() === '') continue;
-        if (indent > blockIndent) {
-          checked += 1;
-          assert.ok(!line.includes('${{'), complain);
-          continue;
-        }
-        blockIndent = null;
-      }
-      const m = /^\s*(?:- )?run:\s*(.*)$/.exec(line);
-      if (m === null) continue;
-      if (m[1] === '' || m[1].startsWith('|') || m[1].startsWith('>')) {
-        blockIndent = indent; // tělo teprve přijde, odsazené hlouběji
-        continue;
-      }
-      checked += 1;
-      assert.ok(!line.includes('${{'), complain);
+    const { body, blocks } = runLines(readFileSync(join(dir, file), 'utf8'));
+    assert.ok(body.length > 0, `${file}: parser nenašel jediný řádek run: — asi přestal rozumět formátu`);
+    for (const line of body) {
+      assert.ok(
+        !line.includes('${{'),
+        `.github/workflows/${file}: „${line.trim()}" — výraz se dosadí do skriptu před shellem, předej ho přes env:`,
+      );
     }
+    checked += body.length;
+    blocksSeen += blocks;
   }
-  assert.ok(checked > 10, `prošlo jen ${checked} řádků run: — parser asi nic nenašel`);
-  console.log(`PASS workflow — tělo run: je bez dosazovaných výrazů (${checked} řádků)`);
+  assert.ok(blocksSeen > 0, 'parser nepotkal žádné víceřádkové `run: |` — ta větev se neověřila');
+  console.log(`PASS workflow — tělo run: je bez dosazovaných výrazů (${checked} řádků, ${blocksSeen} bloků)`);
+}
+
+/*
+ * Nadpis sekce z CHANGELOG.md teče do `gh release create --title`, a cestou se
+ * píše do GITHUB_OUTPUT jako `title=…`. Řídicí znak by ten řádek rozbil, takže
+ * `release-notes.ts` takový nadpis odmítá — a protože se skript v `make all`
+ * jinak vůbec nespouští, hlídá ho až tenhle test. Jede jako podproces nad
+ * dočasným CHANGELOGem (skript čte `CHANGELOG.md` relativně ke cwd).
+ */
+{
+  const tmp = mkdtempSync(join(tmpdir(), 'flek-notes-'));
+  const script = join(ROOT, 'scripts/release-notes.ts');
+  const run = (heading: string): { status: number | null; out: string; err: string } => {
+    writeFileSync(join(tmp, 'CHANGELOG.md'), `${heading}\n\nTělo vydání.\n`);
+    const r = spawnSync('npx', ['tsx', script, 'v9.9.9', join(tmp, 'notes.md')], {
+      cwd: tmp, encoding: 'utf8',
+    });
+    return { status: r.status, out: (r.stdout ?? '').trim(), err: (r.stderr ?? '').trim() };
+  };
+
+  const good = run('## v9.9.9 — Čistý název vydání');
+  assert.equal(good.status, 0, `čistý nadpis musí projít (stderr: ${good.err})`);
+  assert.equal(good.out, 'v9.9.9 — Čistý název vydání', 'název se vypisuje na stdout beze změny');
+
+  const bell = String.fromCharCode(7);
+  const bad = run(`## v9.9.9 — Název s${bell}řídicím znakem`);
+  assert.equal(bad.status, 2, 'nadpis s řídicím znakem musí vydání zastavit');
+  assert.match(bad.err, /řídicí znaky/, 'a říct proč');
+
+  // chybějící sekce zůstává chybou i nadále (starší strážce, tentýž kód)
+  assert.equal(run('## v0.0.1 — Jiná verze').status, 2, 'chybějící sekce pro tag musí skončit dvojkou');
+  console.log('PASS vydání — nadpis s řídicím znakem release zastaví, čistý projde');
 }
 
 console.log('OK: vše prošlo');

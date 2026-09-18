@@ -524,13 +524,20 @@ function reduce(state: GameState, action: PlayerAction): GameState {
         raised: [...f.raised, action.target],
       };
       /*
-       * Na každou otevřenou komponentu se odpovídá zvlášť (čl. V/4): kdo zvýšil
-       * jednu, drží slovo, dokud mu zbývá další, kterou smí zvýšit. Bez toho by
-       * jediné „re" uzavřelo aktérovo kolo a druhý flek obrany (např. na sedmu)
-       * by zůstal bez odpovědi — komponenta by se vyúčtovala o stupeň níž.
+       * Na každou otevřenou komponentu se odpovídá zvlášť (čl. V/4: „u
+       * kombinovaných závazků lze flekovat každý z nich samostatně"), takže kdo
+       * zvýšil jednu, drží slovo, dokud mu zbývá další, kterou smí zvýšit. Bez
+       * toho by jediné „re" uzavřelo aktérovo kolo a druhý flek obrany (např. na
+       * sedmu) by zůstal bez odpovědi — komponenta by se vyúčtovala o stupeň níž,
+       * než jak se u stolu mluvilo.
+       *
+       * Ohlášení sedmy/sta proti tah naopak uzavírá (viz větev níž), takže na
+       * pořadí uvnitř tahu nezáleží: ani „flek a sto proti", ani „sto proti
+       * a flek" nejde — obojí je jedno vyjádření. Viz §36 v design docu.
        */
-      const done = raisableFleks(state.config, state.contract, raised, action.seat).length === 0;
-      const spoken: FlekState = done ? { ...raised, spoke: [...f.spoke, action.seat] } : raised;
+      const spoken: FlekState = raisableFleks(state.config, state.contract, raised, action.seat).length > 0
+        ? raised
+        : { ...raised, spoke: [...f.spoke, action.seat] };
       // kolo se zvýšením nemůže skončit fází, jen předá slovo protistraně
       const next = advanceFleks(state, state.contract, spoken) as FlekState;
       return { ...state, phase: { name: 'fleks', fleks: next } };
@@ -550,14 +557,21 @@ function reduce(state: GameState, action: PlayerAction): GameState {
        */
       const announced: FlekState = {
         ...f,
-        spoke: [...f.spoke, action.seat],
         raised: [
           ...f.raised,
           ...(action.sedma ? (['sedma'] as FlekTarget[]) : []),
           ...(action.kilo ? (['kilo'] as FlekTarget[]) : []),
         ],
       };
-      const next = advanceFleks(state, contract, announced) as FlekState;
+      /*
+       * Ohlášením sedadlo domluvilo: „Sedma a Sto mohou hlásit i hráči obrany
+       * v prvním kole komentování" (čl. VII/1) je JEDNO vyjádření, ne přídavek
+       * k fleku. Drží to v symetrii s větví `flek`, která po vyčerpání zvýšení
+       * tah uzavírá taky — kdyby ohlášení slovo nechávalo, prošlo by „sto proti
+       * a flek", ale ne „flek a sto proti", a na pořadí uvnitř tahu by záleželo.
+       */
+      const announcedSpoken: FlekState = { ...announced, spoke: [...f.spoke, action.seat] };
+      const next = advanceFleks(state, contract, announcedSpoken) as FlekState;
       return { ...state, contract, phase: { name: 'fleks', fleks: next } };
     }
 

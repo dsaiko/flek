@@ -86,7 +86,12 @@ export interface FlekState {
   levels: Partial<Record<FlekTarget, number>>;
   lastRaiser: Partial<Record<FlekTarget, Seat>>;
   toAct: Seat;
-  /** Kdo se v TOMTO kole už vyjádřil — pasem i zvýšením. */
+  /**
+   * Kdo v TOMTO kole domluvil: buď schválil („dobrá"), nebo zvýšil a nezbyla
+   * mu otevřená komponenta, kterou by ještě směl zvýšit (`raisableFleks`).
+   * Kdo zvýšil jednu ze dvou otevřených, tady schválně NENÍ — drží slovo dál
+   * (čl. V/4: každý z kombinovaných závazků se flekuje samostatně).
+   */
   spoke: Seat[];
   /** Co smí strana na tahu v tomhle kole zvyšovat (co zvýšila protistrana). */
   open: FlekTarget[];
