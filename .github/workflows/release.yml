@@ -16,7 +16,16 @@ jobs:
   release:
     runs-on: ubuntu-latest
     steps:
+      # `persist-credentials: false`: checkout jinak zapíše do .git/config
+      # hlavičku s tokenem, a ten má kvůli `contents: write` právo zapisovat.
+      # Zůstal by tam po celý job, tedy i pod `npm ci` (postinstall skripty
+      # celého stromu závislostí), instalací prohlížečů a `make all`. Jedno
+      # kompromitované vydání kterékoli z nich by si ho odtud přečetlo. Token
+      # se tu nepotřebuje k ničemu — vydání ho dostane až v posledním kroku
+      # přes `env:`, kde platí jen pro ten jediný příkaz.
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-node@v4
         with:
@@ -34,13 +43,22 @@ jobs:
             exit 1
           }
 
+      # Přiřazení, ne `echo "title=$(…)"`: návratový kód substituce uvnitř
+      # argumentu se ztratí (`echo` vrátí 0), takže chybějící sekce, prázdné
+      # tělo ani řídicí znak v nadpisu by krok nezastavily — vydání by jelo dál
+      # s prázdným titulkem. Přiřazení stav substituce pod `set -e` propustí.
       - name: Poznámky k vydání z CHANGELOG.md
         id: notes
-        run: echo "title=$(npx tsx scripts/release-notes.ts "$GITHUB_REF_NAME")" >> "$GITHUB_OUTPUT"
+        run: |
+          # Ne `npx`: když by `tsx` v node_modules nenašel, STÁHL by si ho
+          # z registru a spustil uvnitř release jobu. Binárka z lockfilu, ať
+          # chybějící instalace vydání zastaví, místo aby tahala cizí kód.
+          title="$(node node_modules/tsx/dist/cli.mjs scripts/release-notes.ts "$GITHUB_REF_NAME")"
+          echo "title=$title" >> "$GITHUB_OUTPUT"
 
       # chromium i webkit: smoke jede v obou (Safari chytá jiné chyby layoutu)
       - name: Prohlížeče pro smoke testy
-        run: npx playwright install --with-deps chromium webkit
+        run: node node_modules/playwright/cli.js install --with-deps chromium webkit
 
       - name: make all
         env:
@@ -49,7 +67,13 @@ jobs:
           SMOKE_RESTART_MS: 9000
         run: make all
 
+      # Titulek jde přes proměnnou prostředí, ne přes `${{ }}` v těle `run:`.
+      # Výraz se dosazuje do skriptu JEŠTĚ PŘED tím, než ho shell rozebere, a
+      # titulek pochází z nadpisu v CHANGELOG.md (scripts/release-notes.ts bere
+      # `(.*)` doslova) — uvozovka v nadpisu by tak spustila cizí příkaz s
+      # GH_TOKEN a právem `contents: write`. V proměnné je to jen text.
       - name: Vydání
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" --title "${{ steps.notes.outputs.title }}" --notes-file release-notes.md
+          RELEASE_TITLE: ${{ steps.notes.outputs.title }}
+        run: gh release create "$GITHUB_REF_NAME" --title "$RELEASE_TITLE" --notes-file release-notes.md

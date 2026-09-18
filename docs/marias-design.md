@@ -1786,3 +1786,211 @@ sedm sedí a je opravených:
 
 Negativní kontroly: cizí klíč v `HandResult`, vyhozené `take` z validace savu, vyhozená větev
 `take` i odhozový režim v heuristice a `deal` bez configu — každé shodí právě svůj test.
+
+## 35. Fixpoint review kódu — desáté kolo (2026-09-18, po `774cecd`)
+
+Panel (claude, codex, glm-5.3-flash) nad celým stromem po vydání v0.0.6: 21 nálezů, soudce nechal
+sedm (zbytek duplikáty nebo zamítnuto). Všech sedm se ověřilo proti kódu a proti PDF — **žádný
+falešný poplach**, všechny opravené.
+
+### Zapracováno
+
+| # | Závažnost | Nález | Pravidlo | Oprava |
+|---|---|---|---|---|
+| 1 | high | `release.yml` skládal příkaz `gh release create --title "${{ steps.notes.outputs.title }}"`. Výraz se dosazuje do textu skriptu **dřív, než ho shell rozebere**, takže titulek se stává syntaxí. Titulek přitom není konstanta — `release-notes.ts` ho bere doslova z nadpisu v `CHANGELOG.md` (`(.*)`). Uvozovka v nadpisu tedy spustí cizí příkaz na runneru, a to v kroku s `GH_TOKEN` a právem `contents: write` | — | Titulek jde přes `env: RELEASE_TITLE`, kde je pro shell jen text. `release-notes.ts` navíc odmítne nadpis s řídicími znaky, ať se překlep pozná hlasitě |
+| 2 | medium | **Na každý flek šlo odpovědět jen jednou za kolo.** `advanceFleks` uzavíralo kolo, jakmile sedadlo jednou promluvilo, a další kolo otevřelo jen `[...new Set(f.raised)]`. Flekla-li obrana dvě komponenty (A hru, B sedmu), aktér zvedl jednu a **druhá zůstala zamrzlá na fleku** — sedma se vyúčtovala za 2× místo 4×. V UI se to projevilo dvěma tlačítky „Re!", z nichž jedno po kliknutí na druhé zmizelo | Obecná V/4: „**U kombinovaných závazků lze flekovat každý z nich samostatně**" | Sedadlo drží slovo, dokud mu zbývá otevřená komponenta, kterou smí zvýšit. Eligibilitu počítá nová `raisableFleks()` v `legal.ts` — jeden zdroj pravdy pro nabídku akcí i pro posun kola |
+| 3 | medium | Odložený trumf se u soupeře **počítal dvakrát**: ve stavu karta pořád leží v ruce, takže `handCounts` ji zahrnuje, a `renderOpponents` kreslila rub za každou. AI-forhont tak ukazoval o kartu víc a při sehrávce jedna nevysvětlitelně zmizela (dvě hry ze tří) | — | `trumpAsideOf()` vrací i `holder` (z čí ruky karta odešla); `renderOpponents` o ni vějíř zkrátí. Vlastní ruku řeší `handAside()` jako dosud |
+| 4 | medium | `standingOk` v savu ověřovalo `standing.bid` jen jako „nějaký objekt". `bidRank` na cizím tvaru vrací `undefined`, každé porovnání s ním je `false` — a **minimum z licitace tiše přestane platit** | Obecná VII/3 (vysoutěžený stupeň je minimum) | `isBid`, stejně jako všude jinde v souboru |
+| 5 | medium | Nápověda a nastavení se vylučovaly **jen jedním směrem**: `openHelp` zavíral nastavení, `openSettings` nápovědu ne — přestože komentář sliboval „a naopak". Nápověda leží uvnitř `#table`, ozubené kolo je jeho soused, takže kliknout jde; oba panely mají `z-index: 24` a prosvítaly přes sebe | — | `openSettings(true)` zavře nápovědu; smoke to hlídá v obou směrech |
+| 6 | low | `hideThinkingBubble()` se vracelo na `thinkShown === null` dřív, než se podívalo na frontu, takže **čekající** „Momentíček…" zrušit nešlo — a naskočil nad sedadlem, které už dávno táhlo. Doc komentář o řádek výš tvrdil opak | — | Fronta se eviduje zvlášť (`thinkQueued`) a ruší se i tehdy, když nic nevisí |
+| 7 | low | `unlock()` jen spustí `resume()` a vrátí se; `play('deal')` hned za ním narazí na ještě uspaný kontext a potvrzení zapnutí zvuku se **nikdy neozve** | — | `unlock()` vrací příslib; tlačítko zvuků hraje potvrzení až z něj. Odemykací ticháč pro Safari zůstává **synchronně v gestu** (po `await` by ho už neuznalo) |
+| 8 | low | Název testu i24 („odpovědi obrany od forhonta") popisoval pravidlo, které §34 nahradilo. Procházel jen proto, že jeho fixtura (aktér = forhont) obě pořadí slučuje | Obecná V/4, volený B/11 | Přejmenováno na „ve směru hraní"; komentář říká, že rozlišující případ hlídá test níž |
+
+### Testy
+
+Nové a rozšířené bloky ve `scripts/verify.ts` a `scripts/smoke.ts`:
+
+- **fleky — na každou flekovanou komponentu se odpovídá zvlášť**: obrana flekne hru i sedmu, aktér
+  musí dostat slovo na **obě**; po dvou „re" jsou obě úrovně na 2 a teprve pak se kolo posune
+- **workflow — tělo `run:` je bez dosazovaných výrazů**: statická kontrola všech workflow souborů
+  (parsuje i víceřádkové `run: |`), aby se `${{ }}` do skriptu nevrátilo jiným krokem
+- **sav — cizí příhoz**: `{}`, neznámý `kind` i chybějící `cervena` se musí odmítnout, platný durch projít
+- **odložený trumf**: `holder` u volícího i u obránce a shoda „rubů minus odložená karta" s vějířem
+- **zvuky**: podvržený `resume()` se probouzí **až s příslibem** (jako prohlížeč) — zvuk hned po
+  `unlock()` se zahodí, po `await` se ozvat musí
+- **nápověda** (smoke): ozubené kolo přes otevřenou nápovědu a otazník přes otevřené nastavení —
+  v obou směrech smí zůstat otevřený právě jeden panel
+
+Negativní kontroly (vrácení opravy shodí právě svůj test): `done = true` v `flek` větvi,
+`isRecord` místo `isBid`, `${{ }}` zpátky do `run:`, vyhozené `openHelp(false)`.
+
+**Bez testu zůstal nález 6** (čekající bublina): je to čistě časování uvnitř `TableUI`, kde se
+jediný spolehlivý scénář opírá o dvě souběžné lhůty (700 ms a 1100 ms). Takový smoke test by byl
+vratký a podle zásady projektu je lepší žádný než mrtvý — chování hlídá komentář u `thinkQueued`.
+
+### Fixpoint review PR #10 (2026-09-18, po `4bc028c`)
+
+Panel nad PR s opravami §35: **verdikt APPROVE**, žádný nález nad „medium". Osm otevřených
+nálezů, všech osm sedí; sedm opravených, jeden zamítnutý.
+
+| Závažnost | Nález | Oprava |
+|---|---|---|
+| medium | `announce-proti` obcházelo nové pravidlo předávání slova: `flek` drží slovo, dokud zbývá otevřená komponenta, ale ohlášení proti zapisovalo do `spoke` bezpodmínečně. Na pořadí uvnitř tahu tak **záleželo** — „sto proti a pak flek" prošlo, „flek a pak sto proti" ne | Symetricky, ale opačným směrem, než navrhoval recenzent: ohlášení proti tah uzavírá **a flek při vyčerpaných zvýšeních taky**. Ohlášení je podle čl. VII/1 jedno vyjádření v prvním kole komentování, ne přídavek k fleku; opačné řešení (držet slovo, dokud má hráč co říct) by po každém fleku ve voleném přidalo potvrzovací „Dobrá" — viz §36 |
+| medium | Nový strážce řídicích znaků v `release-notes.ts` nikdo nespouštěl: skript není součástí `make all`, takže se mohl smazat i obrátit a všechno by bylo zelené | Test pouští skript jako **podproces** nad dočasným CHANGELOGem: čistý nadpis → kód 0 a název na stdout, nadpis s řídicím znakem → kód 2 a hláška, chybějící sekce → kód 2 |
+| medium | Testovala se jen datová půlka opravy odloženého trumfu (`holder`), ne ta kreslící. Odečet v `renderOpponents` šlo vyhodit, aniž by cokoli spadlo | Rozhodnutí o počtu vytaženo do čisté `opponentBacks(v, seat, unseenCount)` — testuje se bez DOM z pohledu obou obránců, proti `handAside()` téhož hráče (táž zásada jako u `talkSituationFor`, §28) |
+| low | `FlekState.spoke` měl v komentáři „kdo se už vyjádřil — pasem i zvýšením", jenže zvýšení tam sedadlo zapíše až s vyčerpanými komponentami. Přesně to pole, na které se ptá `advanceFleks` i `passSettlesWithoutPlay` | Komentář dopsán o podmínku a odkaz na `raisableFleks` |
+| low | `echo "title=$(npx tsx …)"` **spolkne návratový kód** — substituce uvnitř argumentu ho nepropustí, `echo` vrátí 0. Chybějící sekce, prázdné tělo i nový strážce by tedy vydání nezastavily; job by šel dál s prázdným titulkem a spadl by až o dva kroky dál na cizí chybě | Dvouřádkový `run: |` s přiřazením `title="$(…)"`, které stav substituce pod `set -e` propustí (ověřeno v shellu) |
+| low | Strážce workflow bral odsazení z prvního nebílého znaku, takže u kompaktního `- run: \|` byl „tělem" i sourozenecký `env:` — guard by shodil právě ten zápis, který sám doporučuje | Odsazení se bere ze sloupce KLÍČE `run`. Parser je vytažený do `runLines()` a ověřený na dvou vymyšlených úryvcích, aby mlčení znamenalo čistotu, ne slepotu |
+| low | Sentinel `checked > 10` měl rezervu přesně jeden řádek: smazání řádku z jiného kroku by shodilo test hláškou „parser asi nic nenašel" | Strukturální podmínky: aspoň jeden `run:` na soubor a aspoň jeden víceřádkový blok za běh |
+
+### Zamítnuto (s odůvodněním)
+
+| Nález | Proč |
+|---|---|
+| low: „zapojení tlačítka zvuků na příslib `unlock()` není otestované" | Sedí — vrácení té tří řádky nic neshodí. Jenže test by musel mít uspaný kontext s řízeným příslibem, a smoke si `AudioContext` jen obaluje: kontext vytvořený v gestu startuje rovnou `running`, takže by se `resume()` musel podvrhnout — a test by pak ověřoval podvrh, ne prohlížeč. Kontrakt `createSounds` (zvuk až po dojití příslibu) **otestovaný je**; zbylé tři řádky v `main.ts` jsou jeho jediné volání. Podle zásady projektu je vratký test horší než žádný |
+
+## 36. Kolik toho hráč řekne v jednom tahu (2026-09-18)
+
+Model fleků dával sedadlu jednu akci za tah. Od §35 z toho platí výjimka: kdo zvýšil jednu
+z několika otevřených komponent, drží slovo dál (čl. V/4 „u kombinovaných závazků lze flekovat
+každý z nich samostatně"). Otevřená otázka byla, jestli táž výjimka platí i pro sedmu/sto proti —
+jinými slovy jestli obránce smí v jednom tahu říct „**flek a sto proti**".
+
+Text to nerozhoduje: čl. VII/1 říká jen, že „Závazky Sedma a Sto mohou hlásit i hráči obrany
+v prvním kole komentování ohlášeného trumfového závazku" — tedy v tom kole, ne nutně v témž tahu.
+
+**Rozhodnuto (uživatel, 2026-09-18): ano, smí.** Sedadlo drží slovo, dokud má co říct nad rámec
+„Dobrá"; tah uzavře až schválení. Predikát je `stillHasSay()` v `engine.ts` a ptá se rovnou
+`legalActions` — ne vlastního seznamu. To je na tom to podstatné: kdyby se nabídka a posun kola
+rozešly, propadla by hráči možnost, kterou mu UI o akci dřív samo nabízelo.
+
+Nejdřív bylo zvoleno užší čtení (ohlášení tah uzavírá) s odůvodněním, že širší by přidalo klikání.
+Panel ukázal, že užší čtení **nedrží**: jakmile je otevřených komponent víc, obránce po fleku pořád
+zůstává na tahu, takže „flek a pak sto proti" projde, kdežto „sto proti a pak flek" ne — a ohlášení
+navíc zahodí flek, který byl o akci dřív nabízený. Symetrie šla zachránit jen zrušením výjimky
+z §35, tedy návratem původní chyby. Argument o klikání navíc taky neobstál: po fleku naskočí
+skutečná volba („Dobrá / Flek! na sedmu / Sto proti"), ne potvrzovací klik bez obsahu — zásada
+„žádné klikání bez volby" (§5.5) tím porušená není.
+
+Cena je jedno kliknutí navíc ve voleném kole 0, kdy je „sto proti" dostupné pořád. Kdyby vadilo,
+cesta nejsou další otázky, ale **sdružené akce** — tak, jak to `legalActions` už dělá pro „sedma
+proti + sto proti" jedním tlačítkem.
+
+Drží to test „proti — … nezávisle na pořadí v tahu": obě pořadí musí dát tentýž závazek, tytéž
+úrovně fleků i totéž `toAct`.
+
+### Fixpoint review PR #10, druhé kolo (2026-09-18, po `a615d25`)
+
+| Závažnost | Nález | Oprava |
+|---|---|---|
+| high | Nový test `release-notes.ts` pouštěl `npx tsx` s cwd v dočasném adresáři. Tam `npx` lockfilem nainstalovaný `tsx` nenajde a v CI si ho **stáhne z registru** — cizí nepřipnutý kód v release jobu, který má `contents: write` a token z checkoutu | Volá se rovnou `process.execPath` s `node_modules/tsx/dist/cli.mjs`; když CLI chybí, test spadne, místo aby se cokoli tahalo |
+| medium | `announce-proti` pořád obcházelo pravidlo předávání slova — §36 tvrdil symetrii, kterou kód při více otevřených komponentách neměl | Viz §36: širší čtení, `stillHasSay()` pro obě větve |
+| medium | `isBid` porovnávalo `String(x.kind)`, jenže `String(['durch'])` je taky `'durch'` — a takové pole `JSON.parse` vyrobí přímo. `bidRank` na něm propadne `switch`em, vrátí `undefined` a minimum z licitace přestane platit. Týmž koncem procházel červený betl/durch, kde `bidRank` vrací -1 | Porovnává se syrová hodnota a navíc se ověřuje `bidRank(...) > 0`, což odřízne obě cesty najednou. Test o tři podvržené příhozy bohatší |
+
+Negativní kontroly: `String()` zpět do `isBid`, neexistující cesta k `tsx`, a obě větve
+`stillHasSay` zvlášť — každá shodí právě svůj test.
+
+### Fixpoint review PR #10, třetí kolo (2026-09-18, po `c3559a2`)
+
+Osm nálezů, všechny sedí, všechny opravené. Dva blokující — a ten první je nejdražší chyba
+celého PR, protože porušil vlastnost, kterou projekt inzeruje v README.
+
+| Závažnost | Nález | Oprava |
+|---|---|---|
+| high | **`stillHasSay` prozrazovala trumfovou sedmu obránce.** Ptala se `legalActions`, a ta u sedmy proti sahá do RUKY (`v.hand.includes(card(trump, R7))`). Výsledek se zapisuje do `spoke`/`toAct`, což `view()` posílá všem i workeru. Sekvence: aktér hlásí hru a sto, obránce oba flekne → vyčerpá zvýšení i sto proti a zbývá jediná otázka, jestli má čím hlásit sedmu proti. Z toho, jestli mu zůstalo slovo, si aktér (i heuristika) přečte, kdo drží trumfovou sedmu — přesně tu kartu, podle níž se rozhoduje o sedmě. Ověřeno reprodukcí: dvě rozdání lišící se jen držitelem sedmy dala po TÉŽE veřejné sekvenci různé `toAct` | Predikát čte jen VEŘEJNÝ stav: `raisableFleks(...)` nebo nová `protiPossible(...)` (veřejná polovina čl. VII/1, kterou teď sdílí i `legalActions`). Obránce, který by proti hlásit nemohl, drží slovo taky — jedinou legální akci „dobrá" za něj odklikne `maybeAutoGood` |
+| high | Strážce workflow znal jen zápis `run:`. YAML dovoluje i `run :`, `"run":` a `'run':` — a per-file kontrola se dala nasytit jiným, správně napsaným krokem, takže by injekce v přeskočeném kroku prošla | Regex pokrývá všechny čtyři zápisy, syntetické případy je hlídají v obou podobách (jednořádkové i blokové) |
+| medium | `opponentBacks` mohla u podvrženého savu (prázdná ruka s odloženou kartou) vrátit -1 a `syncChildren` by se zacyklil: `0 > -1` platí, ale `lastElementChild` je `null`, takže se nic neubere — karta ztuhne | Obojí se ořezává na nezáporné celé číslo. Radši nakreslit prázdno než ztuhnout (`assertValid` hlídá 32 karet celkem, ne po rukou) |
+| low | `FlekState.spoke` popisoval `raisableFleks`, jenže reduktor jede přes `stillHasSay` — už podruhé tentýž komentář zastaral rychleji než kód | Popisuje `stillHasSay` a odkazuje na §36 |
+| low | Doc u `raisableFleks` sliboval volajícího v enginu, který po `c3559a2` neexistoval | Ukazuje na `stillHasSay` (teď je to zase pravda) |
+| low | Per-file podmínka „parser nenašel jediný `run:`" by shodila sadu na legitimním workflow složeném ze samých `uses:` — táž past jako dřívější `checked > 10` | Kontroluje se jen u souborů, které nějaké `run:` opravdu obsahují |
+| low | Oprava návratového kódu do `GITHUB_OUTPUT` byla **jediná změna bez negativní kontroly** — návrat k `echo "title=$(…)"` prošel vším | Strážce workflow navíc odmítne řádek, který zapisuje do `$GITHUB_OUTPUT` a obsahuje `$(` |
+| low | Pinnutá byla jen čistá `opponentBacks()`, ne její jediné volání: vrácení inline výpočtu vrátí původní chybu a nic nespadne | Smoke staví stav savem (dealer 0 → forhont je soupeř vlevo) a počítá ruby: 9 + karta stranou. Uvnitř herní smyčky to nešlo — v pozorovaném rozdání je forhontem člověk, takže kontrola by nikdy nenastala (ověřeno měřením, ne odhadem) |
+
+Negativní kontroly: `legalActions` zpět do `stillHasSay`, zúžený regex klíče `run`, `echo "$(…)"`
+zpět do release.yml, inline výpočet zpět do `renderOpponents` — každá shodí právě svůj test.
+
+**Poučení:** `legalActions` je jediný zdroj pravdy o tom, co smí hráč udělat — ale právě proto
+sahá do ruky, a **nesmí se jí ptát nic, co se zapisuje do veřejného stavu**. Testy úniku hlídaly
+`view()` nad daným stavem; tudy unikal REDUKTOR, tedy to, jak stav vzniká. Nový blok „únik —
+předání slova ve flecích nezávisí na cizí ruce" kontroluje právě tohle.
+
+### Fixpoint review PR #10, čtvrté kolo (2026-09-18, po `14394f1`)
+
+Šest nálezů, všechny sedí, všechny opravené.
+
+| Závažnost | Nález | Oprava |
+|---|---|---|
+| high | Strážce injekcí ve workflow přeskakoval platné zápisy YAML: `-    run:` (víc mezer za pomlčkou), flow mapy a **kotvu** `run: &script |`, u níž se tělo tvářilo jako hodnota. Per-file podmínku přitom nasytil jiný, správně napsaný krok, takže by injekce v přeskočeném kroku prošla | **Konec vlastního parseru.** Workflow se čte knihovnou `yaml` a prochází se `jobs.*.steps[].run`; kotvy i flow mapy vyřeší parser sám. Syntetická fixtura drží všechny čtyři zápisy, které postupně proklouzly |
+| medium | `FlekState.spoke` změnil význam (§35/§36), ale verze savu zůstala na 2. Rozehraná hra z v0.0.6 nese sedadlo, které podle STARÉHO pravidla „domluvilo" po jediném fleku — nový reduktor mu slovo nevrátí a komponenta se vyúčtuje o stupeň níž | Verze savu na **3**. Migrovat to nejde (co by hráč řekl, kdyby se ho engine byl zeptal, se dopočítat nedá), takže se rozehraná hra z v2 nenačte. Test odmítnutí v2 je pevný, ne relativní k aktuální verzi |
+| medium | Nový seedovaný smoke blok čekal pevných 1200 ms, zatímco zbytek souboru čeká na podmínku. Na vytíženém runneru by přečetl nuly a spadl hláškou „počítá se dvakrát" — tedy falešně a s nesprávným vysvětlením | Čeká se na `#trump-aside` a na vykreslené ruby; když se stav neobnoví, hlásí se to jako „stav se neobnovil" |
+| medium | Obě pojistky proti zamrznutí (ořez v `opponentBacks` a v `syncChildren`) byly bez testu a daly se smazat se zeleným `make all` | Otestované obě. `syncChildren` je kvůli tomu exportovaná a testovací kontejner má **počítadlo otáček**: bez ořezu test spadne hned, místo aby CI viselo (ověřeno — bez pojistky běh skončí až timeoutem) |
+| medium | Test úniku trumfové sedmy ověřoval jen SHODU obou variant. Kdyby ze `protiPossible` vypadla sedmová větev, obě by slovo předaly dál — taky shodně — a test by mlčel | Ověřuje se i to, CO má nastat: obránce drží slovo a `spoke` zůstává prázdné; nabídka se pak podle ruky lišit smí (ta je soukromá), veřejný stav ne |
+
+Negativní kontroly: kotva a `-    run:` s injekcí do release.yml, verze savu zpět na 2, oba ořezy
+zvlášť, sedmová větev `protiPossible` — každá shodí právě svůj test.
+
+**Poučení:** třikrát jsem ten regex na `run:` látal (odsazení od pomlčky, `run :` a `"run":`,
+nakonec mezery a kotvy). Strážce, který tiše přeskočí krok, budí dojem, že hlídá i to, co nehlídá
+— u bezpečnostní kontroly je to horší než nic. YAML má pro tutéž věc víc zápisů; rozplétat je
+regulárním výrazem je prohraná bitva a patří na to parser.
+
+## 37. Řada akcí má vlastní pruh (2026-09-18)
+
+Při plné licitační nabídce (devět tlačítek: „Dobrá (pas)" + celý žebříček až po Durcha) zajelo
+první tlačítko **přes blok „Ty"** v levém dolním rohu sukna — jméno hráče a konto byly schované
+pod „Dobrá (pas)".
+
+Nejdřív zkusené zúžení boků (`padding-inline` na `#actions` + užší tlačítka v přeplněné řadě)
+nefunguje: nejdelší popisky to neunesou. Německé „Hundert und Sieben" a anglické „Hundred and
+seven" se do zbytku šířky nevejdou, řada se buď zalomí, nebo z odsazení rovnou vyteče — a
+asymetrické odsazení navíc sesunulo „Rozdat" na úvodní obrazovce o 21 px mimo osu pod
+vycentrovaným titulkem.
+
+Zvoleno tedy **vlastní pruh**: `#actions` se zvedne nad blok „Ty" i nad pakl
+(`margin-bottom: clamp(12px, 6cqh, 60px)`). Řada pak může být přes celou šířku a o velikosti
+písma ani o šířce tlačítek není potřeba nic předpokládat. Změřeno ve všech čtyřech jazycích na
+1440×900: žádný překryv s „Ty", paklem, hláškami ani vějířem; mezera k bloku „Ty" 18 px. Čeština
+a francouzština drží devět tlačítek na jednom řádku, angličtina a němčina se zalomí na dva —
+zalomená řada roste nahoru do prázdného sukna, takže výška stolu ani vějíř se nehnou.
+
+## 38. Sav z v2: migrovat všechno, co migrovat jde (2026-09-18)
+
+Verze obálky savu se kvůli změně významu `FlekState.spoke` (§36) zvedla na **3** a `loadMatch`
+začal odmítat **každý** sav z v2. To bylo příliš hrubé.
+
+`spoke` žije výhradně v payloadu fáze „fleks". Sav v kterékoli jiné fázi znamená pro nový
+reduktor přesně totéž co pro starý — a přitom se v klidu (`idle`, `scored`) ukládá právě proto,
+aby mezi návštěvami zůstalo **konto a archiv odehraných her**. Odmítnutý sav tedy hráči po
+aktualizaci vynuluje banku, vypadá to jako ztráta dat, a další autosave starý záznam přepíše
+nadobro. Za to, co se tou verzí řešilo, je to nepřiměřená cena.
+
+Načítání se proto ptá `loadable(v, phase.name)`: v3 vždycky, v2 jen mimo komentování. Přijatý sav
+z v2 se rovnou přepíše na v3, ať se migrace neopakuje. Nenačte se jen to jediné, co opravdu
+přenést nejde — rozehraná komentovací kolečka.
+
+Testy drží obě strany: v2 mimo fleky projde a konto i archiv to přežijí, v2 ve flecích neprojde,
+a **tentýž stav ve v3 projít musí** — jinak by kontrola procházela i tehdy, kdyby se stav odmítal
+kvůli tvaru, ne kvůli verzi.
+
+### Fixpoint review PR #10, páté kolo (2026-09-18, po `add428d`)
+
+Osm nálezů. Sedm sedí a je opravených, jeden odmítnut s odůvodněním.
+
+| Závažnost | Nález | Oprava |
+|---|---|---|
+| high | Test strážce `release-notes.ts` **zmizel** při přepisu sousedního bloku (`f57c060`) a nikomu to nespadlo. Zbyly po něm jen nepoužité importy (`spawnSync`, `mkdtempSync`, `tmpdir`). Skript se v `make all` jinak nespouští, takže kontrolu řídicích znaků v nadpisu nic neprovádělo — selhalo by to až na tagu, v jobu s `contents: write` | Blok obnoven doslova z `14394f1` a opatřen poznámkou, že se s ním musí mazat i strážce v `release-notes.ts` |
+| high | Sav: odmítnutí **všech** savů z v2 bere hráči konto a archiv, i když se ho změna `spoke` netýká | §38 výš — `loadable(v, phase.name)` a migrace na v3 |
+| high | Druhá větev strážce workflow (spolknutý návratový kód u `GITHUB_OUTPUT`) neměla vlastní fixturu. Všechny čtyři vzorky obsahovaly `${{ }}`, takže počet stížností seděl i bez ní — negativní kontrola, která nekouše | Vlastní vzorek bez `${{ }}`: `echo "x=$(…)" >> $GITHUB_OUTPUT` musí stěžovat, přiřazení a teprve pak `echo` (tvar z release.yml) projít musí |
+| medium | Checkout nechával v `.git/config` zapisovací token po celý job — tedy i pod `npm ci` (postinstall skripty celého stromu), instalací prohlížečů a `make all` | `persist-credentials: false`. Vydání dostane token až v posledním kroku přes `env:` |
+| medium | `suitArt.ts` vznikl jako jediný zdroj znaků, ale nic ho nesvazovalo s **zakomitovanými** kartami: `make cards` v `make all` není, takže úprava cesty změní ikonku v UI a každá karta na stole zůstane stará — se zeleným testem | Kontrola v `verify.ts`: 112 karet (4 sady × 4 barvy × 7 hodnot) musí obsahovat výstup `suitArt()` doslova; král se vynechává, jeho emblém je `mono` z týchž obrysů |
+| low | Release job volal `npx tsx` — přesně ten nepřipnutý vzorec, který se v témže PR odstranil z testu | Binárka z lockfilu (`node node_modules/tsx/dist/cli.mjs`), a totéž pro Playwright. Pravidlo je nově **vynucené**: třetí větev strážce workflow hlásí každé `npx` bez `--no-install` |
+| low | Pruh akcí (§37) neměl geometrickou kontrolu — překryv se mohl vrátit nepozorovaně | Smoke: sav s devítinabídkou (seed 514) ve všech čtyřech jazycích, každé tlačítko musí být disjunktní od jmenovky i od hromádky. Ověřeno, že bez `margin-bottom` kontrola spadne (čeština a francouzština) |
+| low | **Odmítnuto:** barvu rohového indexu srovnat s kresbou z panelu 3a | Neudělat. Panel kreslí kuli jako ČERVENOU rouli; kdyby ji následoval i index, měla by kule sedmu k nerozeznání od srdcové — a „červená" zdvojnásobuje sazby. Rozlišuje tvar **a** index, zlatá u kulí je z pásu. Důvod zapsán do `SuitDef` v `gen-cards.ts`, ať se to příště nečte jako rozejití |
+
+Negativní kontroly: vypnutá migrace v2, migrace bez omezení na fázi, vypnutá druhá větev
+strážce `GITHUB_OUTPUT`, vypnutý strážce řídicích znaků v `release-notes.ts`, změněná cesta
+žilky v `suitArt.ts`, zrušený `margin-bottom` u `#actions` — každá shodí právě svůj test.
+
+**Poučení:** test smazaný při přepisu souseda po sobě nenechá žádnou stopu kromě nepoužitých
+importů — a ty nikdo nehlídá. Tenhle konkrétní blok je jediné místo, kde se `release-notes.ts`
+vůbec spouští, takže jeho zmizení nebylo vidět nikde jinde než na tagu.

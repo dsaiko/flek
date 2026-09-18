@@ -6,15 +6,40 @@
  */
 
 import { assertValid } from '../rules/engine';
-import type { GameState } from '../rules/types';
+import type { BidLevel, GameState } from '../rules/types';
+import { bidRank } from '../rules/types';
 
 const KEY = 'flek.match.v1';
 /**
- * Verze obálky savu. Zvýšená na 2 se sazbami `limit`/`limitRaised`: bez nich
- * by zúčtování počítalo s `undefined` a konto by se rozsypalo, a rozehraná
- * hra z v1 navíc běží podle jiného pořadí „Barva?" a deklarace.
+ * Verze obálky savu.
+ *
+ * 2 přišla se sazbami `limit`/`limitRaised`: bez nich by zúčtování počítalo
+ * s `undefined` a konto by se rozsypalo, a rozehraná hra z v1 navíc běží podle
+ * jiného pořadí „Barva?" a deklarace.
+ *
+ * 3 je kvůli významu `FlekState.spoke` (§35/§36). Dřív tam sedadlo přistálo po
+ * PRVNÍ akci, teď až když domluvilo. Rozehraný sav z v2 tedy nese sedadlo,
+ * které podle starého pravidla „domluvilo" po jediném fleku — nový reduktor mu
+ * už slovo nevrátí a flekovaná komponenta se vyúčtuje o stupeň níž. Migrovat
+ * to nejde: co by hráč řekl, kdyby se ho byl engine zeptal, se dopočítat nedá.
  */
-export const VERSION = 2;
+export const VERSION = 3;
+
+/**
+ * Smí se načíst obálka verze `v` se stavem ve fázi `phaseName`?
+ *
+ * `spoke` žije VÝHRADNĚ v payloadu fáze „fleks" — jinde v savu není. Sav z v2
+ * v kterékoli jiné fázi tedy znamená pro nový reduktor přesně totéž co dřív
+ * a zahodit ho není za co. A zahodit ho něco stojí: v klidu (`idle`, `scored`)
+ * se ukládá právě proto, aby mezi návštěvami zůstalo konto a archiv
+ * odehraných her — odmítnutý sav hráči vynuluje banku, další autosave starý
+ * záznam přepíše a je nenávratně pryč. Nenačte se proto jen to jediné, co
+ * opravdu nejde přenést: rozehraná komentovací kolečka.
+ */
+export function loadable(v: unknown, phaseName: unknown): boolean {
+  if (v === VERSION) return true;
+  return v === 2 && phaseName !== 'fleks';
+}
 
 export function saveMatch(state: GameState): void {
   try {
@@ -82,7 +107,9 @@ function isValidPhase(p: Record<string, unknown>): boolean {
       // mód teče přes resolveTakeover do contract.mode a odtud do t() —
       // neznámý klíč by shodil render a poškozený stav se autosavem zvěční
       (st.mode === null || st.mode === 'hra' || st.mode === 'betl' || st.mode === 'durch') &&
-      (st.trump === null || inRange(st.trump, 0, 3)) && (st.bid === null || isRecord(st.bid));
+      // příhoz se ověřuje stejně jako v licitaci: `bidRank` na cizím tvaru vrátí
+      // undefined a porovnání s minimem licitace tiše přestane platit
+      (st.trump === null || inRange(st.trump, 0, 3)) && (st.bid === null || isBid(st.bid));
   };
   switch (p.name) {
     case 'idle':
@@ -175,10 +202,24 @@ function isHistoryAction(x: unknown): boolean {
 
 const BID_KINDS = ['sedma', 'sto', 'sto-sedma', 'betl', 'durch', 'dve-sedmy', 'dve-sedmy-sto'];
 
-/** Závazek z licitace — `kind` se používá jako klíč popisků, `cervena` v sazbách. */
-const isBid = (x: unknown): boolean =>
-  isRecord(x) && BID_KINDS.includes(String((x as Record<string, unknown>).kind)) &&
-  typeof (x as Record<string, unknown>).cervena === 'boolean';
+/**
+ * Závazek z licitace — `kind` se používá jako klíč popisků, `cervena` v sazbách.
+ *
+ * Porovnává se SYROVÁ hodnota, ne `String(...)`: `String(['durch'])` je taky
+ * `'durch'`, a pole `JSON.parse` vyrobí přímo. Takový `kind` by prošel kolem
+ * `switch`e v `bidRank`, ten by vrátil `undefined` a každé porovnání s minimem
+ * licitace by bylo `false` — po vylicitovaném durchu by šlo ohlásit holou hru.
+ *
+ * A protože `bidRank` vrací -1 i pro kombinace, které licitace nikdy nevydá
+ * (červený betl, červený durch), ověřuje se rovnou výsledek: co nemá kladné
+ * místo v žebříčku, do savu nepatří.
+ */
+const isBid = (x: unknown): boolean => {
+  if (!isRecord(x)) return false;
+  const b = x as Record<string, unknown>;
+  return typeof b.kind === 'string' && BID_KINDS.includes(b.kind) &&
+    typeof b.cervena === 'boolean' && bidRank(b as unknown as BidLevel) > 0;
+};
 
 /** Záznam licitace: `legal.ts` i reducer z něj čtou `.seat` a `.bid`. */
 const isBidEntry = (x: unknown): boolean => {
@@ -296,8 +337,12 @@ export function loadMatch(): GameState | null {
     const raw = localStorage.getItem(KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as { v?: number; state?: unknown };
-    if (parsed.v !== VERSION || !looksLikeGameState(parsed.state)) return null;
+    // tvar napřed: `loadable` se ptá na jméno fáze a to musí být ověřené
+    if (!looksLikeGameState(parsed.state)) return null;
+    if (!loadable(parsed.v, parsed.state.phase.name)) return null;
     assertValid(parsed.state); // semantická kontrola (karty, konto, talon)
+    // přepsat na aktuální verzi, ať se migrace neopakuje při každém načtení
+    if (parsed.v !== VERSION) saveMatch(parsed.state);
     return parsed.state;
   } catch {
     return null;

@@ -9,7 +9,9 @@
 
 import { CERVENE, DECK, sortHand, suitOf, type Card } from '../cards';
 import { Random } from '../random';
-import { actionMatchesLegal, flekEnding, legalActions, trumplessChoicePending } from './legal';
+import {
+  actionMatchesLegal, flekEnding, legalActions, protiPossible, raisableFleks, trumplessChoicePending,
+} from './legal';
 import { settle } from './scoring';
 import { trickWinner } from './tricks';
 import type {
@@ -146,6 +148,29 @@ function flekSideMembers(contract: Contract, seat: Seat): Seat[] {
   return seat === contract.declarer
     ? [contract.declarer]
     : speakingOrder(contract.declarer);
+}
+
+/**
+ * Domluvilo sedadlo v tomhle kole, nebo drží slovo dál?
+ *
+ * Drží ho, dokud má co říct nad rámec „dobrá". Každý z kombinovaných závazků se
+ * komentuje samostatně (čl. V/4) a sedmu/sto proti smí obrana hlásit „v prvním
+ * kole komentování" (čl. VII/1) — obojí je řeč téhož tahu, takže na pořadí
+ * uvnitř něj nesmí záležet (§36).
+ *
+ * POZOR, čte se jen z VEŘEJNÉHO stavu, a to je podmínka, ne pohodlí: výsledek
+ * se zapisuje do `spoke` a `toAct`, které `view()` posílá všem i workeru. Dřív
+ * se tenhle predikát ptal `legalActions`, jenže ta u sedmy proti sahá do RUKY —
+ * a z toho, jestli obránci zůstalo slovo, pak šlo vyčíst, že drží trumfovou
+ * sedmu. Tedy právě tu kartu, podle níž se aktér rozhoduje o sedmě.
+ *
+ * Cena je nanejvýš jedno „dobrá" navíc u obránce, který by proti stejně hlásit
+ * nemohl — a to za hráče odklikne `maybeAutoGood`, protože je to jediná
+ * legální akce.
+ */
+function stillHasSay(state: GameState, contract: Contract, f: FlekState, seat: Seat): boolean {
+  return raisableFleks(state.config, contract, f, seat).length > 0
+    || protiPossible(state.config, contract, f, seat);
 }
 
 /**
@@ -519,11 +544,21 @@ function reduce(state: GameState, action: PlayerAction): GameState {
         ...f,
         levels: { ...f.levels, [action.target]: (f.levels[action.target] ?? 0) + 1 },
         lastRaiser: { ...f.lastRaiser, [action.target]: action.seat },
-        spoke: [...f.spoke, action.seat],
         raised: [...f.raised, action.target],
       };
+      /*
+       * Na každou otevřenou komponentu se odpovídá zvlášť (čl. V/4: „u
+       * kombinovaných závazků lze flekovat každý z nich samostatně"), takže kdo
+       * zvýšil jednu, drží slovo, dokud má co říct. Bez toho by jediné „re"
+       * uzavřelo aktérovo kolo a druhý flek obrany (např. na sedmu) by zůstal
+       * bez odpovědi — komponenta by se vyúčtovala o stupeň níž, než jak se
+       * u stolu mluvilo.
+       */
+      const spoken: FlekState = stillHasSay(state, state.contract, raised, action.seat)
+        ? raised
+        : { ...raised, spoke: [...f.spoke, action.seat] };
       // kolo se zvýšením nemůže skončit fází, jen předá slovo protistraně
-      const next = advanceFleks(state, state.contract, raised) as FlekState;
+      const next = advanceFleks(state, state.contract, spoken) as FlekState;
       return { ...state, phase: { name: 'fleks', fleks: next } };
     }
 
@@ -541,14 +576,21 @@ function reduce(state: GameState, action: PlayerAction): GameState {
        */
       const announced: FlekState = {
         ...f,
-        spoke: [...f.spoke, action.seat],
         raised: [
           ...f.raised,
           ...(action.sedma ? (['sedma'] as FlekTarget[]) : []),
           ...(action.kilo ? (['kilo'] as FlekTarget[]) : []),
         ],
       };
-      const next = advanceFleks(state, contract, announced) as FlekState;
+      /*
+       * Slovo se předává stejným pravidlem jako u fleku — ohlášení je řeč téhož
+       * tahu, ne jeho konec. Ptá se nad UŽ ohlášeným závazkem: ohlášená sedma
+       * proti mění jejího držitele, a tím i to, co smí kdo zvýšit.
+       */
+      const announcedSpoken: FlekState = stillHasSay(state, contract, announced, action.seat)
+        ? announced
+        : { ...announced, spoke: [...f.spoke, action.seat] };
+      const next = advanceFleks(state, contract, announcedSpoken) as FlekState;
       return { ...state, contract, phase: { name: 'fleks', fleks: next } };
     }
 

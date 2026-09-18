@@ -42,6 +42,16 @@ for (let i = start + 1; i < lines.length; i += 1) {
 }
 
 const title = lines[start].replace(/^##\s+/, '').trim();
+/*
+ * Titulek teče do `gh release create --title` v release.yml. Tam je předaný
+ * proměnnou prostředí, takže shell v něm nic nevidí — ale řídicí znak by se
+ * do GITHUB_OUTPUT zapsal tiše a rozbil by řádek `title=…`. Radši hlasitě
+ * spadnout na překlepu v nadpisu než vydat vydání s useknutým názvem.
+ */
+if ([...title].some((ch) => (ch.codePointAt(0) ?? 0) < 32 || ch.codePointAt(0) === 127)) {
+  console.error(`CHYBA: nadpis sekce ${tag} obsahuje řídicí znaky`);
+  process.exit(2);
+}
 const body = lines.slice(start + 1, end).join('\n').trim();
 if (body.length === 0) {
   console.error(`CHYBA: sekce ${tag} v CHANGELOG.md je prázdná`);

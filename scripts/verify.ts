@@ -5,9 +5,14 @@
  */
 
 import assert from 'node:assert/strict';
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { parse as parseYaml } from 'yaml';
+
+import { suitArt, type SuitCode } from '../src/lib/ui/suitArt';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -54,6 +59,34 @@ for (const set of ['cards/modern', 'cards/modern-en', 'cards/modern-de', 'cards/
   }
 }
 console.log('PASS SVG bez externích referencí');
+
+/*
+ * Karty v `cards/**` jsou ZAKOMITOVANÝ výstup, ne build artefakt: `make cards`
+ * v `make all` není. Bez téhle kontroly tedy úprava `suitArt.ts` změní ikonku
+ * u popisku závazku v běžící hře, ale každá karta na stole zůstane stará —
+ * a celá sada testů zůstane zelená. Přesně to rozejití (žilka listu měla
+ * v generátoru tři tahy, v ikonce jeden) byl důvod, proč `suitArt.ts` vznikl.
+ *
+ * Král se vynechává: jeho emblém je `mono` varianta a ta se skládá z týchž
+ * obrysů, takže úpravu cesty zachytí ostatní hodnoty stejně spolehlivě.
+ */
+{
+  const setsOf = ['cards/modern', 'cards/modern-en', 'cards/modern-de', 'cards/modern-fr'];
+  const drawn = RANKS.filter((r) => r !== 'K');
+  let checked = 0;
+  for (const code of SUITS as SuitCode[]) {
+    const art = suitArt(code);
+    for (const set of setsOf) {
+      for (const rank of drawn) {
+        const svg = readFileSync(join(ROOT, set, `${rank}${code}.svg`), 'utf8');
+        assert.ok(svg.includes(art), `${set}/${rank}${code}.svg nesedí se suitArt.ts — spusť \`make cards\``);
+        checked += 1;
+      }
+    }
+  }
+  assert.equal(checked, setsOf.length * drawn.length * SUITS.length, 'kontrola musí projít všechny sady');
+  console.log(`PASS karty — znaky v sadách sedí se suitArt.ts (${checked} karet)`);
+}
 
 // ── engine: kódování karet a pořadí ─────────────────────────────────────────
 
@@ -993,9 +1026,14 @@ const KULE = 2 as const;
     console.log(`PASS regrese i19 — talonForbidsTrump: ${checked} odhozů bez deadlocku`);
   }
 
-  // ── i24: pořadí odpovědí na převzetí jde od forhonta ─────────────────────
+  // ── i24: „Barva?" se ptá aktér, teprve pak odpovídá obrana ───────────────
   {
-    // dealer 0 → forhont 1 = aktér; pořadí mluvení [1,2,0] bez aktéra → 2, pak 0
+    /*
+     * Odpovědi jdou ve směru hraní OD AKTÉRA (čl. V/4, B/11) — tady je aktérem
+     * forhont (dealer 0 → forhont 1), takže pořadí [2, 0] vyjde stejně jako
+     * podle dřívějšího pravidla „od forhonta". Rozlišující případ (aktér ≠
+     * forhont) hlídá test „pořadí mluvení jde od toho, kdo hlásil" níž.
+     */
     let st: St = initialState(defaultConfig('voleny'), 0);
     st = apply(st, { type: 'deal', seed: 5 });
     const step = (pred: (a: Act) => boolean) => {
@@ -1016,7 +1054,7 @@ const KULE = 2 as const;
     if (st.phase.name === 'takeover') assert.equal(st.phase.toAct, 0, 'druhý odpovídá sedadlo 0');
     step((a) => a.type === 'takeover' && a.claim === 'good');
     assert.equal(st.phase.name, 'declare', 'po souhlasu obou obránců teprve hlásí aktér');
-    console.log('PASS regrese i24 — „Barva?" od aktéra, odpovědi obrany od forhonta');
+    console.log('PASS regrese i24 — „Barva?" od aktéra, odpovědi obrany ve směru hraní');
   }
 
   // ── i22: AI volí trumf podle ruky, ne první nabídnutý (ani červenou) ─────
@@ -2777,7 +2815,7 @@ const KULE = 2 as const;
 
   // ── odložený trumf: co leží na stole, není v ruce (a do talonu nesmí) ───
   {
-    const { trumpAsideOf, handAside } = await import('../src/lib/ui/table');
+    const { trumpAsideOf, handAside, opponentBacks, syncChildren } = await import('../src/lib/ui/table');
     let st: StA = initialState(defaultConfig('voleny'), 2); // forhont = 0
     st = apply(st, { type: 'deal', seed: 4 });
     assert.equal(trumpAsideOf(view(st, 0)), null, 'před volbou stranou nic neleží');
@@ -2800,6 +2838,45 @@ const KULE = 2 as const;
     assert.ok(theirs, 'obránce vidí, že karta stranou leží');
     assert.equal(theirs?.card, null, 'ale kterou, neví');
     assert.equal(theirs?.faceDown, true, 'leží lícem dolů');
+
+    /*
+     * `holder` = z čí ruky karta odešla stranou. Ve stavu v ní pořád leží, takže
+     * `handCounts` ji počítá — kdo kreslí CIZÍ ruku, musí ji podle `holder` ubrat,
+     * jinak ukáže o kartu víc a po sehrávce mu jedna nevysvětlitelně zmizí.
+     * Vlastní vějíř tuhle práci dělá přes `handAside()`, kterou hlídá test výš.
+     */
+    assert.equal(mine?.holder, 0, 'volícímu karta odešla z ruky');
+    assert.equal(theirs?.holder, 0, 'a obránce ví KOMU, i když neví KTEROU');
+
+    /*
+     * `opponentBacks` je druhá půlka opravy — ta, která se opravdu kreslí.
+     * Protihráč, kterému karta leží stranou, má mít o rub MÍŇ; ostatní sedadla
+     * se nemění. Kontroluje se z pohledu OBOU obránců, ať se nespleteme
+     * v sedadle, a proti `handAside()` téhož hráče, ať obě půlky drží pohromadě.
+     */
+    for (const watcher of [1, 2] as const) {
+      const vw = view(st, watcher);
+      assert.equal(
+        opponentBacks(vw, 0), handAside(view(st, 0)).length,
+        `sedadlo ${watcher}: rubů u volícího musí být tolik, kolik má karet ve vějíři`,
+      );
+      assert.equal(opponentBacks(vw, 0), vw.handCounts[0] - 1, 'tj. o odloženou kartu míň');
+      const other = watcher === 1 ? 2 : 1;
+      assert.equal(
+        opponentBacks(vw, other), vw.handCounts[other],
+        'komu nic stranou neleží, tomu se nic neodečítá',
+      );
+    }
+
+    /*
+     * Pojistka proti ZAMRZNUTÍ. Podvržený sav (prázdná ruka, a přesto odložená
+     * karta) dal dřív -1; `syncChildren` pak v odebírací smyčce točil donekonečna,
+     * protože `0 > -1` platí dál, ale `lastElementChild` je už `null` — karta
+     * ztuhne. `assertValid` to nechytí, hlídá 32 karet celkem, ne po rukou.
+     */
+    const broken = { ...view(st, 1), handCounts: [0, 0, 0] as [number, number, number] };
+    assert.ok(trumpAsideOf(broken), 'fixtura: odložená karta musí ležet, jinak se clamp neprojeví');
+    assert.equal(opponentBacks(broken, 0), 0, 'záporný počet rubů se nesmí vrátit');
 
     /*
      * Do talonu zvolená karta nesmí (ČSM volený, B/7: dvě karty „odděleně od
@@ -2848,6 +2925,43 @@ const KULE = 2 as const;
       assert.equal(trumpAsideOf(view(st, seat)), null, `sedadlo ${seat}: při sehrávce stranou nic neleží`);
     }
     assert.deepEqual(handAside(view(st, 0)), view(st, 0).hand, 've hře je vějíř zase celá ruka');
+    /*
+     * Pojistka proti ZAMRZNUTÍ. Podvržený sav (prázdná ruka, a přesto odložená
+     * karta) dal dřív -1; `syncChildren` pak v odebírací smyčce točil donekonečna,
+     * protože `0 > -1` platí dál, ale `lastElementChild` je už `null`. Karta
+     * ztuhne — a `assertValid` tohle nechytí, hlídá 32 karet celkem, ne po rukou.
+     */
+
+    /*
+     * Kontejner s POJISTKOU: bez ořezu se odebírací smyčka točí donekonečna
+     * a `make verify` by jen visel (ověřeno: běh skončí až timeoutem). Getter
+     * se v každé otáčce ptá na poslední dítě, takže se počítá — a po tisícovce
+     * radši spadne, aby test selhal hlasitě a hned, ne zamrznutím CI.
+     */
+    let spins = 0;
+    const fakeParent = {
+      children: [] as unknown[],
+      get lastElementChild() {
+        if ((spins += 1) > 1000) throw new Error('syncChildren se zacyklil — chybí ořez na nezáporný počet');
+        return this.children.length ? this.children[this.children.length - 1] : null;
+      },
+      appendChild(c: unknown) { this.children.push(c); return c; },
+    };
+    const mkChild = () => {
+      const child = { remove: () => { fakeParent.children.splice(fakeParent.children.indexOf(child), 1); } };
+      return child as unknown as HTMLElement;
+    };
+    syncChildren(fakeParent as unknown as HTMLElement, 3, mkChild);
+    assert.equal(fakeParent.children.length, 3, 'kladný počet se naplní');
+    for (const bad of [-1, Number.NaN, 1.5]) {
+      spins = 0;
+      syncChildren(fakeParent as unknown as HTMLElement, bad, mkChild);
+      assert.ok(
+        fakeParent.children.length >= 0 && Number.isInteger(fakeParent.children.length),
+        `syncChildren(${String(bad)}) musí skončit s rozumným počtem`,
+      );
+    }
+    assert.equal(fakeParent.children.length, 1, '1.5 se má chovat jako 1, záporné a NaN jako 0');
     console.log('PASS odložený trumf — stranou místo ruky, lícem dolů u soupeře, do talonu nesmí');
   }
 
@@ -3437,7 +3551,14 @@ const KULE = 2 as const;
       createOscillator(): unknown {
         return { type: '', frequency: new FakeParam(), connect: (n: unknown) => n, start: () => { started += 1; }, stop: () => {} };
       }
-      resume(): Promise<void> { this.state = 'running'; return Promise.resolve(); }
+      /*
+       * Kontext se probouzí AŽ s dojitím příslibu, ne hned při zavolání — přesně
+       * tak to dělá prohlížeč. Se synchronním probuzením by test neuviděl zvuk
+       * poslaný těsně po `unlock()`, který se ve skutečnosti zahodí.
+       */
+      resume(): Promise<void> {
+        return new Promise((r) => setTimeout(() => { this.state = 'running'; r(); }, 1));
+      }
     }
     const g = globalThis as { AudioContext?: unknown };
     const orig = g.AudioContext;
@@ -3489,8 +3610,22 @@ const KULE = 2 as const;
     }
     assert.ok(started > before, 'po zapnutí se zvuky zas ozvou');
 
+    /*
+     * `resume()` je asynchronní, takže zvuk poslaný HNED za `unlock()` ještě
+     * narazí na uspaný kontext a tiše se zahodí. Tlačítko „zvuky" na tom stojí:
+     * potvrzovací „deal" se hraje až z příslibu, který `unlock()` vrací.
+     */
+    const cold = createSounds(true);
+    started = 0;
+    const resumed = cold.unlock();
+    cold.play('deal');
+    assert.equal(started, 1, 'hned po unlock() zazní jen odemykací ticháč, ne vyžádaný zvuk');
+    await resumed;
+    cold.play('deal');
+    assert.ok(started > 1, 'po dojití příslibu z unlock() se zvuk ozvat MUSÍ');
+
     if (orig === undefined) delete g.AudioContext; else g.AudioContext = orig;
-    console.log('PASS zvuky — autoplay policy, vypínání a všech šest zvuků');
+    console.log('PASS zvuky — autoplay policy, odemknutí příslibem, vypínání a všech šest zvuků');
   }
 
   // ── komentář k vyúčtování se escapuje (jde do innerHTML) ──────────────
@@ -3960,7 +4095,7 @@ console.log('PASS vzdání — platí se celý stojící závazek, mimo legalAct
     setItem: (k: string, val: string) => void store.set(k, val),
     removeItem: (k: string) => void store.delete(k),
   };
-  const { saveMatch: save, loadMatch: load } = await import('../src/lib/match/persist');
+  const { saveMatch: save, loadMatch: load, VERSION: SAV_V } = await import('../src/lib/match/persist');
   const { initialState: init2, apply: ap2 } = await import('../src/lib/rules/engine');
   const { defaultConfig: cfg2 } = await import('../src/lib/rules/sazby');
 
@@ -3985,8 +4120,81 @@ console.log('PASS vzdání — platí se celý stojící závazek, mimo legalAct
   raw.state.contract = { mode: 'hra', trump: null, declarer: 0, sedma: null, kilo: null, dveSedmy: false };
   store.set('flek.match.v1', JSON.stringify(raw));
   assert.equal(load(), null, 'živá „hra bez trumfu" se pořád musí odmítnout');
+
+  /*
+   * Vysoutěžený závazek v savu musí mít tvar příhozu, ne „jakýkoli objekt":
+   * `bidRank` na cizím tvaru vrátí `undefined`, každé porovnání s ním je
+   * `false` — a minimum z licitace (čl. VII/3) tiše přestane platit, takže
+   * aktér smí z vydraženého durchu ohlásit holou hru.
+   */
+  const dealt = ap2(init2(c, 2), { type: 'deal', seed: 4 });
+  const badBids: unknown[] = [
+    {}, { kind: 'hra', cervena: false }, { kind: 'sedma' }, { kind: 'sedma', cervena: 'ano' },
+    // `String(['durch'])` je taky 'durch' — pole `JSON.parse` vyrobí přímo
+    { kind: ['durch'], cervena: false },
+    // kombinace, které licitace nikdy nevydá: `bidRank` na nich vrací -1, tedy
+    // míň než každá deklarace, takže by minimum z licitace přestalo platit
+    { kind: 'betl', cervena: true }, { kind: 'durch', cervena: true },
+  ];
+  for (const bid of badBids) {
+    const bad = JSON.parse(JSON.stringify({ v: SAV_V, state: dealt })) as { v: number; state: { phase: Record<string, unknown> } };
+    bad.state.phase = { name: 'discard-talon', standing: { declarer: 0, mode: null, trump: null, bid } };
+    store.set('flek.match.v1', JSON.stringify(bad));
+    assert.equal(load(), null, `sav s příhozem ${JSON.stringify(bid)} se musí odmítnout`);
+  }
+  // a korektní příhoz projít musí — jinak by test procházel i s `() => false`
+  const okSave = JSON.parse(JSON.stringify({ v: SAV_V, state: dealt })) as { v: number; state: { phase: Record<string, unknown> } };
+  okSave.state.phase = {
+    name: 'discard-talon',
+    standing: { declarer: 0, mode: null, trump: null, bid: { kind: 'durch', cervena: false } },
+  };
+  store.set('flek.match.v1', JSON.stringify(okSave));
+  assert.notEqual(load(), null, 'platný vysoutěžený závazek se načíst musí');
+
+  /*
+   * Starší obálka: v2 se načíst SMÍ, ale jen mimo komentování.
+   *
+   * `FlekState.spoke` změnil význam (§36), takže rozehraná kolečka z v2 nesou
+   * sedadlo, které „domluvilo" po jediném fleku — nový reduktor by mu slovo
+   * nevrátil a komponenta by se vyúčtovala o stupeň níž. Dopočítat, co by hráč
+   * řekl, nejde. Jenže `spoke` nikde jinde než v payloadu fáze „fleks" není,
+   * takže odmítnout kvůli tomu i sav z klidu znamená vynulovat hráči konto
+   * a archiv — a další autosave to pak přepíše nadobro (§38).
+   */
+  assert.ok(SAV_V > 2, 'verze obálky se kvůli změně významu `spoke` musela zvednout');
+  store.set('flek.match.v1', JSON.stringify({ ...okSave, v: 2 }));
+  assert.notEqual(load(), null, 'sav verze 2 mimo komentování se načíst musí — nese konto a archiv');
+  assert.equal(
+    (JSON.parse(store.get('flek.match.v1') as string) as { v: number }).v, SAV_V,
+    'a rovnou se přepíše na aktuální verzi, ať se migrace neopakuje',
+  );
+
+  // konto a archiv migraci přežijí (to je celý důvod, proč se v2 vůbec přijímá)
+  const withLedger = JSON.parse(JSON.stringify({ v: 2, state: conceded })) as { v: number; state: unknown };
+  assert.ok(conceded.handResults.length > 0, 'testovací sav musí mít co ztratit');
+  store.set('flek.match.v1', JSON.stringify(withLedger));
+  const migrated = load();
+  assert.deepEqual(migrated?.ledger, conceded.ledger, 'konto musí přežít migraci z v2');
+  assert.equal(migrated?.handResults.length, conceded.handResults.length, 'a archiv odehraných her taky');
+
+  // rozehraná kolečka z v2 se ale načíst nesmějí — to je to jediné, co nejde přenést
+  const v2Fleks = JSON.parse(JSON.stringify({ v: 2, state: dealt })) as { v: number; state: { contract: unknown; phase: unknown } };
+  v2Fleks.state.contract = { mode: 'hra', trump: 0, declarer: 0, sedma: null, kilo: null, dveSedmy: false };
+  v2Fleks.state.phase = {
+    name: 'fleks',
+    fleks: { levels: {}, lastRaiser: {}, toAct: 1, spoke: [0], open: ['hra'], raised: [], round: 0 },
+  };
+  store.set('flek.match.v1', JSON.stringify(v2Fleks));
+  assert.equal(load(), null, 'rozehraná komentovací kolečka z v2 se načíst nesmějí (starý význam `spoke`)');
+  // …a nesmí to být tím, že by ten stav byl vadný sám o sobě
+  store.set('flek.match.v1', JSON.stringify({ ...v2Fleks, v: SAV_V }));
+  assert.notEqual(load(), null, 'tentýž stav ve v3 projít musí — odmítá se verze, ne tvar');
+
+  // a neznámá verze zůstává odmítnutá (migruje se jen z v2)
+  store.set('flek.match.v1', JSON.stringify({ ...okSave, v: 1 }));
+  assert.equal(load(), null, 'sav verze 1 se pořád načíst nesmí');
 }
-console.log('PASS sav — vzdaná hra v archivu projde, živý kontrakt bez trumfu ne');
+console.log('PASS sav — v2 mimo komentování se migruje, rozehrané fleky z v2 ne, cizí příhoz ani živá hra bez trumfu neprojdou');
 
 // ── únik skrytých informací do workeru (review pravidel, §25 i1/i2) ─────────
 /*
@@ -4085,6 +4293,88 @@ console.log('PASS sav — vzdaná hra v archivu projde, živý kontrakt bez trum
   }
   assert.ok(chooseTrumpSeen > 0, 'test musí projít i volbou trumfu, jinak nic nekontroluje');
   console.log(`PASS únik — pohled hráče neobsahuje cizí karty ani seed rozdání (${checkedStates} stavů)`);
+}
+
+/*
+ * Únik druhým kanálem: přes REDUKTOR, ne přes `view()`.
+ *
+ * Testy výš hlídají, že pohled na DANÝ stav neprozradí cizí karty. Neřeknou ale
+ * nic o tom, jak stav vzniká — a fáze fleků se do pohledu posílá celá. Když
+ * o předání slova rozhodne cokoli z ruky, stačí se dívat na `toAct`: aktér
+ * (i heuristika ve workeru) si přečte, co vidět neměl.
+ *
+ * Konkrétně: aktér hlásí hru a sto, obránce oba flekne. Tím vyčerpá zvýšení
+ * i sto proti a zbývá jediná otázka — jestli má čím hlásit SEDMU proti, tedy
+ * jestli drží trumfovou sedmu. Přesně tu kartu, podle níž se aktér rozhoduje,
+ * jestli hrát na sedmu. Dvě rozdání, která se liší jen jejím držitelem, proto
+ * musí po TÉŽE veřejné sekvenci skončit ve shodné veřejné fázi.
+ */
+{
+  const { initialState: initX, apply: apX } = await import('../src/lib/rules/engine');
+  const { view: viewX } = await import('../src/lib/rules/view');
+  const { legalActions: legalX } = await import('../src/lib/rules/legal');
+  const { defaultConfig: cfgX } = await import('../src/lib/rules/sazby');
+  const { card: mkX, R7: R7X } = await import('../src/lib/cards');
+  type StX = ReturnType<typeof initX>;
+
+  const TRUMP = 2 as const;
+  const seven = mkX(TRUMP, R7X);
+  const base = apX(initX(cfgX('voleny'), 2), { type: 'deal', seed: 5 });
+
+  /** Aktér 0 hlásil hru + sto; trumfovou sedmu drží zadaný obránce. */
+  const withSevenAt = (holder: 1 | 2): StX => {
+    const hands = base.hands.map((h) => h.filter((c) => c !== seven)) as StX['hands'];
+    hands[holder] = [...hands[holder], seven];
+    return {
+      ...base,
+      hands,
+      contract: { mode: 'hra', trump: TRUMP, declarer: 0, sedma: null, kilo: 0, dveSedmy: false },
+      phase: {
+        name: 'fleks',
+        fleks: { levels: {}, lastRaiser: {}, toAct: 1, spoke: [], open: ['hra', 'kilo'], raised: [], round: 0 },
+      },
+    } as StX;
+  };
+
+  const publicAfterFleks = (holder: 1 | 2): string => {
+    let st = withSevenAt(holder);
+    st = apX(st, { type: 'flek', seat: 1, target: 'hra' });
+    st = apX(st, { type: 'flek', seat: 1, target: 'kilo' });
+    // co o stavu ví AKTÉR — tedy přesně to, co jde ze stolu vyčíst
+    return JSON.stringify(viewX(st, 0).phase);
+  };
+
+  assert.equal(
+    publicAfterFleks(1), publicAfterFleks(2),
+    'veřejná fáze po flecích nesmí záviset na tom, který obránce drží trumfovou sedmu',
+  );
+
+  /*
+   * Shoda sama nestačí: kdyby se sedmová větev `protiPossible` ztratila, obě
+   * varianty by slovo předaly dál — taky shodně, a test by mlčel. Musí se proto
+   * ověřit i to, CO má být: obránce drží slovo, protože sedma proti je ještě ve
+   * hře. Nabídka se pak liší podle ruky (to je v pořádku — ta je soukromá),
+   * ale veřejný stav ne.
+   */
+  for (const holder of [1, 2] as const) {
+    let st = withSevenAt(holder);
+    st = apX(st, { type: 'flek', seat: 1, target: 'hra' });
+    st = apX(st, { type: 'flek', seat: 1, target: 'kilo' });
+    const f = st.phase.name === 'fleks' ? st.phase.fleks : null;
+    assert.equal(f?.toAct, 1, `sedma proti je pořád ve hře, obránce 1 drží slovo (sedmu drží ${holder})`);
+    assert.deepEqual(f?.spoke, [], 'a do „domluvil" ho to nezapisuje');
+    const mine = legalX(viewX(st, 1));
+    assert.equal(
+      mine.some((a) => a.type === 'announce-proti' && a.sedma), holder === 1,
+      'sedmu proti smí hlásit jen ten, kdo ji opravdu drží (nabídka je soukromá)',
+    );
+    assert.ok(mine.some((a) => a.type === 'good'), 'druhý má aspoň „dobrá" — kolo se nezasekne');
+  }
+
+  // a fixtura musí být taková, že je co rozlišovat (jinak by test procházel naprázdno)
+  const holdsSeven = (holder: 1 | 2): boolean => withSevenAt(holder).hands[1].includes(seven);
+  assert.ok(holdsSeven(1) && !holdsSeven(2), 'fixtura: sedmu má mít jednou obránce 1, podruhé ne');
+  console.log('PASS únik — předání slova ve flecích nezávisí na cizí ruce (reduktor, ne jen view)');
 }
 
 // seed AI: nesmí jít odvodit ze seedu rozdání (a naopak)
@@ -4331,7 +4621,47 @@ console.log('PASS sav — vzdaná hra v archivu projde, živý kontrakt bez trum
         { type: 'announce-proti', seat: 1, sedma: false, kilo: true }),
       /nelegální/, 'reducer musí sto proti v licitovaném odmítnout',
     );
-    console.log('PASS proti — jen volený a jen v prvním kole (čl. VII/1, II/23)');
+    /*
+     * Na pořadí uvnitř tahu nesmí záležet: „flek a sto proti" i „sto proti
+     * a flek" je táž řeč u stolu (§36). Sedadlo proto drží slovo, dokud má co
+     * říct — a obě cesty musí skončit v témže stavu, jinak by hráči propadlo
+     * to, co mu UI o akci dřív samo nabízelo.
+     */
+    const roundZero: StF = {
+      ...stL,
+      config: cfgF('voleny'),
+      contract: { mode: 'hra', trump: 2, declarer: 0, sedma: null, kilo: null, dveSedmy: false },
+      phase: { name: 'fleks', fleks: { levels: {}, lastRaiser: {}, toAct: 1, spoke: [], open: ['hra'], raised: [], round: 0 } },
+    } as StF;
+    const flekHra: ActF = { type: 'flek', seat: 1, target: 'hra' };
+    const stoProti: ActF = { type: 'announce-proti', seat: 1, sedma: false, kilo: true };
+    const fleksOf = (st: StF) => (st.phase.name === 'fleks' ? st.phase.fleks : null);
+
+    const afterFlek = apF(roundZero, flekHra);
+    assert.equal(fleksOf(afterFlek)?.toAct, 1, 'po fleku drží slovo dál — sto proti má pořád na jazyku');
+    assert.ok(
+      legalF(viewF(afterFlek, 1)).some((a) => a.type === 'announce-proti' && a.kilo),
+      'a sto proti mu zůstalo nabídnuté',
+    );
+    const afterProti = apF(roundZero, stoProti);
+    assert.equal(fleksOf(afterProti)?.toAct, 1, 'po ohlášení taky — flek na hru mu zbývá');
+    assert.ok(
+      legalF(viewF(afterProti, 1)).some((a) => a.type === 'flek' && a.target === 'hra'),
+      'a flek na hru mu zůstal nabídnutý',
+    );
+
+    // obě pořadí musí dát tentýž závazek i tytéž úrovně
+    const viaFlek = apF(afterFlek, stoProti);
+    const viaProti = apF(afterProti, flekHra);
+    assert.deepEqual(viaFlek.contract, viaProti.contract, 'závazek nesmí záviset na pořadí kliknutí');
+    assert.deepEqual(fleksOf(viaFlek)?.levels, fleksOf(viaProti)?.levels, 'ani úrovně fleků');
+    assert.deepEqual(fleksOf(viaFlek)?.toAct, fleksOf(viaProti)?.toAct, 'ani to, kdo mluví dál');
+    // a jakmile domluví (buď mu nic nezbylo, nebo řekne „dobrá"), mluví druhý
+    const settled = fleksOf(viaFlek)?.toAct === 1
+      ? apF(viaFlek, { type: 'good', seat: 1 })
+      : viaFlek;
+    assert.equal(fleksOf(settled)?.toAct, 2, 'po domluvení jde slovo druhému obránci');
+    console.log('PASS proti — jen volený a jen v prvním kole, a nezávisle na pořadí v tahu (čl. VII/1, V/4, II/23)');
   }
 
   /*
@@ -4370,6 +4700,19 @@ console.log('PASS sav — vzdaná hra v archivu projde, živý kontrakt bez trum
     const flekHra = legalF(viewF(st, fleks0.toAct)).find((a) => a.type === 'flek' && a.target === 'hra');
     assert.ok(flekHra, 'flek na hru musí být v prvním kole legální');
     let st2 = apF(st, flekHra);
+    /*
+     * „U kombinovaných závazků lze flekovat každý z nich samostatně" (čl. V/4):
+     * kdo flekl hru, drží slovo dál, protože sedma mu zůstala otevřená. Teprve
+     * až ji schválí (nebo flekne), přijde na řadu druhý obránce.
+     */
+    const fMid = st2.phase.name === 'fleks' ? st2.phase.fleks : null;
+    assert.ok(fMid);
+    assert.equal(fMid.toAct, fleks0.toAct, 'kdo flekl hru, vyjádří se ještě k sedmě');
+    assert.ok(
+      legalF(viewF(st2, fMid.toAct)).some((a) => a.type === 'flek' && a.target === 'sedma'),
+      'sedma zůstala témuž obránci otevřená',
+    );
+    st2 = apF(st2, actsF(st2).find((a) => a.type === 'good') as ActF); // sedmu schvaluje
     // druhý obránce dořekne kolo
     st2 = apF(st2, actsF(st2).find((a) => a.type === 'good') as ActF);
     const f1 = st2.phase.name === 'fleks' ? st2.phase.fleks : null;
@@ -4386,6 +4729,76 @@ console.log('PASS sav — vzdaná hra v archivu projde, živý kontrakt bez trum
     const st3 = apF(st2, actsF(st2).find((a) => a.type === 'good') as ActF);
     assert.notEqual(st3.phase.name, 'fleks', 'schválení jednou stranou flekování ukončí');
     console.log('PASS fleky — kola, otevřené komponenty a konec po souhlasu strany (čl. V/4)');
+  }
+
+  /*
+   * Každá komponenta se komentuje SAMOSTATNĚ (čl. V/4: „U kombinovaných závazků
+   * lze flekovat každý z nich samostatně"). Flekne-li obrana dvě, aktér se musí
+   * dostat k oběma — dřív mu jediné „re" uzavřelo kolo, druhá komponenta zůstala
+   * zamrzlá na fleku a vyúčtovala se o stupeň níž, než jak se u stolu mluvilo.
+   */
+  {
+    let st: StF | null = null;
+    for (let seed = 1; seed <= 60 && st === null; seed += 1) {
+      let s2: StF = apF(initF(cfgF('voleny'), 2), { type: 'deal', seed });
+      let guard = 0;
+      while (s2.phase.name !== 'fleks' && s2.phase.name !== 'scored' && (guard += 1) < 60) {
+        const acts = actsF(s2);
+        s2 = apF(s2,
+          acts.find((a) => a.type === 'declare' && a.mode === 'hra' && a.sedma) ??
+          acts.find((a) => a.type === 'takeover' && a.claim === 'good') ??
+          acts.find((a) => a.type === 'discard' && a.cards.every((c) => pointsOf(c) === 0)) ??
+          acts.find((a) => a.type === 'choose-trump' && a.card !== 'from-people') ?? acts[0]);
+      }
+      if (s2.phase.name === 'fleks' && s2.contract?.sedma !== null) st = s2;
+    }
+    assert.ok(st, 'nenašlo se rozdání s hrou i sedmou — test by nic neověřil');
+    const declarer = st.contract?.declarer;
+    const d0 = st.phase.name === 'fleks' ? st.phase.fleks.toAct : null;
+    assert.ok(d0 !== null);
+
+    // první obránce flekne hru a sedmu schválí, druhý flekne sedmu
+    let s = apF(st, legalF(viewF(st, d0)).find((a) => a.type === 'flek' && a.target === 'hra') as ActF);
+    s = apF(s, actsF(s).find((a) => a.type === 'good') as ActF);
+    const fB = s.phase.name === 'fleks' ? s.phase.fleks : null;
+    assert.ok(fB);
+    assert.notEqual(fB.toAct, d0, 'po vyjádření k oběma komponentám mluví druhý obránce');
+    const sedma = legalF(viewF(s, fB.toAct)).find((a) => a.type === 'flek' && a.target === 'sedma');
+    assert.ok(sedma, 'druhý obránce smí flekovat sedmu');
+    const d1 = fB.toAct;
+    s = apF(s, sedma);
+    /*
+     * Ve voleném kole 0 má i po fleku pořád na jazyku „sto proti" (čl. VII/1),
+     * takže tah uzavře až „dobrá" — viz §36. V licitovaném by skončil hned.
+     */
+    assert.equal(
+      s.phase.name === 'fleks' ? s.phase.fleks.toAct : null, d1,
+      'dokud má co říct, drží slovo',
+    );
+    s = apF(s, actsF(s).find((a) => a.type === 'good') as ActF);
+
+    const fC = s.phase.name === 'fleks' ? s.phase.fleks : null;
+    assert.ok(fC);
+    assert.equal(fC.round, 1, 'obrana domluvila, začíná kolo aktéra');
+    assert.equal(fC.toAct, declarer, 'kolo 1 patří aktérovi');
+    assert.deepEqual([...fC.open].sort(), ['hra', 'sedma'], 'otevřené jsou OBĚ flekované komponenty');
+
+    // aktér zvedne hru — a nesmí tím přijít o právo odpovědět i na sedmu
+    s = apF(s, legalF(viewF(s, fC.toAct)).find((a) => a.type === 'flek' && a.target === 'hra') as ActF);
+    const fD = s.phase.name === 'fleks' ? s.phase.fleks : null;
+    assert.ok(fD);
+    assert.equal(fD.toAct, declarer, 'aktér drží slovo, dokud neodpoví i na sedmu');
+    const reSedma = legalF(viewF(s, fD.toAct)).find((a) => a.type === 'flek' && a.target === 'sedma');
+    assert.ok(reSedma, 'druhé „re" musí jít vyslovit — jinak se sedma vyúčtuje o stupeň níž');
+    s = apF(s, reSedma);
+
+    const fE = s.phase.name === 'fleks' ? s.phase.fleks : null;
+    assert.ok(fE);
+    assert.equal(fE.round, 2, 'teprve po odpovědi na obě komponenty se kolo posune');
+    assert.notEqual(fE.toAct, declarer, 'slovo se vrací obraně');
+    assert.equal(fE.levels.hra, 2, 'hra: flek + re');
+    assert.equal(fE.levels.sedma, 2, 'sedma: flek + re');
+    console.log('PASS fleky — na každou flekovanou komponentu se odpovídá zvlášť (čl. V/4)');
   }
 
   /*
@@ -4778,6 +5191,10 @@ console.log('PASS sav — vzdaná hra v archivu projde, živý kontrakt bez trum
     assert.equal(st.phase.name, 'fleks');
     if (st.phase.name === 'fleks') assert.equal(st.phase.fleks.toAct, 2, 'první komentuje zadák (po aktérovi 1 ve směru hry), ne forhont');
     st = apV(st, { type: 'flek', seat: 2, target: 'hra' });
+    // „U kombinovaných závazků lze flekovat každý z nich samostatně" (čl. V/4):
+    // zadák komentoval hru, sto má pořád otevřené — slovo tedy drží dál
+    if (st.phase.name === 'fleks') assert.equal(st.phase.fleks.toAct, 2, 'zadák se ještě vyjádří ke stu');
+    st = apV(st, { type: 'good', seat: 2 });
     if (st.phase.name === 'fleks') assert.equal(st.phase.fleks.toAct, 0, 'pak forhont');
     st = apV(st, { type: 'good', seat: 0 });
     if (st.phase.name === 'fleks') assert.equal(st.phase.fleks.toAct, 1, 'kolo 1 patří aktérovi');
@@ -4828,7 +5245,16 @@ console.log('PASS sav — vzdaná hra v archivu projde, živý kontrakt bez trum
       const raise = (seat: SeatV): void => {
         assert.ok(canFlek(st, seat), `${variant}: sedadlo ${seat} musí smět zvýšit`);
         st = apV(st, { type: 'flek', seat, target: 'hra' });
-        if (seat !== 0) st = apV(st, { type: 'good', seat: 2 });
+        /*
+         * Obrana dořekne kolo. Ve voleném kole 0 drží slovo i ten, kdo právě
+         * flekl — „sto proti" má pořád na jazyku (§36) — takže „dobrá" řekne
+         * nejdřív on a teprve pak jeho spoluhráč.
+         */
+        if (seat === 0) return;
+        let guard = 0;
+        while (st.phase.name === 'fleks' && st.phase.fleks.toAct !== 0 && (guard += 1) < 5) {
+          st = apV(st, { type: 'good', seat: st.phase.fleks.toAct });
+        }
       };
       raise(1); raise(0); raise(1); raise(0);
       // strop se měří u hráče NA TAHU — `legalActions` dá jinak prázdno každému, kdo na tahu není
@@ -5022,6 +5448,196 @@ console.log('PASS sav — vzdaná hra v archivu projde, živý kontrakt bez trum
     }
     console.log('PASS vyúčtování — talon v licitovaném betlu/durchu zůstává rubem (čl. II/11)');
   }
+}
+
+/*
+ * Vydávací workflow: do těla `run:` nepatří výraz `${{ }}`.
+ *
+ * GitHub ho dosadí do textu skriptu JEŠTĚ PŘED tím, než ho shell rozebere —
+ * hodnota se tak stává SYNTAXÍ, ne argumentem. Titulek vydání přitom pochází
+ * z nadpisu v CHANGELOG.md (scripts/release-notes.ts bere `(.*)` doslova),
+ * takže uvozovka v nadpisu by na runneru spustila cizí příkaz, a to v kroku,
+ * kde je vystavený `GH_TOKEN` s právem `contents: write`. Hodnoty se proto
+ * předávají přes `env:`, kde jsou pro shell jen text.
+ */
+{
+  /**
+   * Všechny `run:` skripty ve workflow — přes skutečný YAML parser.
+   *
+   * Tohle si vlastní parser třikrát nezasloužil: postupně mu unikl kompaktní
+   * `- run: |` (odsazení od pomlčky), zapisy `run :` a `"run":`, a nakonec
+   * `-    run:` s víc mezerami a kotva `run: &script |`, u níž se tělo tvářilo
+   * jako hodnota. Strážce, který tiše přeskočí krok, je horší než žádný —
+   * budí dojem, že je hlídáno i to, co není. YAML umí spoustu zápisů téhož;
+   * rozplétat je regulárním výrazem je prohraná bitva, tak to dělá knihovna
+   * (`yaml`, kotvy a flow mapy vyřeší sama).
+   */
+  const runScripts = (yamlText: string): string[] => {
+    const doc = parseYaml(yamlText) as { jobs?: Record<string, { steps?: { run?: unknown }[] }> } | null;
+    const out: string[] = [];
+    for (const job of Object.values(doc?.jobs ?? {})) {
+      for (const step of job?.steps ?? []) {
+        if (typeof step?.run === 'string') out.push(step.run);
+      }
+    }
+    return out;
+  };
+
+  /** Co se ve skriptu nesmí objevit, s vysvětlením proč. */
+  const complaints = (script: string, where: string): string[] => {
+    const out: string[] = [];
+    for (const line of script.split('\n')) {
+      /*
+       * `${{ }}` se dosadí do TEXTU skriptu dřív, než ho shell rozebere —
+       * hodnota se tím stává syntaxí. Předává se proto přes `env:`.
+       */
+      if (line.includes('${{')) out.push(`${where}: „${line.trim()}" — výraz se dosadí před shellem, předej ho přes env:`);
+      /*
+       * `echo "x=$(cmd)" >> $GITHUB_OUTPUT` SPOLKNE návratový kód: substituce
+       * uvnitř argumentu ho nepropustí a `echo` vrátí 0, takže `set -e` nezabere
+       * a krok pokračuje s prázdnou hodnotou.
+       */
+      if (line.includes('GITHUB_OUTPUT') && line.includes('$(')) {
+        out.push(`${where}: „${line.trim()}" — návratový kód substituce se ztratí, přiřaď do proměnné`);
+      }
+      /*
+       * `npx foo` SÁHNE DO REGISTRU, když `foo` v node_modules nenajde. Tady
+       * to znamená cizí, nikým neodsouhlasený kód uvnitř vydávacího jobu.
+       * Dneska se to nestane, protože `npm ci` běžel ve stejném adresáři —
+       * ale je to jedno `--omit=dev` nebo jeden nedoběhlý `npm ci` daleko.
+       * Binárka se volá z lockfilu (`node node_modules/<balík>/…`).
+       */
+      if (/(^|[\s;&|(])npx\s/.test(line) && !line.includes('--no-install')) {
+        out.push(`${where}: „${line.trim()}" — npx si balík doinstaluje z registru, volej binárku z node_modules`);
+      }
+    }
+    return out;
+  };
+
+  // parser napřed na zápisech, které vlastnímu regexu postupně unikly
+  const tricky = [
+    'jobs:',
+    '  a:',
+    '    steps:',
+    '      - run: |',                       // kompaktní blok
+    '          echo "${{ github.event.issue.title }}"',
+    '        env:',
+    '          SAFE: ${{ secrets.TOKEN }}', // sourozenec, ne tělo
+    '      -    run: echo "${{ inputs.x }}"', // víc mezer za pomlčkou
+    '      - name: kotva',
+    '        run: &script |',               // kotva: tělo se tvářilo jako hodnota
+    '          echo "${{ inputs.y }}"',
+    '      - { name: flow, run: \'echo "${{ inputs.z }}"\' }', // flow mapa
+    '      - uses: actions/checkout@v4',    // krok bez run:
+  ].join('\n');
+  const found = runScripts(tricky);
+  assert.equal(found.length, 4, `parser má najít čtyři skripty, našel ${found.length}`);
+  assert.equal(
+    found.filter((r) => r.includes('${{')).length, 4,
+    'a ve všech čtyřech musí ten výraz vidět — každý z těchhle zápisů už jednou proklouzl',
+  );
+  assert.equal(
+    complaints(found.join('\n'), 'x').length, 4, 'každý z nich musí vyvolat stížnost',
+  );
+  // sourozenecké `env:` do těla nepatří — jinak by guard shodil správný krok
+  assert.ok(
+    found.every((r) => !r.includes('SAFE')),
+    '`env:` vedle `run:` není jeho tělo',
+  );
+  // a čistý workflow ze samých `uses:` projde bez řečí (žádný `run:` neznamená v pořádku)
+  assert.deepEqual(runScripts('jobs:\n  a:\n    steps:\n      - uses: x/y@v1'), []);
+
+  /*
+   * Druhá větev potřebuje VLASTNÍ vzorek. Ve `tricky` je `${{` na každém řádku,
+   * takže by tamní čtyři stížnosti seděly i tehdy, kdyby kontrola spolknutého
+   * návratového kódu vypadla — negativní kontrola, která nekouše. Tady žádný
+   * výraz není: stěžovat si smí jedině ta druhá větev.
+   */
+  const steps = (...lines: string[]) => ['jobs:', '  a:', '    steps:', '      - run: |', ...lines.map((l) => `          ${l}`)].join('\n');
+  const swallows = complaints(runScripts(steps('echo "title=$(node scripts/release-notes.ts)" >> "$GITHUB_OUTPUT"')).join('\n'), 'x');
+  assert.equal(swallows.length, 1, 'substituce uvnitř `echo` do GITHUB_OUTPUT musí vyvolat stížnost');
+  assert.match(swallows[0], /návratový kód/, 'a říct proč, ne jen že se to nelíbí');
+  // …a tvar, kterým to release.yml řeší (přiřazení a teprve pak echo), projít musí
+  assert.deepEqual(
+    complaints(runScripts(steps(
+      'title="$(node scripts/release-notes.ts)"',
+      'echo "title=$title" >> "$GITHUB_OUTPUT"',
+    )).join('\n'), 'x'),
+    [], 'přiřazení do proměnné je právě to řešení, které strážce vynucuje',
+  );
+
+  // …a totéž pro `npx`: co si smí doinstalovat z registru, do release jobu nepatří
+  const npxBad = complaints(runScripts(steps('npx playwright install --with-deps chromium')).join('\n'), 'x');
+  assert.equal(npxBad.length, 1, '`npx` bez `--no-install` musí vyvolat stížnost');
+  assert.match(npxBad[0], /z registru/, 'a říct, co je na tom špatně');
+  assert.deepEqual(
+    complaints(runScripts(steps(
+      'node node_modules/playwright/cli.js install chromium', // binárka z lockfilu
+      'npx --no-install tsx scripts/x.ts',                    // …nebo aspoň bez doinstalace
+      'echo "npx se o sobě jen zmiňuje"',                     // zmínka uprostřed slova není volání
+    )).join('\n'), 'x'),
+    [], 'volání z node_modules ani `--no-install` stěžovat nesmí',
+  );
+
+  const dir = join(ROOT, '.github/workflows');
+  const files = readdirSync(dir).filter((f) => f.endsWith('.yml') || f.endsWith('.yaml'));
+  assert.ok(files.length > 0, 'nenašel se žádný workflow — test by nic nehlídal');
+  let scripts = 0;
+  for (const file of files) {
+    for (const script of runScripts(readFileSync(join(dir, file), 'utf8'))) {
+      scripts += 1;
+      const found2 = complaints(script, `.github/workflows/${file}`);
+      assert.equal(found2.length, 0, found2[0]);
+    }
+  }
+  assert.ok(scripts > 0, 'v žádném workflow se nenašel `run:` — parser asi nedošel k `jobs`');
+  console.log(`PASS workflow — run: bez dosazovaných výrazů, spolknutých návratových kódů a npx (${scripts} skriptů)`);
+}
+
+/*
+ * Nadpis sekce z CHANGELOG.md teče do `gh release create --title`, a cestou se
+ * píše do GITHUB_OUTPUT jako `title=…`. Řídicí znak by ten řádek rozbil, takže
+ * `release-notes.ts` takový nadpis odmítá — a protože se skript v `make all`
+ * jinak vůbec nespouští, hlídá ho až tenhle test. Jede jako podproces nad
+ * dočasným CHANGELOGem (skript čte `CHANGELOG.md` relativně ke cwd).
+ *
+ * Tenhle blok už jednou zmizel při přepisu sousedního strážce a nikomu to
+ * nespadlo — jediné, co po něm zbylo, byly nepoužité importy. Pokud ho někdy
+ * budeš mazat, smaž s ním i ten guard v `release-notes.ts`; jinak zůstane
+ * kontrola, kterou nikdo nespouští, a selže až na tagu, v jobu s `contents:
+ * write`.
+ */
+{
+  const tmp = mkdtempSync(join(tmpdir(), 'flek-notes-'));
+  const script = join(ROOT, 'scripts/release-notes.ts');
+  /*
+   * Ne `npx`: cwd je mimo repozitář, takže by `tsx` z `node_modules` nenašel
+   * a v CI by si ho STÁHL z registru — cizí nevypnutý kód v release jobu,
+   * který má `contents: write` a token z checkoutu. Voláme rovnou node
+   * s CLI z lockfilu; když tam není, test radši spadne, než aby něco tahal.
+   */
+  const tsxCli = join(ROOT, 'node_modules/tsx/dist/cli.mjs');
+  assert.ok(existsSync(tsxCli), 'tsx z node_modules nenalezen — `npm ci` neproběhl?');
+  const run = (heading: string): { status: number | null; out: string; err: string } => {
+    writeFileSync(join(tmp, 'CHANGELOG.md'), `${heading}\n\nTělo vydání.\n`);
+    const r = spawnSync(process.execPath, [tsxCli, script, 'v9.9.9', join(tmp, 'notes.md')], {
+      cwd: tmp, encoding: 'utf8',
+    });
+    return { status: r.status, out: (r.stdout ?? '').trim(), err: (r.stderr ?? '').trim() };
+  };
+
+  const good = run('## v9.9.9 — Čistý název vydání');
+  assert.equal(good.status, 0, `čistý nadpis musí projít (stderr: ${good.err})`);
+  assert.equal(good.out, 'v9.9.9 — Čistý název vydání', 'název se vypisuje na stdout beze změny');
+
+  const bell = String.fromCharCode(7);
+  const bad = run(`## v9.9.9 — Název s${bell}řídicím znakem`);
+  assert.equal(bad.status, 2, 'nadpis s řídicím znakem musí vydání zastavit');
+  assert.match(bad.err, /řídicí znaky/, 'a říct proč');
+
+  // chybějící sekce zůstává chybou i nadále (starší strážce, tentýž kód)
+  assert.equal(run('## v0.0.1 — Jiná verze').status, 2, 'chybějící sekce pro tag musí skončit dvojkou');
+  console.log('PASS vydání — nadpis s řídicím znakem release zastaví, čistý projde');
 }
 
 console.log('OK: vše prošlo');

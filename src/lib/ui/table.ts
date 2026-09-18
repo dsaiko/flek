@@ -82,6 +82,13 @@ export class TableUI {
   private thinkTimer: ReturnType<typeof setTimeout> | null = null;
   /** U koho bublina „přemýšlím" právě visí (aby šla sundat, až tah přijde). */
   private thinkShown: Seat | null = null;
+  /**
+   * U koho „přemýšlím" teprve čeká ve frontě (`bubblePending`) na doječtení té
+   * předchozí. Visící a čekající bublina jsou dva různé stavy: kdyby se hlídal
+   * jen ten první, tah AI by frontu nezrušil a „Momentíček…" by naskočil nad
+   * sedadlem, které už dávno táhlo.
+   */
+  private thinkQueued: Seat | null = null;
   /** Kdy naposledy bublina u sedadla naskočila (minimální čtecí čas). */
   private readonly bubbleShownAt = new Map<Seat, number>();
   /** Hláška čekající, až uplyne minimální čas té předchozí. */
@@ -145,6 +152,7 @@ export class TableUI {
     if (this.thinkTimer !== null) clearTimeout(this.thinkTimer);
     this.thinkTimer = null;
     this.thinkShown = null;
+    this.thinkQueued = null;
     this.recentTalk.length = 0;
     this.scoredLine = null;
     this.scoredSoundFor = null;
@@ -414,9 +422,7 @@ export class TableUI {
       const role = seat === v.dealer ? t('dealerShort') : seat === forhont(v.dealer) ? t('forhont') : '';
       $(box, '.seat-sub').textContent = role ? `${role} · ${fmtMoney(v.ledger[seat])}` : fmtMoney(v.ledger[seat]);
       const backs = $(box, '.backs');
-      const extraUnseen =
-        v.phase.name === 'choose-trump' && seat === forhont(v.dealer) ? unseenCount : 0;
-      const n = v.handCounts[seat] + extraUnseen;
+      const n = opponentBacks(v, seat, unseenCount);
       const animate = reveal && !this.reducedMotion();
       const imgs = syncChildren(backs, n, () => {
         const img = document.createElement('img');
@@ -745,12 +751,17 @@ export class TableUI {
   private showBubble(seat: Seat, html: string, kind: 'talk' | 'thinking' = 'talk'): void {
     const pending = this.bubblePending.get(seat);
     if (pending !== undefined) clearTimeout(pending);
+    // ve frontě čeká vždy jen poslední hláška — tahle tam případné „Momentíček…"
+    // střídá, takže ho přestáváme evidovat
+    if (this.thinkQueued === seat) this.thinkQueued = null;
     const since = Date.now() - (this.bubbleShownAt.get(seat) ?? 0);
     if (since < MIN_BUBBLE_MS) {
+      if (kind === 'thinking') this.thinkQueued = seat;
       this.bubblePending.set(
         seat,
         setTimeout(() => {
           this.bubblePending.delete(seat);
+          if (this.thinkQueued === seat) this.thinkQueued = null;
           this.paintBubble(seat, html, kind);
         }, MIN_BUBBLE_MS - since),
       );
@@ -803,6 +814,17 @@ export class TableUI {
 
   /** Sundá „Momentíček…", pokud zrovna visí (nebo čeká ve frontě). */
   private hideThinkingBubble(): void {
+    // čekající se ruší i tehdy, když nic nevisí — právě tak se totiž stihne
+    // zrušit dřív, než ho `bubblePending` vykreslí nad hotovým tahem
+    const queued = this.thinkQueued;
+    if (queued !== null) {
+      this.thinkQueued = null;
+      const waiting = this.bubblePending.get(queued);
+      if (waiting !== undefined) {
+        clearTimeout(waiting);
+        this.bubblePending.delete(queued);
+      }
+    }
     if (this.thinkShown === null) return;
     const seat = this.thinkShown;
     this.thinkShown = null;
@@ -1235,13 +1257,24 @@ const setSrc = (img: HTMLImageElement, src: string): void => {
 };
 
 /** Zajistí, že kontejner má přesně `count` dětí daného typu, a vrátí je. */
-function syncChildren<T extends HTMLElement>(
+/**
+ * Sladí počet dětí kontejneru s `count` (recyklace místo překreslování).
+ * Exportováno kvůli testu ukončení při záporném/nečíselném vstupu.
+ */
+export function syncChildren<T extends HTMLElement>(
   parent: HTMLElement,
   count: number,
   create: () => T,
 ): T[] {
-  while (parent.children.length > count) parent.lastElementChild?.remove();
-  while (parent.children.length < count) parent.appendChild(create());
+  /*
+   * Záporný (nebo neceločíselný) počet by první smyčku zacyklil: `0 > -1` platí
+   * dál, ale `lastElementChild` je už `null`, takže se nic neubere a karta
+   * zamrzne. Radši nakreslit prázdno než ztuhnout — podvržený sav se sem dostat
+   * může (`assertValid` hlídá 32 karet celkem, ne po rukou).
+   */
+  const n = Number.isFinite(count) ? Math.max(0, Math.floor(count)) : 0;
+  while (parent.children.length > n) parent.lastElementChild?.remove();
+  while (parent.children.length < n) parent.appendChild(create());
   return Array.from(parent.children) as T[];
 }
 
@@ -1397,7 +1430,7 @@ function flekSummary(state: GameState): string {
  */
 export function trumpAsideOf(
   v: PlayerView,
-): { card: Card | null; suit: Suit; faceDown: boolean } | null {
+): { card: Card | null; suit: Suit; faceDown: boolean; holder: Seat | null } | null {
   const p = v.phase;
   if (p.name !== 'discard-talon' && p.name !== 'declare' && p.name !== 'takeover' && p.name !== 'fleks') {
     return null;
@@ -1420,10 +1453,15 @@ export function trumpAsideOf(
      * soupeřovu ne — `view()` mi ji ani nepošle, přijde `null`.
      */
     const mine = v.revealedTrump !== null;
-    return { card: mine ? v.revealedTrump : null, suit, faceDown: !mine };
+    /*
+     * `holder` = z čí ruky karta odešla stranou. Ve stavu v ní pořád leží
+     * (engine ji jen zapsal do `revealedTrump`), takže `handCounts` ji počítá
+     * — kdo kreslí ruce, musí ji o jednu ubrat, jinak ji ukáže dvakrát.
+     */
+    return { card: mine ? v.revealedTrump : null, suit, faceDown: !mine, holder: declarer };
   }
   // licitovaný: žádná karta se nevynáší, trumf je jen barva ze závazku
-  return { card: null, suit, faceDown: false };
+  return { card: null, suit, faceDown: false, holder: null };
 }
 
 /**
@@ -1468,6 +1506,27 @@ export function knownMode(v: PlayerView): GameMode | null {
   const standing =
     p.name === 'discard-talon' || p.name === 'declare' || p.name === 'takeover' ? p.standing : null;
   return standing?.mode ?? v.contract?.mode ?? null;
+}
+
+/**
+ * Kolik rubů se kreslí protihráči do vějíře.
+ *
+ * Exportováno, aby to šlo testovat bez DOM — je to rozhodnutí o POČTU karet,
+ * a spletený počet hráč u stolu pozná hned (ta samá zásada jako u `handAside`).
+ */
+export function opponentBacks(v: PlayerView, seat: Seat, unseenCount = 0): number {
+  /*
+   * Zvolený trumf leží stranou na stole (kreslí ho `renderTrumpAside`), ale ve
+   * stavu pořád patří do ruky — `handCounts` ho počítá. Bez odečtení by měl
+   * protihráč ve vějíři o kartu víc a při sehrávce by mu jedna nevysvětlitelně
+   * zmizela. Vlastní ruku řeší `handAside()` tímtéž způsobem.
+   */
+  const aside = trumpAsideOf(v)?.holder === seat ? 1 : 0;
+  // volba trumfu „z lidu": karty ještě nikdo neviděl, ale u forhonta už leží
+  const extraUnseen =
+    v.phase.name === 'choose-trump' && seat === forhont(v.dealer) ? unseenCount : 0;
+  // u podvrženého savu (prázdná ruka s odloženým trumfem) by vyšlo -1
+  return Math.max(0, v.handCounts[seat] + extraUnseen - aside);
 }
 
 /** Ruka tak, jak ji vidí hráč: bez karty, která leží stranou na stole. */

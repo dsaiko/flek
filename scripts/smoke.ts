@@ -10,6 +10,11 @@
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { chromium, webkit } from 'playwright';
+import { apply, initialState } from '../src/lib/rules/engine';
+import { legalActions } from '../src/lib/rules/legal';
+import { defaultConfig } from '../src/lib/rules/sazby';
+import { view } from '../src/lib/rules/view';
+import { VERSION as SAVE_VERSION } from '../src/lib/match/persist';
 import { TALK_TABLES } from '../src/lib/ui/tableTalk';
 
 // Pevný seed: smoke musí být reprodukovatelný. Se seedem 10 vede odhoz, který
@@ -328,6 +333,7 @@ for (let i = 0; i < 400; i += 1) {
   }
 
   const status = await page.textContent('#status');
+
 
   /*
    * Zvolený trumf leží stranou na stole (ČSM Čl. VII/1) a ve VĚJÍŘI v tu dobu
@@ -849,12 +855,41 @@ if (!fromPeopleCancelled) {
   if (!helpEn.includes('how it is played')) problems.push('anglická nápověda se nepřepnula');
   if (helpEn.includes('jak se hraje')) problems.push('v anglické nápovědě zůstal český text');
   if (!closed) problems.push('Esc nápovědu nezavřel');
+
+  /*
+   * Nápověda a nastavení se vylučují V OBOU SMĚRECH. Nápověda leží uvnitř
+   * #table, kdežto ozubené kolo je jeho soused — otevřená nápověda ho tedy
+   * nepřekrývá a kliknout na něj jde. Oba panely mají stejný z-index, takže
+   * kdyby se nezavřel ten druhý, prosvítaly by přes sebe a nešly by číst.
+   */
+  await page.click('#btn-help');
+  await page.waitForSelector('#help-float:not([hidden])', { timeout: 3000 });
+  await page.click('#btn-settings');
+  await page.waitForTimeout(150);
+  if ((await page.locator('#settings-float:not([hidden])').count()) !== 1) {
+    problems.push('ozubené kolo přes otevřenou nápovědu nastavení neotevřelo');
+  }
+  if ((await page.locator('#help-float:not([hidden])').count()) !== 0) {
+    problems.push('otevřené nastavení nezavřelo nápovědu (dva panely přes sebe)');
+  }
+  // a opačně: otazník přes otevřené nastavení
+  await page.click('#btn-help');
+  await page.waitForTimeout(150);
+  if ((await page.locator('#help-float:not([hidden])').count()) !== 1) {
+    problems.push('otazník přes otevřené nastavení nápovědu neotevřel');
+  }
+  if ((await page.locator('#settings-float:not([hidden])').count()) !== 0) {
+    problems.push('otevřená nápověda nezavřela nastavení');
+  }
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(150);
+
   if (problems.length > 0) {
     console.error(`CHYBA: nápověda — ${problems.join('; ')}`);
     await browser.close();
     process.exit(1);
   }
-  console.log(`Nápověda: otevře se, přepíná jazyk (${helpCs.length} znaků česky) a Esc ji zavře`);
+  console.log(`Nápověda: otevře se, přepíná jazyk (${helpCs.length} znaků česky), Esc ji zavře a s nastavením se vylučují oboustranně`);
 }
 
 /*
@@ -892,6 +927,147 @@ if (cspViolations.length > 0) {
   console.error(`CHYBA: CSP zablokovala ${cspViolations.length} zdroj(ů):`);
   for (const v of cspViolations) console.error(`  ${v}`);
   process.exit(1);
+}
+
+/*
+ * Odložený trumf u SOUPEŘE: ve stavu leží pořád v jeho ruce (`handCounts` ho
+ * počítá), takže kdo kreslí cizí vějíř, musí ho odečíst — jinak má forhont
+ * o rub víc a při sehrávce mu jedna karta nevysvětlitelně zmizí. Čistou funkci
+ * `opponentBacks()` hlídá verify; tohle je o tom, že ji `renderOpponents` taky
+ * VOLÁ.
+ *
+ * Stav se staví deterministicky a podává stránce savem — čekat, až na tenhle
+ * případ dojde herní smyčka, nejde: člověk je v pozorovaném rozdání forhont,
+ * takže odložená karta patří jemu. (Ověřeno: s kontrolou uvnitř smyčky nenastal
+ * ten případ ani jednou, a mrtvá kontrola je horší než žádná.)
+ */
+{
+  const seeded = await browser.newPage({ viewport: { width: 1400, height: 900 } });
+  seeded.on('dialog', (d) => void d.accept());
+  await seeded.goto(url);
+  await seeded.evaluate((payload) => localStorage.setItem('flek.match.v1', payload), asideSave());
+  await seeded.reload();
+  /*
+   * Čekat na PODMÍNKU, ne na hodiny: mezi `reload()` a čtením musí stihnout
+   * naběhnout bundle, worker, potvrzovací dialog o obnovení a překreslení.
+   * Na vytíženém runneru (viz SMOKE_RESTART_MS) by pevná prodleva vypršela
+   * dřív a test by spadl na „počítá se dvakrát", i když se jen nestihl obnovit.
+   */
+  try {
+    await seeded.waitForSelector('#trump-aside:not([hidden]) img', { timeout: 15000 });
+    await seeded.waitForFunction(
+      () => (document.querySelectorAll('#seat-left .backs img').length > 0),
+      undefined, { timeout: 15000 },
+    );
+  } catch {
+    console.error('CHYBA: stav se neobnovil — odložený trumf se u soupeře vůbec neobjevil');
+    await seeded.close();
+    await browser.close();
+    process.exit(1);
+  }
+  await seeded.waitForTimeout(150); // dokreslení zbylých rubů
+  const backs = [
+    await seeded.locator('#seat-left .backs img').count(),
+    await seeded.locator('#seat-right .backs img').count(),
+  ];
+  const asideShown = await seeded.locator('#trump-aside:not([hidden])').count();
+  await seeded.close();
+  // forhont je soupeř vlevo (sedadlo 1): 9 rubů + karta stranou = 10 v ruce
+  if (asideShown !== 1 || backs[0] !== 9 || backs[1] !== 10) {
+    console.error(
+      `CHYBA: soupeřův odložený trumf se počítá dvakrát — ruby ${backs.join(' a ')}, karta stranou ${asideShown}; čekáno 9 a 10 s kartou stranou`,
+    );
+    await browser.close();
+    process.exit(1);
+  }
+  console.log(`Soupeřův odložený trumf: ${backs[0]} rubů + karta stranou (ruka má ${backs[1]})`);
+}
+
+/*
+ * Akční lišta nesmí ležet přes jmenovku hráče ani přes jeho hromádku.
+ *
+ * Tohle nahlásil uživatel snímkem z licitovaného: devět nabídek se zalomilo do
+ * dvou řad a spodní řada skončila na „Ty". Kontrola je proto na GEOMETRII, ne
+ * na tom, že lišta má nějaký `margin` — zalomení závisí na ŠÍŘCE POPISKŮ, a ta
+ * se s jazykem mění (německy je „Hundert und Sieben" o půl řádku delší než
+ * „sto a sedma"). Jede se přes všechny jazyky, co sada popisků nabízí.
+ *
+ * Stav se podává savem: devítinabídka vyžaduje konkrétní ruku (obě sedmy a sto
+ * v barvě), na kterou by se herní smyčka načekala.
+ */
+{
+  const payload = auctionSave();
+  const worst: string[] = [];
+  for (const lang of ['cs', 'en', 'de', 'fr']) {
+    const bid = await browser.newPage({ viewport: { width: 1400, height: 900 } });
+    bid.on('dialog', (d) => void d.accept());
+    const langUrl = new URL(url);
+    langUrl.searchParams.set('lang', lang);
+    await bid.goto(langUrl.toString());
+    /*
+     * Se savem se seedují i NASTAVENÍ: aplikace si variantu bere z nich, ne ze
+     * savu, a s výchozím „voleným" by se licitovaný sav zahodil a nabídka by
+     * se vůbec neobjevila (na tohle už jsem jednou naletěl).
+     */
+    await bid.evaluate(([match, settings]) => {
+      localStorage.setItem('flek.match.v1', match);
+      localStorage.setItem('flek.settings.v1', settings);
+    }, [payload, JSON.stringify({ variant: 'licitovany', sounds: false })]);
+    await bid.reload();
+    try {
+      await bid.waitForFunction(
+        () => document.querySelectorAll('#actions .action-btn').length >= 9,
+        undefined, { timeout: 15000 },
+      );
+    } catch {
+      const n = await bid.locator('#actions .action-btn').count();
+      console.error(`CHYBA: licitovaný sav se neobnovil — nabídka má ${n} tlačítek místo devíti (${lang})`);
+      await bid.close();
+      await browser.close();
+      process.exit(1);
+    }
+    await bid.waitForTimeout(120); // dosazení popisků a případné zalomení
+
+    /*
+     * Bez pojmenovaných pomocníků uvnitř `evaluate`: tsx je přeloží esbuildem
+     * a propašuje do nich `__name`, který v prohlížeči neexistuje (stejná past
+     * jako u `addInitScript` nahoře).
+     */
+    const boxes = await bid.evaluate(() => ({
+      buttons: [...document.querySelectorAll('#actions .action-btn')].map((b) => {
+        const r = b.getBoundingClientRect();
+        return { label: (b.textContent ?? '').trim(), x: r.x, y: r.y, w: r.width, h: r.height };
+      }),
+      meta: [...document.querySelectorAll('.me-meta')].map((e) => {
+        const r = e.getBoundingClientRect();
+        return { x: r.x, y: r.y, w: r.width, h: r.height };
+      })[0] ?? null,
+      pile: [...document.querySelectorAll('#pile-me')].map((e) => {
+        const r = e.getBoundingClientRect();
+        return { x: r.x, y: r.y, w: r.width, h: r.height };
+      })[0] ?? null,
+    }));
+    for (const [name, target] of [['jmenovku', boxes.meta], ['hromádku', boxes.pile]] as const) {
+      if (target === null || target.w === 0) continue; // prvek se v téhle fázi nekreslí
+      for (const b of boxes.buttons) {
+        const ox = Math.min(b.x + b.w, target.x + target.w) - Math.max(b.x, target.x);
+        const oy = Math.min(b.y + b.h, target.y + target.h) - Math.max(b.y, target.y);
+        if (ox > 0 && oy > 0) {
+          worst.push(`${lang}: „${b.label}" přes ${name} (${Math.round(ox)}×${Math.round(oy)} px)`);
+        }
+      }
+    }
+    if (lang === 'cs') {
+      await bid.screenshot({ path: join(outDir, 'smoke-auction.png') });
+    }
+    await bid.close();
+  }
+  if (worst.length > 0) {
+    console.error(`CHYBA: nabídka licitace překrývá hráčovy prvky:\n  ${worst.join('\n  ')}`);
+    await browser.close();
+    process.exit(1);
+  }
+  console.log('Nabídka licitace (9 tlačítek) se ve všech čtyřech jazycích vyhne jmenovce i hromádce');
 }
 
 await browser.close();
@@ -970,6 +1146,62 @@ if (!trumpBackInHand) {
     `WebKit: úvodní obrazovka drží poměry (karta varianty ${windowed.toFixed(1)} % / ${full.toFixed(1)} % výšky sukna)`,
   );
   await wk.close();
+}
+
+/**
+ * Sav s rozehranou hrou, kde trumf volil SOUPEŘ (forhont = sedadlo 1, tedy
+ * vlevo od člověka) a odložená karta tak leží v jeho ruce. Staví se enginem,
+ * ne klikáním — jen tak je stav v každém běhu stejný.
+ */
+function asideSave(): string {
+  // dealer 0 → forhont 1, tedy soupeř VLEVO: trumf volí on a karta zůstává jemu
+  let st = apply(initialState(defaultConfig('voleny'), 0), { type: 'deal', seed: 1 });
+  const acts = (): ReturnType<typeof legalActions> => {
+    for (const seat of [0, 1, 2] as const) {
+      const a = legalActions(view(st, seat));
+      if (a.length > 0) return a;
+    }
+    return [];
+  };
+  let guard = 0;
+  while (st.phase.name !== 'fleks' && st.phase.name !== 'scored' && (guard += 1) < 60) {
+    const a = acts();
+    st = apply(st,
+      a.find((x) => x.type === 'choose-trump' && x.card !== 'from-people') ??
+      // talon bez es a desítek, jinak aktérovi zbude jen betl/durch (C/13)
+      a.find((x) => x.type === 'discard' && x.cards.every((c) => c % 8 !== 3 && c % 8 !== 7)) ??
+      a.find((x) => x.type === 'declare' && x.mode === 'hra') ??
+      a.find((x) => x.type === 'takeover' && x.claim === 'good') ?? a[0]);
+  }
+  if (st.phase.name !== 'fleks' || st.contract?.mode !== 'hra' || st.contract.declarer !== 1) {
+    throw new Error('scénář pro odložený trumf neskončil barevnou hrou soupeře vlevo');
+  }
+  return JSON.stringify({ v: SAVE_VERSION, state: st });
+}
+
+/**
+ * Sav s licitovaným, kde je člověk na tahu a nabídka má DEVĚT tlačítek —
+ * tolik, co se jich vejde na obrazovku uživatele, který hlásil překryv.
+ *
+ * Seed 514 není náhoda: devítinabídka (obě sedmy i sto, a obojí v barvě)
+ * vypadne z rozdání jen občas, tak je vybraný hledáním. Kdyby ho úprava
+ * licitace rozbila, kontrola to řekne rovnou — proto ta kontrola na devět.
+ */
+function auctionSave(): string {
+  let st = apply(initialState(defaultConfig('licitovany'), 0), { type: 'deal', seed: 514 });
+  let guard = 0;
+  while (st.phase.name !== 'bidding' && (guard += 1) < 40) {
+    const next = ([0, 1, 2] as const)
+      .map((s) => legalActions(view(st, s)))
+      .find((a) => a.length > 0);
+    if (next === undefined) break;
+    st = apply(st, next[0]);
+  }
+  const offer = legalActions(view(st, 0));
+  if (st.phase.name !== 'bidding' || (st.phase as { toAct: number }).toAct !== 0 || offer.length < 9) {
+    throw new Error(`scénář pro nabídku licitace nedal devět možností (fáze ${st.phase.name}, ${offer.length})`);
+  }
+  return JSON.stringify({ v: SAVE_VERSION, state: st });
 }
 
 async function tableClip(): Promise<{ x: number; y: number; width: number; height: number }> {

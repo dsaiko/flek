@@ -18,6 +18,64 @@ import { bidRank, defendersOf, forhont, nextSeat } from './types';
 const MODE_RANK: Record<GameMode, number> = { hra: 0, betl: 1, durch: 2 };
 
 /**
+ * Otevřené komponenty, které dané sedadlo v tomhle kole ještě smí zvýšit.
+ *
+ * „V daném kole schvalování se lze vyjadřovat již jen k tomu závazku, který
+ * v předchozím kole protistrana flekovala" (Obecná pravidla čl. V/4) — nabídka
+ * proto vychází z `f.open`, ne z celého závazku. Kdo komponentu právě zvýšil,
+ * je u ní `lastRaiser` a další zvýšení už patří protistraně, takže seznam po
+ * každém fleku ubývá.
+ *
+ * Exportováno pro `stillHasSay` v `engine.ts`: podle něj se pozná, že sedadlo
+ * po fleku drží slovo dál (zbývá mu další otevřená komponenta) — jinak by se
+ * kolo uzavřelo po jediném zvýšení a ostatní flekované závazky by zůstaly bez
+ * odpovědi. Je to čistá funkce VEŘEJNÉHO stavu, což je u posunu kola podmínka,
+ * ne náhoda (viz `protiPossible`).
+ */
+export function raisableFleks(
+  config: RulesConfig,
+  contract: Contract,
+  f: FlekState,
+  seat: Seat,
+): FlekTarget[] {
+  const holderSeat = (t: FlekTarget): Seat =>
+    t === 'sedma' ? (contract.sedma as Seat)
+    : t === 'kilo' ? (contract.kilo as Seat)
+    : contract.declarer;
+  const sideOf = (s: Seat): boolean => s === contract.declarer; // true = strana aktéra
+  return f.open.filter((t) => {
+    if ((f.levels[t] ?? 0) >= config.sazby.maxFlekLevel) return false;
+    const last = f.lastRaiser[t];
+    return last === undefined
+      ? sideOf(seat) !== sideOf(holderSeat(t)) // první flek dává protistrana držitele
+      : sideOf(seat) !== sideOf(last); // dál se strany střídají
+  });
+}
+
+/**
+ * Smí sedadlo v tomhle kole vůbec uvažovat o sedmě/stu proti?
+ *
+ * „Závazky Sedma a Sto mohou hlásit i hráči obrany v prvním kole komentování
+ * ohlášeného trumfového závazku" (Obecná pravidla čl. VII/1) — tedy jen volený
+ * a jen kolo 0. Licitovaný je zakazuje úplně (čl. II/23).
+ *
+ * Čte se JEN z veřejného stavu: jestli hráč sedmu proti opravdu má čím hlásit
+ * (drží trumfovou sedmu), rozhoduje až nabídka akcí. Tenhle predikát řídí
+ * i předávání slova ve `stillHasSay`, a to se do veřejné fáze zapisuje — kdyby
+ * koukal do ruky, dal by se z `toAct` vyčíst držitel trumfové sedmy.
+ */
+export function protiPossible(
+  config: RulesConfig,
+  contract: Contract,
+  f: FlekState,
+  seat: Seat,
+): boolean {
+  if (config.variant !== 'voleny' || contract.mode !== 'hra') return false;
+  if (seat === contract.declarer || f.round !== 0) return false;
+  return (contract.sedma === null && contract.trump !== null) || contract.kilo === null;
+}
+
+/**
  * Jak dopadne flekování, když právě teď skončí (nikdo už nezvýšil).
  *
  * Tři důvody, proč se sehrávka nekoná, a všechny jsou v pravidlech:
@@ -357,36 +415,13 @@ export function legalActions(v: PlayerView): PlayerAction[] {
 
       out.push({ type: 'good', seat: me });
 
-      const holderSeat = (t: FlekTarget): Seat =>
-        t === 'sedma' ? (contract.sedma as Seat)
-        : t === 'kilo' ? (contract.kilo as Seat)
-        : contract.declarer;
-      const sideOf = (s: Seat): boolean => s === contract.declarer; // true = strana aktéra
-
-      /*
-       * „V daném kole schvalování se lze vyjadřovat již jen k tomu závazku,
-       * který v předchozím kole protistrana flekovala" (Obecná pravidla
-       * čl. V/4) — otevřené komponenty proto nese `f.open`, ne celý závazek.
-       */
-      for (const t of f.open) {
-        const level = f.levels[t] ?? 0;
-        if (level >= v.config.sazby.maxFlekLevel) continue;
-        const last = f.lastRaiser[t];
-        const eligible =
-          last === undefined
-            ? sideOf(me) !== sideOf(holderSeat(t)) // první flek dává protistrana držitele
-            : sideOf(me) !== sideOf(last); // dál se strany střídají
-        if (eligible) out.push({ type: 'flek', seat: me, target: t });
+      for (const t of raisableFleks(v.config, contract, f, me)) {
+        out.push({ type: 'flek', seat: me, target: t });
       }
 
-      /*
-       * Sedma/sto proti: „Závazky Sedma a Sto mohou hlásit i hráči obrany
-       * V PRVNÍM KOLE komentování ohlášeného trumfového závazku" (Obecná
-       * pravidla čl. VII/1) — tedy jen volený a jen v kole 0. Licitovaná
-       * pravidla je zakazují úplně: „Sedmu ani sto proti nelze hlásit"
-       * (čl. II/23).
-       */
-      if (v.config.variant === 'voleny' && contract.mode === 'hra' && !sideOf(me) && f.round === 0) {
+      // sedma/sto proti (čl. VII/1) — veřejnou polovinu podmínky drží
+      // `protiPossible`, ruka rozhoduje až o tom, co z toho se nabídne
+      if (protiPossible(v.config, contract, f, me)) {
         const canSedmaProti =
           contract.sedma === null && contract.trump !== null && v.hand.includes(card(contract.trump, R7));
         const canKiloProti = contract.kilo === null;
