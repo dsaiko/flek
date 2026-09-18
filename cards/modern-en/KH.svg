@@ -7,7 +7,7 @@
   <g transform="translate(120 205) scale(1.12) translate(-120 -205)">
   <circle cx="120" cy="186" r="24" fill="#2f2f3a"/>
   <path d="M76 322 C80 270 96 222 120 220 C144 222 160 270 164 322 Z" fill="#c62828"/>
-  <g transform="translate(120 272) scale(0.6)"><path d="M0 30 C-3 21 -10 12 -18 5 C-29 -3 -33 -13 -30 -21 C-27 -30 -19 -34 -12 -33 C-6 -32 -2 -27 0 -21 C2 -27 6 -32 12 -33 C19 -34 27 -30 30 -21 C33 -13 29 -3 18 5 C10 12 3 21 0 30 Z" fill="#ffffff"/></g>
+  <g transform="translate(120 272) scale(0.78)"><g transform="translate(-32 -32)"><path fill="#ffffff" d="M32 57S7 41 7 24C7 15 13 9 21 9c5 0 9 3 11 7 2-4 6-7 11-7 8 0 14 6 14 15 0 17-25 33-25 33z"/></g></g>
   <path d="M94 170 L94 144 L107 156 L120 138 L133 156 L146 144 L146 170 Z" fill="#e8b100" stroke="#a87c00" stroke-width="2"/>
   <circle cx="94" cy="142" r="3.4" fill="#e8b100" stroke="#a87c00" stroke-width="1.6"/>
   <circle cx="120" cy="136" r="3.4" fill="#e8b100" stroke="#a87c00" stroke-width="1.6"/>
