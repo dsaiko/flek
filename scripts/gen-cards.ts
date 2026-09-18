@@ -15,6 +15,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { suitArt } from '../src/lib/ui/suitArt';
 
 const LANG: 'cs' | 'en' | 'de' | 'fr' =
   process.argv[2] === 'en' ? 'en' : process.argv[2] === 'de' ? 'de' : process.argv[2] === 'fr' ? 'fr' : 'cs';
@@ -30,8 +31,13 @@ const H = 410;
 const CX = W / 2; // 120
 const CY = H / 2; // 205
 
-const PIP_SCALE = 0.74;
-const ACE_SCALE = 2.8;
+/*
+ * Kresba z panelu „3a Klasické" je v rámu 64×64, ale sama zabírá jen ~50 jednotek
+ * na výšku — starší symboly měly ~66. Měřítka jsou proto o třetinu vyšší, aby
+ * pip na kartě vyšel stejně velký jako dřív (0.74×66 ≈ 0.98×50).
+ */
+const PIP_SCALE = 0.98;
+const ACE_SCALE = 3.7;
 const FIGURE_SCALE = 1.12; // zvětšení postaviček uvnitř panelu
 
 const FONT = `-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif`;
@@ -56,59 +62,12 @@ const SUITS: SuitDef[] = [
 ];
 
 // ── symboly barev ────────────────────────────────────────────────────────────
-// Každý symbol je vycentrovaný na (0,0), výška zhruba 64–68 jednotek.
-// mono = základní barva siluety (např. bílý symbol na hrudi figury),
-// detail = barva vnitřních detailů mono varianty (žilka listu, pásek kuly, čepička žaludu)
-
-function heart(mono?: string): string {
-  const fill = mono ?? '#c62828';
-  return `<path d="M0 30 C-3 21 -10 12 -18 5 C-29 -3 -33 -13 -30 -21 C-27 -30 -19 -34 -12 -33 C-6 -32 -2 -27 0 -21 C2 -27 6 -32 12 -33 C19 -34 27 -30 30 -21 C33 -13 29 -3 18 5 C10 12 3 21 0 30 Z" fill="${fill}"/>`;
-}
-
-function leaf(mono?: string, detail?: string): string {
-  const fill = mono ?? '#2e7d32';
-  const veinColor = mono ? detail : '#1b4d1f';
-  const vein = veinColor
-    ? `<path d="M0 -24 L0 24 M0 -8 C-6 -4 -10 0 -12 6 M0 -2 C6 2 10 6 12 12" stroke="${veinColor}" stroke-width="2.4" stroke-linecap="round" fill="none" opacity="${mono ? 1 : 0.55}"/>`
-    : '';
-  return `<path d="M0 -34 C9 -26 21 -13 21 1 C21 17 11 29 0 34 C-11 29 -21 17 -21 1 C-21 -13 -9 -26 0 -34 Z" fill="${fill}"/>${vein}`;
-}
-
-function bell(mono?: string, detail?: string): string {
-  if (mono) {
-    const d = detail
-      ? `<path d="M-25 -8 Q0 4 25 -8" stroke="${detail}" stroke-width="3" fill="none"/><path d="M0 10 L5.5 16.5 L0 23 L-5.5 16.5 Z" fill="${detail}"/>`
-      : `<path d="M0 12 L6 19 L0 26 L-6 19 Z" fill="${mono}"/>`;
-    return `<circle cx="0" cy="-2" r="27" fill="${mono}"/>${d}`;
-  }
-  return [
-    `<circle cx="0" cy="-2" r="27" fill="#edaa17" stroke="#8a5a00" stroke-width="2.4"/>`,
-    `<path d="M-25 -8 Q0 4 25 -8" stroke="#8a5a00" stroke-width="2.4" fill="none"/>`,
-    `<circle cx="-9" cy="-13" r="6" fill="#ffffff" opacity="0.5"/>`,
-    `<path d="M0 10 L5.5 16.5 L0 23 L-5.5 16.5 Z" fill="#8a5a00"/>`,
-  ].join('');
-}
-
-function acorn(mono?: string, detail?: string): string {
-  const nut = mono ?? '#6a8f3c';
-  const cap = mono ? (detail ?? mono) : '#7a4f2b';
-  const stem = mono ? '' : `<path d="M0 -26 Q3 -33 8 -36" stroke="#7a4f2b" stroke-width="3.4" stroke-linecap="round" fill="none"/>`;
-  const shine = mono ? '' : `<path d="M-7 2 C-7 12 -4 20 0 25" stroke="#ffffff" stroke-width="2.6" stroke-linecap="round" fill="none" opacity="0.35"/>`;
-  return [
-    stem,
-    `<path d="M-17 -8 C-17 8 -9 25 0 32 C9 25 17 8 17 -8 Q0 -14 -17 -8 Z" fill="${nut}"/>`,
-    shine,
-    `<path d="M-19 -7 Q-19 -26 0 -26 Q19 -26 19 -7 Q0 -13 -19 -7 Z" fill="${cap}"/>`,
-  ].join('');
-}
+// Kresba je v `src/lib/ui/suitArt.ts` (předloha: Claude Design, panel „3a
+// Klasické"). Sdílí ji generátor i inline ikonky v UI — dřív to byly dvě ručně
+// udržované kopie a rozešly se.
 
 function symbol(code: SuitDef['code'], mono?: string, detail?: string): string {
-  switch (code) {
-    case 'H': return heart(mono);
-    case 'L': return leaf(mono, detail);
-    case 'B': return bell(mono, detail);
-    case 'A': return acorn(mono, detail);
-  }
+  return suitArt(code, mono === undefined ? {} : { mono, detail });
 }
 
 function placedSymbol(code: SuitDef['code'], x: number, y: number, scale: number, rotate = 0, mono?: string, detail?: string): string {
@@ -194,7 +153,7 @@ function figureBody(suit: SuitDef, rank: RankDef): string {
     parts.push(
       `<path d="M76 322 C80 270 96 222 120 220 C144 222 160 270 164 322 Z" fill="${suit.color}"/>`,
     );
-    parts.push(placedSymbol(suit.code, CX, 272, 0.6, 0, '#ffffff', suit.color));
+    parts.push(placedSymbol(suit.code, CX, 272, 0.78, 0, '#ffffff', suit.color));
     parts.push(
       `<path d="M94 170 L94 144 L107 156 L120 138 L133 156 L146 144 L146 170 Z" fill="#e8b100" stroke="#a87c00" stroke-width="2"/>`,
       `<circle cx="94" cy="142" r="3.4" fill="#e8b100" stroke="#a87c00" stroke-width="1.6"/>`,
@@ -202,7 +161,7 @@ function figureBody(suit: SuitDef, rank: RankDef): string {
       `<circle cx="146" cy="142" r="3.4" fill="#e8b100" stroke="#a87c00" stroke-width="1.6"/>`,
     );
   } else if (rank.code === 'O') {
-    parts.push(placedSymbol(suit.code, CX, 140, 0.66));
+    parts.push(placedSymbol(suit.code, CX, 140, 0.86));
     parts.push(`<circle cx="${CX}" cy="212" r="21" fill="${INK}"/>`);
     parts.push(
       `<path d="M101 194 A19 15 0 0 1 139 194 Z" fill="${suit.color}"/>`,
@@ -216,7 +175,7 @@ function figureBody(suit: SuitDef, rank: RankDef): string {
     parts.push(
       `<path d="M80 246 C84 208 96 172 120 170 C144 172 156 208 160 246 Z" fill="${suit.color}"/>`,
     );
-    parts.push(placedSymbol(suit.code, CX, 290, 0.66));
+    parts.push(placedSymbol(suit.code, CX, 290, 0.86));
   }
 
   parts.push('</g>');
