@@ -1257,7 +1257,11 @@ const setSrc = (img: HTMLImageElement, src: string): void => {
 };
 
 /** Zajistí, že kontejner má přesně `count` dětí daného typu, a vrátí je. */
-function syncChildren<T extends HTMLElement>(
+/**
+ * Sladí počet dětí kontejneru s `count` (recyklace místo překreslování).
+ * Exportováno kvůli testu ukončení při záporném/nečíselném vstupu.
+ */
+export function syncChildren<T extends HTMLElement>(
   parent: HTMLElement,
   count: number,
   create: () => T,

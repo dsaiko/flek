@@ -947,7 +947,25 @@ if (cspViolations.length > 0) {
   await seeded.goto(url);
   await seeded.evaluate((payload) => localStorage.setItem('flek.match.v1', payload), asideSave());
   await seeded.reload();
-  await seeded.waitForTimeout(1200);
+  /*
+   * Čekat na PODMÍNKU, ne na hodiny: mezi `reload()` a čtením musí stihnout
+   * naběhnout bundle, worker, potvrzovací dialog o obnovení a překreslení.
+   * Na vytíženém runneru (viz SMOKE_RESTART_MS) by pevná prodleva vypršela
+   * dřív a test by spadl na „počítá se dvakrát", i když se jen nestihl obnovit.
+   */
+  try {
+    await seeded.waitForSelector('#trump-aside:not([hidden]) img', { timeout: 15000 });
+    await seeded.waitForFunction(
+      () => (document.querySelectorAll('#seat-left .backs img').length > 0),
+      undefined, { timeout: 15000 },
+    );
+  } catch {
+    console.error('CHYBA: stav se neobnovil — odložený trumf se u soupeře vůbec neobjevil');
+    await seeded.close();
+    await browser.close();
+    process.exit(1);
+  }
+  await seeded.waitForTimeout(150); // dokreslení zbylých rubů
   const backs = [
     await seeded.locator('#seat-left .backs img').count(),
     await seeded.locator('#seat-right .backs img').count(),

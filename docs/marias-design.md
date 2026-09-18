@@ -1913,3 +1913,42 @@ zpět do release.yml, inline výpočet zpět do `renderOpponents` — každá sh
 sahá do ruky, a **nesmí se jí ptát nic, co se zapisuje do veřejného stavu**. Testy úniku hlídaly
 `view()` nad daným stavem; tudy unikal REDUKTOR, tedy to, jak stav vzniká. Nový blok „únik —
 předání slova ve flecích nezávisí na cizí ruce" kontroluje právě tohle.
+
+### Fixpoint review PR #10, čtvrté kolo (2026-09-18, po `14394f1`)
+
+Šest nálezů, všechny sedí, všechny opravené.
+
+| Závažnost | Nález | Oprava |
+|---|---|---|
+| high | Strážce injekcí ve workflow přeskakoval platné zápisy YAML: `-    run:` (víc mezer za pomlčkou), flow mapy a **kotvu** `run: &script |`, u níž se tělo tvářilo jako hodnota. Per-file podmínku přitom nasytil jiný, správně napsaný krok, takže by injekce v přeskočeném kroku prošla | **Konec vlastního parseru.** Workflow se čte knihovnou `yaml` a prochází se `jobs.*.steps[].run`; kotvy i flow mapy vyřeší parser sám. Syntetická fixtura drží všechny čtyři zápisy, které postupně proklouzly |
+| medium | `FlekState.spoke` změnil význam (§35/§36), ale verze savu zůstala na 2. Rozehraná hra z v0.0.6 nese sedadlo, které podle STARÉHO pravidla „domluvilo" po jediném fleku — nový reduktor mu slovo nevrátí a komponenta se vyúčtuje o stupeň níž | Verze savu na **3**. Migrovat to nejde (co by hráč řekl, kdyby se ho engine byl zeptal, se dopočítat nedá), takže se rozehraná hra z v2 nenačte. Test odmítnutí v2 je pevný, ne relativní k aktuální verzi |
+| medium | Nový seedovaný smoke blok čekal pevných 1200 ms, zatímco zbytek souboru čeká na podmínku. Na vytíženém runneru by přečetl nuly a spadl hláškou „počítá se dvakrát" — tedy falešně a s nesprávným vysvětlením | Čeká se na `#trump-aside` a na vykreslené ruby; když se stav neobnoví, hlásí se to jako „stav se neobnovil" |
+| medium | Obě pojistky proti zamrznutí (ořez v `opponentBacks` a v `syncChildren`) byly bez testu a daly se smazat se zeleným `make all` | Otestované obě. `syncChildren` je kvůli tomu exportovaná a testovací kontejner má **počítadlo otáček**: bez ořezu test spadne hned, místo aby CI viselo (ověřeno — bez pojistky běh skončí až timeoutem) |
+| medium | Test úniku trumfové sedmy ověřoval jen SHODU obou variant. Kdyby ze `protiPossible` vypadla sedmová větev, obě by slovo předaly dál — taky shodně — a test by mlčel | Ověřuje se i to, CO má nastat: obránce drží slovo a `spoke` zůstává prázdné; nabídka se pak podle ruky lišit smí (ta je soukromá), veřejný stav ne |
+
+Negativní kontroly: kotva a `-    run:` s injekcí do release.yml, verze savu zpět na 2, oba ořezy
+zvlášť, sedmová větev `protiPossible` — každá shodí právě svůj test.
+
+**Poučení:** třikrát jsem ten regex na `run:` látal (odsazení od pomlčky, `run :` a `"run":`,
+nakonec mezery a kotvy). Strážce, který tiše přeskočí krok, budí dojem, že hlídá i to, co nehlídá
+— u bezpečnostní kontroly je to horší než nic. YAML má pro tutéž věc víc zápisů; rozplétat je
+regulárním výrazem je prohraná bitva a patří na to parser.
+
+## 37. Řada akcí má vlastní pruh (2026-09-18)
+
+Při plné licitační nabídce (devět tlačítek: „Dobrá (pas)" + celý žebříček až po Durcha) zajelo
+první tlačítko **přes blok „Ty"** v levém dolním rohu sukna — jméno hráče a konto byly schované
+pod „Dobrá (pas)".
+
+Nejdřív zkusené zúžení boků (`padding-inline` na `#actions` + užší tlačítka v přeplněné řadě)
+nefunguje: nejdelší popisky to neunesou. Německé „Hundert und Sieben" a anglické „Hundred and
+seven" se do zbytku šířky nevejdou, řada se buď zalomí, nebo z odsazení rovnou vyteče — a
+asymetrické odsazení navíc sesunulo „Rozdat" na úvodní obrazovce o 21 px mimo osu pod
+vycentrovaným titulkem.
+
+Zvoleno tedy **vlastní pruh**: `#actions` se zvedne nad blok „Ty" i nad pakl
+(`margin-bottom: clamp(12px, 6cqh, 60px)`). Řada pak může být přes celou šířku a o velikosti
+písma ani o šířce tlačítek není potřeba nic předpokládat. Změřeno ve všech čtyřech jazycích na
+1440×900: žádný překryv s „Ty", paklem, hláškami ani vějířem; mezera k bloku „Ty" 18 px. Čeština
+a francouzština drží devět tlačítek na jednom řádku, angličtina a němčina se zalomí na dva —
+zalomená řada roste nahoru do prázdného sukna, takže výška stolu ani vějíř se nehnou.

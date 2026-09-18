@@ -808,7 +808,23 @@ const version = pkg.version;
   }
   #pile-me { position: absolute; right: 14px; bottom: 10px; margin: 0; z-index: 3; }
   #melds-me { position: absolute; right: 14px; bottom: calc(var(--card-w) * .72); margin: 0; z-index: 3; }
-  #actions { min-height: 40px; display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-bottom: 8px; }
+  /*
+   * Řada akcí má VLASTNÍ pruh: zvedá se nad blok „Ty" a pakl, které leží při
+   * dolní hraně sukna. Dřív s nimi sdílela pás a první tlačítko plné licitační
+   * nabídky (devět kusů) zajelo přesně přes jméno hráče.
+   *
+   * Řešit to zúžením boků nešlo: nejdelší popisky („Hundert und Sieben")
+   * se do zbytku nevejdou a řada se buď zalomí, nebo z odsazení vyteče.
+   * Vlastní pruh drží ve všech čtyřech jazycích a nepotřebuje o velikosti
+   * písma ani o šířce tlačítek nic předpokládat.
+   */
+  #actions {
+    min-height: 40px; display: flex; flex-wrap: wrap; gap: 8px;
+    justify-content: center;
+    margin-bottom: clamp(12px, 6cqh, 60px);
+    /* jen aby se řada nedotýkala rámu, když se přece jen zalomí */
+    padding-inline: clamp(8px, 2cqh, 22px);
+  }
   /* jednotný styl herních tlačítek: obdélník s oblými rohy (à la FLEK dialogy) */
   .action-btn {
     /* inline-flex + gap: ikona barvy se zarovná na OPTICKÝ střed textu a mezery

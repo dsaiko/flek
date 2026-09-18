@@ -11,11 +11,20 @@ import { bidRank } from '../rules/types';
 
 const KEY = 'flek.match.v1';
 /**
- * Verze obálky savu. Zvýšená na 2 se sazbami `limit`/`limitRaised`: bez nich
- * by zúčtování počítalo s `undefined` a konto by se rozsypalo, a rozehraná
- * hra z v1 navíc běží podle jiného pořadí „Barva?" a deklarace.
+ * Verze obálky savu.
+ *
+ * 2 přišla se sazbami `limit`/`limitRaised`: bez nich by zúčtování počítalo
+ * s `undefined` a konto by se rozsypalo, a rozehraná hra z v1 navíc běží podle
+ * jiného pořadí „Barva?" a deklarace.
+ *
+ * 3 je kvůli významu `FlekState.spoke` (§35/§36). Dřív tam sedadlo přistálo po
+ * PRVNÍ akci, teď až když domluvilo. Rozehraný sav z v2 tedy nese sedadlo,
+ * které podle starého pravidla „domluvilo" po jediném fleku — nový reduktor mu
+ * už slovo nevrátí a flekovaná komponenta se vyúčtuje o stupeň níž. Migrovat
+ * to nejde (co by hráč řekl, kdyby se ho byl engine zeptal, se dopočítat
+ * nedá), takže se rozehraná hra z v2 radši nenačte.
  */
-export const VERSION = 2;
+export const VERSION = 3;
 
 export function saveMatch(state: GameState): void {
   try {
