@@ -16,7 +16,16 @@ jobs:
   release:
     runs-on: ubuntu-latest
     steps:
+      # `persist-credentials: false`: checkout jinak zapíše do .git/config
+      # hlavičku s tokenem, a ten má kvůli `contents: write` právo zapisovat.
+      # Zůstal by tam po celý job, tedy i pod `npm ci` (postinstall skripty
+      # celého stromu závislostí), instalací prohlížečů a `make all`. Jedno
+      # kompromitované vydání kterékoli z nich by si ho odtud přečetlo. Token
+      # se tu nepotřebuje k ničemu — vydání ho dostane až v posledním kroku
+      # přes `env:`, kde platí jen pro ten jediný příkaz.
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-node@v4
         with:
@@ -41,12 +50,15 @@ jobs:
       - name: Poznámky k vydání z CHANGELOG.md
         id: notes
         run: |
-          title="$(npx tsx scripts/release-notes.ts "$GITHUB_REF_NAME")"
+          # Ne `npx`: když by `tsx` v node_modules nenašel, STÁHL by si ho
+          # z registru a spustil uvnitř release jobu. Binárka z lockfilu, ať
+          # chybějící instalace vydání zastaví, místo aby tahala cizí kód.
+          title="$(node node_modules/tsx/dist/cli.mjs scripts/release-notes.ts "$GITHUB_REF_NAME")"
           echo "title=$title" >> "$GITHUB_OUTPUT"
 
       # chromium i webkit: smoke jede v obou (Safari chytá jiné chyby layoutu)
       - name: Prohlížeče pro smoke testy
-        run: npx playwright install --with-deps chromium webkit
+        run: node node_modules/playwright/cli.js install --with-deps chromium webkit
 
       - name: make all
         env:

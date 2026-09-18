@@ -21,10 +21,25 @@ const KEY = 'flek.match.v1';
  * PRVNÍ akci, teď až když domluvilo. Rozehraný sav z v2 tedy nese sedadlo,
  * které podle starého pravidla „domluvilo" po jediném fleku — nový reduktor mu
  * už slovo nevrátí a flekovaná komponenta se vyúčtuje o stupeň níž. Migrovat
- * to nejde (co by hráč řekl, kdyby se ho byl engine zeptal, se dopočítat
- * nedá), takže se rozehraná hra z v2 radši nenačte.
+ * to nejde: co by hráč řekl, kdyby se ho byl engine zeptal, se dopočítat nedá.
  */
 export const VERSION = 3;
+
+/**
+ * Smí se načíst obálka verze `v` se stavem ve fázi `phaseName`?
+ *
+ * `spoke` žije VÝHRADNĚ v payloadu fáze „fleks" — jinde v savu není. Sav z v2
+ * v kterékoli jiné fázi tedy znamená pro nový reduktor přesně totéž co dřív
+ * a zahodit ho není za co. A zahodit ho něco stojí: v klidu (`idle`, `scored`)
+ * se ukládá právě proto, aby mezi návštěvami zůstalo konto a archiv
+ * odehraných her — odmítnutý sav hráči vynuluje banku, další autosave starý
+ * záznam přepíše a je nenávratně pryč. Nenačte se proto jen to jediné, co
+ * opravdu nejde přenést: rozehraná komentovací kolečka.
+ */
+export function loadable(v: unknown, phaseName: unknown): boolean {
+  if (v === VERSION) return true;
+  return v === 2 && phaseName !== 'fleks';
+}
 
 export function saveMatch(state: GameState): void {
   try {
@@ -322,8 +337,12 @@ export function loadMatch(): GameState | null {
     const raw = localStorage.getItem(KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as { v?: number; state?: unknown };
-    if (parsed.v !== VERSION || !looksLikeGameState(parsed.state)) return null;
+    // tvar napřed: `loadable` se ptá na jméno fáze a to musí být ověřené
+    if (!looksLikeGameState(parsed.state)) return null;
+    if (!loadable(parsed.v, parsed.state.phase.name)) return null;
     assertValid(parsed.state); // semantická kontrola (karty, konto, talon)
+    // přepsat na aktuální verzi, ať se migrace neopakuje při každém načtení
+    if (parsed.v !== VERSION) saveMatch(parsed.state);
     return parsed.state;
   } catch {
     return null;

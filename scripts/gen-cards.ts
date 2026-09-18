@@ -54,6 +54,18 @@ interface SuitDef {
   index: string;   // barva textu indexu (tmavší kvůli čitelnosti)
 }
 
+/*
+ * `color`/`index` ZÁMĚRNĚ nekopírují odstíny z `SUIT_ART_COLORS`.
+ *
+ * Je to identita barvy, ne barva kresby. Panel 3a kreslí kuli jako ČERVENOU
+ * rouli se zlatým pásem a žalud jako červený oříšek se zeleným kloboučkem.
+ * Kdyby se podle těla obarvil i index, měla by kule červenou sedmu úplně
+ * stejně jako srdce — a „červená" v mariáši zdvojnásobuje sazby (čl. II/3),
+ * takže je to přesně ta dvojice, která se plést nesmí. Kuli drží pohromadě
+ * zlatá ze pásu, žaludy hnědá. Rozlišuje tedy tvar A index; kdo to přebarví
+ * podle kresby, ať napřed vygeneruje 7B vedle 7H a podívá se.
+ */
+
 const SUITS: SuitDef[] = [
   { code: 'H', nameCs: 'červené', nameEn: 'hearts', nameDe: 'Herz', nameFr: 'cœur', color: '#c62828', index: '#c62828' },
   { code: 'L', nameCs: 'zelené', nameEn: 'leaves', nameDe: 'Grün', nameFr: 'feuille', color: '#2e7d32', index: '#2e7d32' },

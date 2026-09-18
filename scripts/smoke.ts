@@ -983,6 +983,93 @@ if (cspViolations.length > 0) {
   console.log(`Soupeřův odložený trumf: ${backs[0]} rubů + karta stranou (ruka má ${backs[1]})`);
 }
 
+/*
+ * Akční lišta nesmí ležet přes jmenovku hráče ani přes jeho hromádku.
+ *
+ * Tohle nahlásil uživatel snímkem z licitovaného: devět nabídek se zalomilo do
+ * dvou řad a spodní řada skončila na „Ty". Kontrola je proto na GEOMETRII, ne
+ * na tom, že lišta má nějaký `margin` — zalomení závisí na ŠÍŘCE POPISKŮ, a ta
+ * se s jazykem mění (německy je „Hundert und Sieben" o půl řádku delší než
+ * „sto a sedma"). Jede se přes všechny jazyky, co sada popisků nabízí.
+ *
+ * Stav se podává savem: devítinabídka vyžaduje konkrétní ruku (obě sedmy a sto
+ * v barvě), na kterou by se herní smyčka načekala.
+ */
+{
+  const payload = auctionSave();
+  const worst: string[] = [];
+  for (const lang of ['cs', 'en', 'de', 'fr']) {
+    const bid = await browser.newPage({ viewport: { width: 1400, height: 900 } });
+    bid.on('dialog', (d) => void d.accept());
+    const langUrl = new URL(url);
+    langUrl.searchParams.set('lang', lang);
+    await bid.goto(langUrl.toString());
+    /*
+     * Se savem se seedují i NASTAVENÍ: aplikace si variantu bere z nich, ne ze
+     * savu, a s výchozím „voleným" by se licitovaný sav zahodil a nabídka by
+     * se vůbec neobjevila (na tohle už jsem jednou naletěl).
+     */
+    await bid.evaluate(([match, settings]) => {
+      localStorage.setItem('flek.match.v1', match);
+      localStorage.setItem('flek.settings.v1', settings);
+    }, [payload, JSON.stringify({ variant: 'licitovany', sounds: false })]);
+    await bid.reload();
+    try {
+      await bid.waitForFunction(
+        () => document.querySelectorAll('#actions .action-btn').length >= 9,
+        undefined, { timeout: 15000 },
+      );
+    } catch {
+      const n = await bid.locator('#actions .action-btn').count();
+      console.error(`CHYBA: licitovaný sav se neobnovil — nabídka má ${n} tlačítek místo devíti (${lang})`);
+      await bid.close();
+      await browser.close();
+      process.exit(1);
+    }
+    await bid.waitForTimeout(120); // dosazení popisků a případné zalomení
+
+    /*
+     * Bez pojmenovaných pomocníků uvnitř `evaluate`: tsx je přeloží esbuildem
+     * a propašuje do nich `__name`, který v prohlížeči neexistuje (stejná past
+     * jako u `addInitScript` nahoře).
+     */
+    const boxes = await bid.evaluate(() => ({
+      buttons: [...document.querySelectorAll('#actions .action-btn')].map((b) => {
+        const r = b.getBoundingClientRect();
+        return { label: (b.textContent ?? '').trim(), x: r.x, y: r.y, w: r.width, h: r.height };
+      }),
+      meta: [...document.querySelectorAll('.me-meta')].map((e) => {
+        const r = e.getBoundingClientRect();
+        return { x: r.x, y: r.y, w: r.width, h: r.height };
+      })[0] ?? null,
+      pile: [...document.querySelectorAll('#pile-me')].map((e) => {
+        const r = e.getBoundingClientRect();
+        return { x: r.x, y: r.y, w: r.width, h: r.height };
+      })[0] ?? null,
+    }));
+    for (const [name, target] of [['jmenovku', boxes.meta], ['hromádku', boxes.pile]] as const) {
+      if (target === null || target.w === 0) continue; // prvek se v téhle fázi nekreslí
+      for (const b of boxes.buttons) {
+        const ox = Math.min(b.x + b.w, target.x + target.w) - Math.max(b.x, target.x);
+        const oy = Math.min(b.y + b.h, target.y + target.h) - Math.max(b.y, target.y);
+        if (ox > 0 && oy > 0) {
+          worst.push(`${lang}: „${b.label}" přes ${name} (${Math.round(ox)}×${Math.round(oy)} px)`);
+        }
+      }
+    }
+    if (lang === 'cs') {
+      await bid.screenshot({ path: join(outDir, 'smoke-auction.png') });
+    }
+    await bid.close();
+  }
+  if (worst.length > 0) {
+    console.error(`CHYBA: nabídka licitace překrývá hráčovy prvky:\n  ${worst.join('\n  ')}`);
+    await browser.close();
+    process.exit(1);
+  }
+  console.log('Nabídka licitace (9 tlačítek) se ve všech čtyřech jazycích vyhne jmenovce i hromádce');
+}
+
 await browser.close();
 
 // vyčerpání smyčky NENÍ úspěch — jinak by test procházel, i když hra uvízne
@@ -1088,6 +1175,31 @@ function asideSave(): string {
   }
   if (st.phase.name !== 'fleks' || st.contract?.mode !== 'hra' || st.contract.declarer !== 1) {
     throw new Error('scénář pro odložený trumf neskončil barevnou hrou soupeře vlevo');
+  }
+  return JSON.stringify({ v: SAVE_VERSION, state: st });
+}
+
+/**
+ * Sav s licitovaným, kde je člověk na tahu a nabídka má DEVĚT tlačítek —
+ * tolik, co se jich vejde na obrazovku uživatele, který hlásil překryv.
+ *
+ * Seed 514 není náhoda: devítinabídka (obě sedmy i sto, a obojí v barvě)
+ * vypadne z rozdání jen občas, tak je vybraný hledáním. Kdyby ho úprava
+ * licitace rozbila, kontrola to řekne rovnou — proto ta kontrola na devět.
+ */
+function auctionSave(): string {
+  let st = apply(initialState(defaultConfig('licitovany'), 0), { type: 'deal', seed: 514 });
+  let guard = 0;
+  while (st.phase.name !== 'bidding' && (guard += 1) < 40) {
+    const next = ([0, 1, 2] as const)
+      .map((s) => legalActions(view(st, s)))
+      .find((a) => a.length > 0);
+    if (next === undefined) break;
+    st = apply(st, next[0]);
+  }
+  const offer = legalActions(view(st, 0));
+  if (st.phase.name !== 'bidding' || (st.phase as { toAct: number }).toAct !== 0 || offer.length < 9) {
+    throw new Error(`scénář pro nabídku licitace nedal devět možností (fáze ${st.phase.name}, ${offer.length})`);
   }
   return JSON.stringify({ v: SAVE_VERSION, state: st });
 }

@@ -12,6 +12,8 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parse as parseYaml } from 'yaml';
 
+import { suitArt, type SuitCode } from '../src/lib/ui/suitArt';
+
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 
 const RANKS = ['7', '8', '9', 'T', 'U', 'O', 'K', 'D'];
@@ -57,6 +59,34 @@ for (const set of ['cards/modern', 'cards/modern-en', 'cards/modern-de', 'cards/
   }
 }
 console.log('PASS SVG bez externích referencí');
+
+/*
+ * Karty v `cards/**` jsou ZAKOMITOVANÝ výstup, ne build artefakt: `make cards`
+ * v `make all` není. Bez téhle kontroly tedy úprava `suitArt.ts` změní ikonku
+ * u popisku závazku v běžící hře, ale každá karta na stole zůstane stará —
+ * a celá sada testů zůstane zelená. Přesně to rozejití (žilka listu měla
+ * v generátoru tři tahy, v ikonce jeden) byl důvod, proč `suitArt.ts` vznikl.
+ *
+ * Král se vynechává: jeho emblém je `mono` varianta a ta se skládá z týchž
+ * obrysů, takže úpravu cesty zachytí ostatní hodnoty stejně spolehlivě.
+ */
+{
+  const setsOf = ['cards/modern', 'cards/modern-en', 'cards/modern-de', 'cards/modern-fr'];
+  const drawn = RANKS.filter((r) => r !== 'K');
+  let checked = 0;
+  for (const code of SUITS as SuitCode[]) {
+    const art = suitArt(code);
+    for (const set of setsOf) {
+      for (const rank of drawn) {
+        const svg = readFileSync(join(ROOT, set, `${rank}${code}.svg`), 'utf8');
+        assert.ok(svg.includes(art), `${set}/${rank}${code}.svg nesedí se suitArt.ts — spusť \`make cards\``);
+        checked += 1;
+      }
+    }
+  }
+  assert.equal(checked, setsOf.length * drawn.length * SUITS.length, 'kontrola musí projít všechny sady');
+  console.log(`PASS karty — znaky v sadách sedí se suitArt.ts (${checked} karet)`);
+}
 
 // ── engine: kódování karet a pořadí ─────────────────────────────────────────
 
@@ -4122,16 +4152,49 @@ console.log('PASS vzdání — platí se celý stojící závazek, mimo legalAct
   assert.notEqual(load(), null, 'platný vysoutěžený závazek se načíst musí');
 
   /*
-   * Starší obálka se odmítá. Není to formalita: `FlekState.spoke` změnil význam
-   * (§36), takže rozehraná hra z v2 nese sedadlo, které „domluvilo" po jediném
-   * fleku — nový reduktor by mu slovo nevrátil a komponenta by se vyúčtovala
-   * o stupeň níž. Dopočítat, co by hráč řekl, nejde, proto se sav nenačte.
+   * Starší obálka: v2 se načíst SMÍ, ale jen mimo komentování.
+   *
+   * `FlekState.spoke` změnil význam (§36), takže rozehraná kolečka z v2 nesou
+   * sedadlo, které „domluvilo" po jediném fleku — nový reduktor by mu slovo
+   * nevrátil a komponenta by se vyúčtovala o stupeň níž. Dopočítat, co by hráč
+   * řekl, nejde. Jenže `spoke` nikde jinde než v payloadu fáze „fleks" není,
+   * takže odmítnout kvůli tomu i sav z klidu znamená vynulovat hráči konto
+   * a archiv — a další autosave to pak přepíše nadobro (§38).
    */
+  assert.ok(SAV_V > 2, 'verze obálky se kvůli změně významu `spoke` musela zvednout');
   store.set('flek.match.v1', JSON.stringify({ ...okSave, v: 2 }));
-  assert.equal(load(), null, 'sav verze 2 (starý význam `spoke`) se načíst nesmí');
-  assert.ok(SAV_V > 2, 'a verze obálky se kvůli tomu musela zvednout');
+  assert.notEqual(load(), null, 'sav verze 2 mimo komentování se načíst musí — nese konto a archiv');
+  assert.equal(
+    (JSON.parse(store.get('flek.match.v1') as string) as { v: number }).v, SAV_V,
+    'a rovnou se přepíše na aktuální verzi, ať se migrace neopakuje',
+  );
+
+  // konto a archiv migraci přežijí (to je celý důvod, proč se v2 vůbec přijímá)
+  const withLedger = JSON.parse(JSON.stringify({ v: 2, state: conceded })) as { v: number; state: unknown };
+  assert.ok(conceded.handResults.length > 0, 'testovací sav musí mít co ztratit');
+  store.set('flek.match.v1', JSON.stringify(withLedger));
+  const migrated = load();
+  assert.deepEqual(migrated?.ledger, conceded.ledger, 'konto musí přežít migraci z v2');
+  assert.equal(migrated?.handResults.length, conceded.handResults.length, 'a archiv odehraných her taky');
+
+  // rozehraná kolečka z v2 se ale načíst nesmějí — to je to jediné, co nejde přenést
+  const v2Fleks = JSON.parse(JSON.stringify({ v: 2, state: dealt })) as { v: number; state: { contract: unknown; phase: unknown } };
+  v2Fleks.state.contract = { mode: 'hra', trump: 0, declarer: 0, sedma: null, kilo: null, dveSedmy: false };
+  v2Fleks.state.phase = {
+    name: 'fleks',
+    fleks: { levels: {}, lastRaiser: {}, toAct: 1, spoke: [0], open: ['hra'], raised: [], round: 0 },
+  };
+  store.set('flek.match.v1', JSON.stringify(v2Fleks));
+  assert.equal(load(), null, 'rozehraná komentovací kolečka z v2 se načíst nesmějí (starý význam `spoke`)');
+  // …a nesmí to být tím, že by ten stav byl vadný sám o sobě
+  store.set('flek.match.v1', JSON.stringify({ ...v2Fleks, v: SAV_V }));
+  assert.notEqual(load(), null, 'tentýž stav ve v3 projít musí — odmítá se verze, ne tvar');
+
+  // a neznámá verze zůstává odmítnutá (migruje se jen z v2)
+  store.set('flek.match.v1', JSON.stringify({ ...okSave, v: 1 }));
+  assert.equal(load(), null, 'sav verze 1 se pořád načíst nesmí');
 }
-console.log('PASS sav — vzdaná hra v archivu projde, živý kontrakt bez trumfu ani cizí příhoz ne');
+console.log('PASS sav — v2 mimo komentování se migruje, rozehrané fleky z v2 ne, cizí příhoz ani živá hra bez trumfu neprojdou');
 
 // ── únik skrytých informací do workeru (review pravidel, §25 i1/i2) ─────────
 /*
@@ -5437,6 +5500,16 @@ console.log('PASS sav — vzdaná hra v archivu projde, živý kontrakt bez trum
       if (line.includes('GITHUB_OUTPUT') && line.includes('$(')) {
         out.push(`${where}: „${line.trim()}" — návratový kód substituce se ztratí, přiřaď do proměnné`);
       }
+      /*
+       * `npx foo` SÁHNE DO REGISTRU, když `foo` v node_modules nenajde. Tady
+       * to znamená cizí, nikým neodsouhlasený kód uvnitř vydávacího jobu.
+       * Dneska se to nestane, protože `npm ci` běžel ve stejném adresáři —
+       * ale je to jedno `--omit=dev` nebo jeden nedoběhlý `npm ci` daleko.
+       * Binárka se volá z lockfilu (`node node_modules/<balík>/…`).
+       */
+      if (/(^|[\s;&|(])npx\s/.test(line) && !line.includes('--no-install')) {
+        out.push(`${where}: „${line.trim()}" — npx si balík doinstaluje z registru, volej binárku z node_modules`);
+      }
     }
     return out;
   };
@@ -5474,6 +5547,38 @@ console.log('PASS sav — vzdaná hra v archivu projde, živý kontrakt bez trum
   // a čistý workflow ze samých `uses:` projde bez řečí (žádný `run:` neznamená v pořádku)
   assert.deepEqual(runScripts('jobs:\n  a:\n    steps:\n      - uses: x/y@v1'), []);
 
+  /*
+   * Druhá větev potřebuje VLASTNÍ vzorek. Ve `tricky` je `${{` na každém řádku,
+   * takže by tamní čtyři stížnosti seděly i tehdy, kdyby kontrola spolknutého
+   * návratového kódu vypadla — negativní kontrola, která nekouše. Tady žádný
+   * výraz není: stěžovat si smí jedině ta druhá větev.
+   */
+  const steps = (...lines: string[]) => ['jobs:', '  a:', '    steps:', '      - run: |', ...lines.map((l) => `          ${l}`)].join('\n');
+  const swallows = complaints(runScripts(steps('echo "title=$(node scripts/release-notes.ts)" >> "$GITHUB_OUTPUT"')).join('\n'), 'x');
+  assert.equal(swallows.length, 1, 'substituce uvnitř `echo` do GITHUB_OUTPUT musí vyvolat stížnost');
+  assert.match(swallows[0], /návratový kód/, 'a říct proč, ne jen že se to nelíbí');
+  // …a tvar, kterým to release.yml řeší (přiřazení a teprve pak echo), projít musí
+  assert.deepEqual(
+    complaints(runScripts(steps(
+      'title="$(node scripts/release-notes.ts)"',
+      'echo "title=$title" >> "$GITHUB_OUTPUT"',
+    )).join('\n'), 'x'),
+    [], 'přiřazení do proměnné je právě to řešení, které strážce vynucuje',
+  );
+
+  // …a totéž pro `npx`: co si smí doinstalovat z registru, do release jobu nepatří
+  const npxBad = complaints(runScripts(steps('npx playwright install --with-deps chromium')).join('\n'), 'x');
+  assert.equal(npxBad.length, 1, '`npx` bez `--no-install` musí vyvolat stížnost');
+  assert.match(npxBad[0], /z registru/, 'a říct, co je na tom špatně');
+  assert.deepEqual(
+    complaints(runScripts(steps(
+      'node node_modules/playwright/cli.js install chromium', // binárka z lockfilu
+      'npx --no-install tsx scripts/x.ts',                    // …nebo aspoň bez doinstalace
+      'echo "npx se o sobě jen zmiňuje"',                     // zmínka uprostřed slova není volání
+    )).join('\n'), 'x'),
+    [], 'volání z node_modules ani `--no-install` stěžovat nesmí',
+  );
+
   const dir = join(ROOT, '.github/workflows');
   const files = readdirSync(dir).filter((f) => f.endsWith('.yml') || f.endsWith('.yaml'));
   assert.ok(files.length > 0, 'nenašel se žádný workflow — test by nic nehlídal');
@@ -5486,7 +5591,53 @@ console.log('PASS sav — vzdaná hra v archivu projde, živý kontrakt bez trum
     }
   }
   assert.ok(scripts > 0, 'v žádném workflow se nenašel `run:` — parser asi nedošel k `jobs`');
-  console.log(`PASS workflow — skripty run: jsou bez dosazovaných výrazů (${scripts} skriptů)`);
+  console.log(`PASS workflow — run: bez dosazovaných výrazů, spolknutých návratových kódů a npx (${scripts} skriptů)`);
+}
+
+/*
+ * Nadpis sekce z CHANGELOG.md teče do `gh release create --title`, a cestou se
+ * píše do GITHUB_OUTPUT jako `title=…`. Řídicí znak by ten řádek rozbil, takže
+ * `release-notes.ts` takový nadpis odmítá — a protože se skript v `make all`
+ * jinak vůbec nespouští, hlídá ho až tenhle test. Jede jako podproces nad
+ * dočasným CHANGELOGem (skript čte `CHANGELOG.md` relativně ke cwd).
+ *
+ * Tenhle blok už jednou zmizel při přepisu sousedního strážce a nikomu to
+ * nespadlo — jediné, co po něm zbylo, byly nepoužité importy. Pokud ho někdy
+ * budeš mazat, smaž s ním i ten guard v `release-notes.ts`; jinak zůstane
+ * kontrola, kterou nikdo nespouští, a selže až na tagu, v jobu s `contents:
+ * write`.
+ */
+{
+  const tmp = mkdtempSync(join(tmpdir(), 'flek-notes-'));
+  const script = join(ROOT, 'scripts/release-notes.ts');
+  /*
+   * Ne `npx`: cwd je mimo repozitář, takže by `tsx` z `node_modules` nenašel
+   * a v CI by si ho STÁHL z registru — cizí nevypnutý kód v release jobu,
+   * který má `contents: write` a token z checkoutu. Voláme rovnou node
+   * s CLI z lockfilu; když tam není, test radši spadne, než aby něco tahal.
+   */
+  const tsxCli = join(ROOT, 'node_modules/tsx/dist/cli.mjs');
+  assert.ok(existsSync(tsxCli), 'tsx z node_modules nenalezen — `npm ci` neproběhl?');
+  const run = (heading: string): { status: number | null; out: string; err: string } => {
+    writeFileSync(join(tmp, 'CHANGELOG.md'), `${heading}\n\nTělo vydání.\n`);
+    const r = spawnSync(process.execPath, [tsxCli, script, 'v9.9.9', join(tmp, 'notes.md')], {
+      cwd: tmp, encoding: 'utf8',
+    });
+    return { status: r.status, out: (r.stdout ?? '').trim(), err: (r.stderr ?? '').trim() };
+  };
+
+  const good = run('## v9.9.9 — Čistý název vydání');
+  assert.equal(good.status, 0, `čistý nadpis musí projít (stderr: ${good.err})`);
+  assert.equal(good.out, 'v9.9.9 — Čistý název vydání', 'název se vypisuje na stdout beze změny');
+
+  const bell = String.fromCharCode(7);
+  const bad = run(`## v9.9.9 — Název s${bell}řídicím znakem`);
+  assert.equal(bad.status, 2, 'nadpis s řídicím znakem musí vydání zastavit');
+  assert.match(bad.err, /řídicí znaky/, 'a říct proč');
+
+  // chybějící sekce zůstává chybou i nadále (starší strážce, tentýž kód)
+  assert.equal(run('## v0.0.1 — Jiná verze').status, 2, 'chybějící sekce pro tag musí skončit dvojkou');
+  console.log('PASS vydání — nadpis s řídicím znakem release zastaví, čistý projde');
 }
 
 console.log('OK: vše prošlo');
