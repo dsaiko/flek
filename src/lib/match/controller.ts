@@ -137,9 +137,14 @@ export class MatchController {
     this.afterChange();
   }
 
-  /** Nové rozdání (z fáze idle/scored). */
+  /**
+   * Nové rozdání (z fáze idle/scored). Nese AKTUÁLNÍ konfiguraci pravidel:
+   * sav si celý config veze s sebou, takže bez toho by obnovený zápas hrál
+   * další hry podle pravidel z doby uložení (např. se stropem fleků, který
+   * licitovaný už nemá). Rozehraná hra se nemění — config platí od `deal`.
+   */
   dealNext(): void {
-    this.dispatch({ type: 'deal', seed: this.opts.seedSource() });
+    this.dispatch({ type: 'deal', seed: this.opts.seedSource(), config: this.opts.config });
   }
 
   stop(): void {

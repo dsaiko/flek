@@ -3775,7 +3775,8 @@ console.log('PASS karty — názvy barev a hodnot ve všech čtyřech jazycích'
     const cfgV = defaultConfig('voleny');
     let tst: S = ap(init(cfgV, 2), { type: 'deal', seed: 4 });
     let claimed: number | null = null;
-    const asker = (): number | null => tst.talonOwner;
+    // původní aktér = ten, kdo se ptal „Barva?" (talonOwner je uprostřed převzetí schválně null)
+    let originalActor: number | null = null;
     for (let steps = 0; steps < 200 && tst.phase.name !== 'tricks' && tst.phase.name !== 'scored'; steps += 1) {
       if (tst.phase.name === 'takeover' && claimed === null) {
         const actor = tst.phase.toAct;
@@ -3783,6 +3784,7 @@ console.log('PASS karty — názvy barev a hodnot ve všech čtyřech jazycích'
         const st = tst.phase.standing;
         if (st.mode === null && actor === st.declarer) {
           // aktér se nejdřív zeptá „Barva?"
+          originalActor = actor;
           tst = ap(tst, acts.find((a) => a.type === 'takeover' && a.claim === 'good')!);
           continue;
         }
@@ -3822,7 +3824,8 @@ console.log('PASS karty — názvy barev a hodnot ve všech čtyřech jazycích'
       }
     }
     assert.notEqual(claimed, null, `scénář s převzetím (${claim}) vůbec nenastal — test by nic neověřil`);
-    assert.notEqual(claimed, asker() === claimed ? null : asker(), 'scénář vyžaduje, aby přebíral OBRÁNCE');
+    assert.notEqual(originalActor, null, 'scénář musí projít otázkou „Barva?"');
+    assert.notEqual(claimed, originalActor, 'scénář vyžaduje, aby přebíral OBRÁNCE, ne původní aktér');
     // rozlišující bod: kontrakt ještě není, nárok žije ve standing
     assert.equal(tst.contract, null, 'před deklarací kontrakt neexistuje — to je jádro nálezu');
     if (claim === 'betl') {
@@ -4685,6 +4688,73 @@ console.log('PASS sav — vzdaná hra v archivu projde, živý kontrakt bez trum
     console.log('PASS převzetí — obránce sebere talon, odhodí a teprve pak hlásí betl/durch (čl. VII/1)');
   }
 
+  // ── sav: historie s nárokem `take` musí projít validací (jinak reload zahodí rozehraný zápas) ──
+  {
+    const store = new Map<string, string>();
+    (globalThis as { localStorage?: unknown }).localStorage = {
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: (k: string, val: string) => void store.set(k, val),
+      removeItem: (k: string) => void store.delete(k),
+    };
+    const { saveMatch: saveT, loadMatch: loadT } = await import('../src/lib/match/persist');
+    let st = apV(askedColour(), { type: 'takeover', seat: 1, claim: 'take' });
+    assert.ok(st.history.some((a) => a.type === 'takeover' && a.claim === 'take'), 'fixtura nese nárok take');
+    saveT(st);
+    assert.deepEqual(loadT(), JSON.parse(JSON.stringify(st)), 'sav s nárokem take se musí načíst beze změny');
+    // a totéž po odhozu a volbě — ať kolotoč projde i fází declare se standing bez trumfu
+    st = stepV(st, (a) => a.type === 'discard', 'odhoz');
+    saveT(st);
+    assert.deepEqual(loadT(), JSON.parse(JSON.stringify(st)), 'sav ve fázi declare po sebraném talonu projde');
+    // poškozený nárok validace odmítne — to je ta hranice, kterou `take` musel projít
+    const raw = JSON.parse(store.get('flek.match.v1') as string) as { state: { history: { type: string; claim?: string }[] } };
+    const takeIdx = raw.state.history.findIndex((a) => a.type === 'takeover' && a.claim === 'take');
+    raw.state.history[takeIdx].claim = 'grab';
+    store.set('flek.match.v1', JSON.stringify(raw));
+    assert.equal(loadT(), null, 'neznámý nárok v historii se odmítá');
+    delete (globalThis as { localStorage?: unknown }).localStorage;
+    console.log('PASS sav — nárok „take" v historii projde kolotočem save→load');
+  }
+
+  // ── AI: obránce bere talon na betlovou ruku, a se sebraným talonem odhazuje na hru bez trumfů ──
+  {
+    const { decideAuction } = await import('../src/lib/ai/heuristics');
+    const { card: mkH, strength: strH, pointsOf: ptsH } = await import('../src/lib/cards');
+    type ViewH = Parameters<typeof decideAuction>[0];
+    const rngH = new RndV(1);
+    const baseH = (variant: 'voleny' | 'licitovany', seat: SeatV, hand: number[], phase: ViewH['phase']): ViewH => ({
+      seat, config: cfgV(variant), dealer: 2, hand, handCounts: [10, hand.length, 10] as [number, number, number],
+      revealedTrump: null, unseenCount: 0, talonKnown: [], talon: null, contract: null, phase,
+      publicHistory: [], handResults: [], ledger: [0, 0, 0], handNo: 1,
+    });
+    const asking: ViewH['phase'] = {
+      name: 'takeover', toAct: 1, passed: [], standing: { declarer: 0, mode: null, trump: 2, bid: null },
+    };
+    // 7 a 8 ve všech barvách + dvě devítky: nejnižší karty barev, nula děr ⇒ betl
+    const betlHand = [0, 1, 8, 9, 16, 17, 24, 25, 2, 10];
+    // esa, králové, desítky napříč barvami: díry všude ⇒ ani betl, ani durch
+    const weakHand = [7, 6, 3, 15, 14, 11, 23, 22, 31, 30];
+    for (const difficulty of ['easy', 'normal', 'hard'] as const) {
+      const take = decideAuction(baseH('voleny', 1, betlHand, asking), difficulty, rngH);
+      assert.deepEqual(take, { type: 'takeover', seat: 1, claim: 'take' }, `${difficulty}: na betlovou ruku obránce bere talon`);
+      const good = decideAuction(baseH('voleny', 1, weakHand, asking), difficulty, rngH);
+      assert.deepEqual(good, { type: 'takeover', seat: 1, claim: 'good' }, `${difficulty}: slabá ruka barvu schválí`);
+    }
+    // se sebraným talonem (standing bez módu i trumfu) odhazuje na betl: dvě NEJVYŠŠÍ karty pryč
+    const twelve = [...betlHand, mkH(1, 7), mkH(3, 3)]; // + zelené eso a žaludská desítka
+    const took: ViewH['phase'] = { name: 'discard-talon', standing: { declarer: 1, mode: null, trump: null, bid: null } };
+    const d = decideAuction(baseH('voleny', 1, twelve, took), 'normal', rngH);
+    assert.equal(d.type, 'discard');
+    if (d.type === 'discard') {
+      const top = twelve.slice().sort((a, b) => strH(b, 'natural') - strH(a, 'natural')).slice(0, 2).sort();
+      assert.deepEqual([...d.cards].sort(), top, 'na betl letí do talonu eso a desítka — nejvyšší karty');
+    }
+    // v licitovaném totéž standing (trumf jen „bez červeného příhozu") znamená barevnou hru: esa a desítky se drží
+    const dL = decideAuction(baseH('licitovany', 1, twelve, took), 'normal', rngH);
+    assert.equal(dL.type, 'discard');
+    if (dL.type === 'discard') assert.ok(dL.cards.every((c) => ptsH(c) === 0), 'v licitovaném se hodnotové karty do talonu nedávají');
+    console.log('PASS AI — obránce bere talon na betl a se sebraným talonem odhazuje vysoké karty');
+  }
+
   // ── pořadí mluvení: ve směru hraní od aktéra, ne od forhonta (čl. V/4, B/11) ──
   {
     // licitovaný, dealer 2: forhont 0, prostřední 1, zadák 2. Aktér vylicituje sto a hlásí ho.
@@ -4761,13 +4831,22 @@ console.log('PASS sav — vzdaná hra v archivu projde, živý kontrakt bez trum
         if (seat !== 0) st = apV(st, { type: 'good', seat: 2 });
       };
       raise(1); raise(0); raise(1); raise(0);
+      // strop se měří u hráče NA TAHU — `legalActions` dá jinak prázdno každému, kdo na tahu není
+      const onTurn = (seat: SeatV): void => {
+        assert.equal(st.phase.name, 'fleks');
+        if (st.phase.name === 'fleks') assert.equal(st.phase.fleks.toAct, seat, `${variant}: na tahu má být ${seat}`);
+        assert.ok(actsV(st, seat).some((a) => a.type === 'good'), `${variant}: sedadlo ${seat} má aspoň „dobrá"`);
+      };
       if (variant === 'licitovany') {
         assert.equal(cap, 4);
+        onTurn(1);
         assert.equal(canFlek(st, 1), false, 'licitovaný: po botách už pátý flek není („posledního platného fleku (čtvrtého)", čl. IV)');
       } else {
         assert.equal(cap, 5);
+        onTurn(1);
         assert.equal(canFlek(st, 1), true, 'volený: kalhoty jdou');
         raise(1);
+        onTurn(0);
         assert.equal(canFlek(st, 0), false, 'volený: nad kalhoty se nejde');
       }
     }
@@ -4803,7 +4882,20 @@ console.log('PASS sav — vzdaná hra v archivu projde, živý kontrakt bez trum
       concede: ['type', 'seat'],
     };
     const RESULT = ['handNo', 'contract', 'limit', 'cardPoints', 'marriagePoints', 'components', 'delta'];
+    const POINTS = ['declarer', 'defenders'];
+    const COMPONENT = ['target', 'wonBy', 'baseRate', 'flekMultiplier', 'extraMultiplier', 'amount', 'silent', 'note'];
+    const resultShape = (r: unknown, where: string): void => {
+      keysOf(r, RESULT, where);
+      const x = r as Record<string, unknown>;
+      keysOf(x.contract, CONTRACT, `${where}.contract`);
+      keysOf(x.cardPoints, POINTS, `${where}.cardPoints`);
+      keysOf(x.marriagePoints, POINTS, `${where}.marriagePoints`);
+      assert.ok(Array.isArray(x.delta) && (x.delta as unknown[]).length === 3, `${where}.delta`);
+      for (const c of x.components as unknown[]) keysOf(c, COMPONENT, `${where}.components`);
+    };
+    const seenPhases = new Set<string>();
     const assertShape = (v: ReturnType<typeof viewV>): void => {
+      seenPhases.add(v.phase.name);
       keysOf(v, VIEW, 'view');
       keysOf(v.config, CONFIG, 'config');
       if (v.contract !== null) keysOf(v.contract, CONTRACT, 'contract');
@@ -4821,12 +4913,13 @@ console.log('PASS sav — vzdaná hra v archivu projde, živý kontrakt bez trum
         for (const m of p.marriages as unknown[]) keysOf(m, ['seat', 'suit'], 'marriages');
       }
       if (p.name === 'bidding') for (const b of p.bids as unknown[]) keysOf(b, ['seat', 'bid'], 'bids');
+      if (p.name === 'scored') resultShape(p.result, 'phase.scored.result');
       for (const a of v.publicHistory) {
         assert.ok(HISTORY[a.type], `neznámá akce ${a.type}`);
         keysOf(a, HISTORY[a.type], `history ${a.type}`);
         if (a.type === 'choose-trump') assert.ok(a.card === 'hidden' || a.card === 'from-people');
       }
-      for (const r of v.handResults) { keysOf(r, RESULT, 'handResult'); keysOf(r.contract, CONTRACT, 'handResult.contract'); }
+      for (const r of v.handResults) resultShape(r, 'handResult');
     };
 
     /**
@@ -4849,30 +4942,64 @@ console.log('PASS sav — vzdaná hra v archivu projde, živý kontrakt bez trum
     };
 
     let states = 0;
+    const checkAll = (st: StV, variant: string, seed: number): void => {
+      for (const seat of [0, 1, 2] as const) {
+        const v = viewV(st, seat);
+        assertShape(v);
+        assert.equal(
+          JSON.stringify(viewV(swapped(st, seat), seat)), JSON.stringify(v),
+          `${variant}/${seed}: pohled sedadla ${seat} závisí na cizích kartách (${st.phase.name})`,
+        );
+        states += 1;
+      }
+    };
     for (const variant of ['voleny', 'licitovany'] as const) {
       for (let seed = 201; seed <= 240; seed += 1) {
         const rng = new RndV(seed * 13 + 5);
-        let st: StV = apV(initV(cfgV(variant), 2), { type: 'deal', seed: 7_000_009 * seed });
-        let guard = 0;
-        while (st.phase.name !== 'scored') {
-          if ((guard += 1) > 400) throw new Error('tvar-test: hra se zasekla');
-          for (const seat of [0, 1, 2] as const) {
-            const v = viewV(st, seat);
-            assertShape(v);
-            assert.equal(
-              JSON.stringify(viewV(swapped(st, seat), seat)), JSON.stringify(v),
-              `${variant}/${seed}: pohled sedadla ${seat} závisí na cizích kartách (${st.phase.name})`,
-            );
-            states += 1;
+        let st: StV = initV(cfgV(variant), 2);
+        checkAll(st, variant, seed); // idle
+        // druhá hra navrch: `handResults` je pak neprázdné i během hry, ne až v `scored`
+        for (let hand = 0; hand < 2; hand += 1) {
+          st = apV(st, { type: 'deal', seed: 7_000_009 * seed + hand });
+          let guard = 0;
+          while (st.phase.name !== 'scored') {
+            if ((guard += 1) > 400) throw new Error('tvar-test: hra se zasekla');
+            checkAll(st, variant, seed);
+            const seat = actorV(st);
+            if (seat === null) break;
+            const acts = actsV(st, seat);
+            st = apV(st, acts[rng.int(acts.length)]);
           }
-          const seat = actorV(st);
-          if (seat === null) break;
-          const acts = actsV(st, seat);
-          st = apV(st, acts[rng.int(acts.length)]);
+          // ZÚČTOVÁNÍ: právě tady se poprvé objeví `phase.result` i nový záznam archivu —
+          // smyčka, která končí na `scored`, by je nikdy nezkontrolovala
+          assert.equal(st.phase.name, 'scored');
+          checkAll(st, variant, seed);
         }
       }
     }
-    console.log(`PASS tvar pohledu — jen známé klíče a žádná závislost na cizích kartách (${states} pohledů)`);
+    // každý deklarovaný tvar fáze se musel doopravdy potkat, jinak je allowlist mrtvý
+    for (const name of Object.keys(PHASE)) {
+      assert.ok(seenPhases.has(name), `fáze „${name}" se v testu nikdy neobjevila — její allowlist nic nehlídá`);
+    }
+    console.log(`PASS tvar pohledu — jen známé klíče a žádná závislost na cizích kartách (${states} pohledů, ${seenPhases.size} fází)`);
+  }
+
+  // ── sav si veze config: další rozdání musí jet podle AKTUÁLNÍCH pravidel ──
+  {
+    const { MatchController: MCV } = await import('../src/lib/match/controller');
+    const stale = apV(initV(cfgV('licitovany'), 2), { type: 'deal', seed: 1 });
+    const staleCfg = { ...stale.config, sazby: { ...stale.config.sazby, maxFlekLevel: 5 } };
+    const resumed: StV = { ...stale, config: staleCfg, phase: { name: 'idle' } };
+    const driver = { think: () => new Promise<never>(() => {}), cancel: () => {} };
+    const ctrl = new MCV(driver as never, {
+      config: cfgV('licitovany'), humanSeat: 0, difficulty: 'easy', budgetMs: 0,
+      seedSource: () => 2, aiDelayMs: 0, autoGood: false,
+    }, resumed);
+    assert.equal(ctrl.state.config.sazby.maxFlekLevel, 5, 'fixtura: sav nese zastaralý strop');
+    ctrl.dealNext();
+    ctrl.stop();
+    assert.equal(ctrl.state.config.sazby.maxFlekLevel, 4, 'nové rozdání jede podle aktuální konfigurace, ne podle savu');
+    console.log('PASS sav — config ze savu neřídí další rozdání (strop fleků v licitovaném)');
   }
 
   // ── talon ve vyúčtování: v licitovaném při betlu/durchu zůstává rubem (čl. II/11) ──
