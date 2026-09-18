@@ -1768,3 +1768,21 @@ Upravené: i1 a i50 (převzetí jde přes `take` → odhoz → deklarace), i12 (
 hlásí betl), vzdání po převzetí (dvě větve: se sebraným talonem platí betl, nárok na durch platí
 durch), i7 (peněžní sazebník sdílený, strop fleků ne), vějíř (standing bez trumfu ve voleném =
 hra bez trumfů, v licitovaném ne).
+
+### Fixpoint review PR #9 (2026-09-18, po `ed27f59`)
+
+Panel (claude, codex, glm) nad PR: 14 nálezů, 7 duplikátů/zamítnutí soudcem, 7 otevřených. Všech
+sedm sedí a je opravených:
+
+| Závažnost | Nález | Oprava |
+|---|---|---|
+| high | Test „tvar pohledu" končil smyčku na `scored`, tedy přesně tam, kde se poprvé objeví `phase.result` a nový záznam v `handResults` — allowlist pro `scored` a výsledky nikdy neběžel, a byl mělký | Kontroluje se i `idle` před rozdáním a zúčtování po každé z DVOU her (archiv je pak neprázdný i během hry); `resultShape` prochází kontrakt, body, komponenty i deltu; test navíc vyžaduje, aby se každá deklarovaná fáze v běhu opravdu potkala |
+| medium | Sav si veze celý config, takže obnovený licitovaný zápas hrál další hry se stropem 5 | `dealNext()` předává `opts.config` — nové rozdání jede podle aktuálních pravidel, rozehraná hra se nemění (config platí od `deal`) |
+| medium | `isHistoryAction` s nárokem `take` neměl test — bez něj by reload rozehraný zápas tiše zahodil | Kolotoč save→load se `take` v historii (i ve fázi `declare` po sebraném talonu) a odmítnutí neznámého nároku |
+| medium | Strážce „přebíral OBRÁNCE" v testu vzdání byl tautologie (`talonOwner` je uprostřed převzetí schválně `null`) | Původní aktér se zachytí u otázky „Barva?" a porovnává se s ním |
+| medium | Nové větve heuristiky (`take`, odhoz na hru bez trumfů) bez asercí | Jednotkový test: betlová ruka → `take`, slabá → `good` (všechny obtížnosti); se sebraným talonem letí do talonu dvě nejvyšší karty, v licitovaném s týmž standingem se hodnotové karty drží |
+| low | Assert stropu fleků procházel i tehdy, když sedadlo nebylo na tahu | Před kontrolou se ověří `toAct` a že sedadlo má aspoň „dobrá" |
+| low | Nápověda ve čtyřech jazycích slibovala kalhoty i v licitovaném | Věta rozdělena podle varianty |
+
+Negativní kontroly: cizí klíč v `HandResult`, vyhozené `take` z validace savu, vyhozená větev
+`take` i odhozový režim v heuristice a `deal` bez configu — každé shodí právě svůj test.
