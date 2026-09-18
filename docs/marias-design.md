@@ -1827,3 +1827,46 @@ Negativní kontroly (vrácení opravy shodí právě svůj test): `done = true` 
 **Bez testu zůstal nález 6** (čekající bublina): je to čistě časování uvnitř `TableUI`, kde se
 jediný spolehlivý scénář opírá o dvě souběžné lhůty (700 ms a 1100 ms). Takový smoke test by byl
 vratký a podle zásady projektu je lepší žádný než mrtvý — chování hlídá komentář u `thinkQueued`.
+
+### Fixpoint review PR #10 (2026-09-18, po `4bc028c`)
+
+Panel nad PR s opravami §35: **verdikt APPROVE**, žádný nález nad „medium". Osm otevřených
+nálezů, všech osm sedí; sedm opravených, jeden zamítnutý.
+
+| Závažnost | Nález | Oprava |
+|---|---|---|
+| medium | `announce-proti` obcházelo nové pravidlo předávání slova: `flek` drží slovo, dokud zbývá otevřená komponenta, ale ohlášení proti zapisovalo do `spoke` bezpodmínečně. Na pořadí uvnitř tahu tak **záleželo** — „sto proti a pak flek" prošlo, „flek a pak sto proti" ne | Symetricky, ale opačným směrem, než navrhoval recenzent: ohlášení proti tah uzavírá **a flek při vyčerpaných zvýšeních taky**. Ohlášení je podle čl. VII/1 jedno vyjádření v prvním kole komentování, ne přídavek k fleku; opačné řešení (držet slovo, dokud má hráč co říct) by po každém fleku ve voleném přidalo potvrzovací „Dobrá" — viz §36 |
+| medium | Nový strážce řídicích znaků v `release-notes.ts` nikdo nespouštěl: skript není součástí `make all`, takže se mohl smazat i obrátit a všechno by bylo zelené | Test pouští skript jako **podproces** nad dočasným CHANGELOGem: čistý nadpis → kód 0 a název na stdout, nadpis s řídicím znakem → kód 2 a hláška, chybějící sekce → kód 2 |
+| medium | Testovala se jen datová půlka opravy odloženého trumfu (`holder`), ne ta kreslící. Odečet v `renderOpponents` šlo vyhodit, aniž by cokoli spadlo | Rozhodnutí o počtu vytaženo do čisté `opponentBacks(v, seat, unseenCount)` — testuje se bez DOM z pohledu obou obránců, proti `handAside()` téhož hráče (táž zásada jako u `talkSituationFor`, §28) |
+| low | `FlekState.spoke` měl v komentáři „kdo se už vyjádřil — pasem i zvýšením", jenže zvýšení tam sedadlo zapíše až s vyčerpanými komponentami. Přesně to pole, na které se ptá `advanceFleks` i `passSettlesWithoutPlay` | Komentář dopsán o podmínku a odkaz na `raisableFleks` |
+| low | `echo "title=$(npx tsx …)"` **spolkne návratový kód** — substituce uvnitř argumentu ho nepropustí, `echo` vrátí 0. Chybějící sekce, prázdné tělo i nový strážce by tedy vydání nezastavily; job by šel dál s prázdným titulkem a spadl by až o dva kroky dál na cizí chybě | Dvouřádkový `run: |` s přiřazením `title="$(…)"`, které stav substituce pod `set -e` propustí (ověřeno v shellu) |
+| low | Strážce workflow bral odsazení z prvního nebílého znaku, takže u kompaktního `- run: \|` byl „tělem" i sourozenecký `env:` — guard by shodil právě ten zápis, který sám doporučuje | Odsazení se bere ze sloupce KLÍČE `run`. Parser je vytažený do `runLines()` a ověřený na dvou vymyšlených úryvcích, aby mlčení znamenalo čistotu, ne slepotu |
+| low | Sentinel `checked > 10` měl rezervu přesně jeden řádek: smazání řádku z jiného kroku by shodilo test hláškou „parser asi nic nenašel" | Strukturální podmínky: aspoň jeden `run:` na soubor a aspoň jeden víceřádkový blok za běh |
+
+### Zamítnuto (s odůvodněním)
+
+| Nález | Proč |
+|---|---|
+| low: „zapojení tlačítka zvuků na příslib `unlock()` není otestované" | Sedí — vrácení té tří řádky nic neshodí. Jenže test by musel mít uspaný kontext s řízeným příslibem, a smoke si `AudioContext` jen obaluje: kontext vytvořený v gestu startuje rovnou `running`, takže by se `resume()` musel podvrhnout — a test by pak ověřoval podvrh, ne prohlížeč. Kontrakt `createSounds` (zvuk až po dojití příslibu) **otestovaný je**; zbylé tři řádky v `main.ts` jsou jeho jediné volání. Podle zásady projektu je vratký test horší než žádný |
+
+## 36. Kolik toho hráč řekne v jednom tahu (2026-09-18)
+
+Otevřená otázka, kterou §35 odkryl a tenhle commit **vědomě nerozhoduje** ve prospěch změny.
+
+Model fleků dává sedadlu jednu akci za tah. Od §35 z toho platí výjimka: kdo zvýšil jednu
+z několika otevřených komponent, drží slovo dál (čl. V/4 „u kombinovaných závazků lze flekovat
+každý z nich samostatně"). Otázka je, jestli táž výjimka platí i pro sedmu/sto proti — jinými
+slovy jestli obránce smí v jednom tahu říct „**flek a sto proti**".
+
+Text to nerozhoduje: čl. VII/1 říká jen, že „Závazky Sedma a Sto mohou hlásit i hráči obrany
+v prvním kole komentování ohlášeného trumfového závazku" — tedy v tom kole, ne nutně v témž tahu.
+Obě čtení jsou obhajitelná.
+
+Zvoleno **užší**: ohlášení proti tah uzavírá, stejně jako flek bez zbylých komponent. Důvod je
+UX, ne pravidla — ve voleném je „sto proti" v kole 0 dostupné pořád, takže při širším čtení by
+po každém fleku naskočila ještě jedna otázka a hráč by musel potvrdit „Dobrá". To je klikání
+navíc na nejčastější interakci ve hře (viz zásada „žádné klikání bez volby", §5.5).
+
+Kdyby se to mělo otevřít, správná cesta není další kolo otázek, ale **sdružené akce** — tak, jak
+to `legalActions` už dělá pro „sedma proti + sto proti" jedním tlačítkem. Do té doby platí užší
+čtení a drží ho test „proti — … tah uzavírá stejně jako flek".

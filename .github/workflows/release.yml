@@ -34,9 +34,15 @@ jobs:
             exit 1
           }
 
+      # Přiřazení, ne `echo "title=$(…)"`: návratový kód substituce uvnitř
+      # argumentu se ztratí (`echo` vrátí 0), takže chybějící sekce, prázdné
+      # tělo ani řídicí znak v nadpisu by krok nezastavily — vydání by jelo dál
+      # s prázdným titulkem. Přiřazení stav substituce pod `set -e` propustí.
       - name: Poznámky k vydání z CHANGELOG.md
         id: notes
-        run: echo "title=$(npx tsx scripts/release-notes.ts "$GITHUB_REF_NAME")" >> "$GITHUB_OUTPUT"
+        run: |
+          title="$(npx tsx scripts/release-notes.ts "$GITHUB_REF_NAME")"
+          echo "title=$title" >> "$GITHUB_OUTPUT"
 
       # chromium i webkit: smoke jede v obou (Safari chytá jiné chyby layoutu)
       - name: Prohlížeče pro smoke testy

@@ -412,9 +412,6 @@ export class TableUI {
   }
 
   private renderOpponents(v: PlayerView, reveal = false, unseenCount = 0): void {
-    // zvolený trumf leží stranou na stole (kreslí ho renderTrumpAside), ale ve
-    // stavu pořád patří do ruky — ve vějíři protihráče by byl podruhé
-    const asideHolder = trumpAsideOf(v)?.holder ?? null;
     for (const pos of ['left', 'right'] as const) {
       const seat = this.seatAt(pos);
       const box = $(this.root, `#seat-${pos}`);
@@ -425,9 +422,7 @@ export class TableUI {
       const role = seat === v.dealer ? t('dealerShort') : seat === forhont(v.dealer) ? t('forhont') : '';
       $(box, '.seat-sub').textContent = role ? `${role} · ${fmtMoney(v.ledger[seat])}` : fmtMoney(v.ledger[seat]);
       const backs = $(box, '.backs');
-      const extraUnseen =
-        v.phase.name === 'choose-trump' && seat === forhont(v.dealer) ? unseenCount : 0;
-      const n = v.handCounts[seat] + extraUnseen - (seat === asideHolder ? 1 : 0);
+      const n = opponentBacks(v, seat, unseenCount);
       const animate = reveal && !this.reducedMotion();
       const imgs = syncChildren(backs, n, () => {
         const img = document.createElement('img');
@@ -1500,6 +1495,26 @@ export function knownMode(v: PlayerView): GameMode | null {
   const standing =
     p.name === 'discard-talon' || p.name === 'declare' || p.name === 'takeover' ? p.standing : null;
   return standing?.mode ?? v.contract?.mode ?? null;
+}
+
+/**
+ * Kolik rubů se kreslí protihráči do vějíře.
+ *
+ * Exportováno, aby to šlo testovat bez DOM — je to rozhodnutí o POČTU karet,
+ * a spletený počet hráč u stolu pozná hned (ta samá zásada jako u `handAside`).
+ */
+export function opponentBacks(v: PlayerView, seat: Seat, unseenCount = 0): number {
+  /*
+   * Zvolený trumf leží stranou na stole (kreslí ho `renderTrumpAside`), ale ve
+   * stavu pořád patří do ruky — `handCounts` ho počítá. Bez odečtení by měl
+   * protihráč ve vějíři o kartu víc a při sehrávce by mu jedna nevysvětlitelně
+   * zmizela. Vlastní ruku řeší `handAside()` tímtéž způsobem.
+   */
+  const aside = trumpAsideOf(v)?.holder === seat ? 1 : 0;
+  // volba trumfu „z lidu": karty ještě nikdo neviděl, ale u forhonta už leží
+  const extraUnseen =
+    v.phase.name === 'choose-trump' && seat === forhont(v.dealer) ? unseenCount : 0;
+  return v.handCounts[seat] + extraUnseen - aside;
 }
 
 /** Ruka tak, jak ji vidí hráč: bez karty, která leží stranou na stole. */
