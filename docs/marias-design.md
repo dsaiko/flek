@@ -1952,3 +1952,45 @@ písma ani o šířce tlačítek není potřeba nic předpokládat. Změřeno ve
 1440×900: žádný překryv s „Ty", paklem, hláškami ani vějířem; mezera k bloku „Ty" 18 px. Čeština
 a francouzština drží devět tlačítek na jednom řádku, angličtina a němčina se zalomí na dva —
 zalomená řada roste nahoru do prázdného sukna, takže výška stolu ani vějíř se nehnou.
+
+## 38. Sav z v2: migrovat všechno, co migrovat jde (2026-09-18)
+
+Verze obálky savu se kvůli změně významu `FlekState.spoke` (§36) zvedla na **3** a `loadMatch`
+začal odmítat **každý** sav z v2. To bylo příliš hrubé.
+
+`spoke` žije výhradně v payloadu fáze „fleks". Sav v kterékoli jiné fázi znamená pro nový
+reduktor přesně totéž co pro starý — a přitom se v klidu (`idle`, `scored`) ukládá právě proto,
+aby mezi návštěvami zůstalo **konto a archiv odehraných her**. Odmítnutý sav tedy hráči po
+aktualizaci vynuluje banku, vypadá to jako ztráta dat, a další autosave starý záznam přepíše
+nadobro. Za to, co se tou verzí řešilo, je to nepřiměřená cena.
+
+Načítání se proto ptá `loadable(v, phase.name)`: v3 vždycky, v2 jen mimo komentování. Přijatý sav
+z v2 se rovnou přepíše na v3, ať se migrace neopakuje. Nenačte se jen to jediné, co opravdu
+přenést nejde — rozehraná komentovací kolečka.
+
+Testy drží obě strany: v2 mimo fleky projde a konto i archiv to přežijí, v2 ve flecích neprojde,
+a **tentýž stav ve v3 projít musí** — jinak by kontrola procházela i tehdy, kdyby se stav odmítal
+kvůli tvaru, ne kvůli verzi.
+
+### Fixpoint review PR #10, páté kolo (2026-09-18, po `add428d`)
+
+Osm nálezů. Sedm sedí a je opravených, jeden odmítnut s odůvodněním.
+
+| Závažnost | Nález | Oprava |
+|---|---|---|
+| high | Test strážce `release-notes.ts` **zmizel** při přepisu sousedního bloku (`f57c060`) a nikomu to nespadlo. Zbyly po něm jen nepoužité importy (`spawnSync`, `mkdtempSync`, `tmpdir`). Skript se v `make all` jinak nespouští, takže kontrolu řídicích znaků v nadpisu nic neprovádělo — selhalo by to až na tagu, v jobu s `contents: write` | Blok obnoven doslova z `14394f1` a opatřen poznámkou, že se s ním musí mazat i strážce v `release-notes.ts` |
+| high | Sav: odmítnutí **všech** savů z v2 bere hráči konto a archiv, i když se ho změna `spoke` netýká | §38 výš — `loadable(v, phase.name)` a migrace na v3 |
+| high | Druhá větev strážce workflow (spolknutý návratový kód u `GITHUB_OUTPUT`) neměla vlastní fixturu. Všechny čtyři vzorky obsahovaly `${{ }}`, takže počet stížností seděl i bez ní — negativní kontrola, která nekouše | Vlastní vzorek bez `${{ }}`: `echo "x=$(…)" >> $GITHUB_OUTPUT` musí stěžovat, přiřazení a teprve pak `echo` (tvar z release.yml) projít musí |
+| medium | Checkout nechával v `.git/config` zapisovací token po celý job — tedy i pod `npm ci` (postinstall skripty celého stromu), instalací prohlížečů a `make all` | `persist-credentials: false`. Vydání dostane token až v posledním kroku přes `env:` |
+| medium | `suitArt.ts` vznikl jako jediný zdroj znaků, ale nic ho nesvazovalo s **zakomitovanými** kartami: `make cards` v `make all` není, takže úprava cesty změní ikonku v UI a každá karta na stole zůstane stará — se zeleným testem | Kontrola v `verify.ts`: 112 karet (4 sady × 4 barvy × 7 hodnot) musí obsahovat výstup `suitArt()` doslova; král se vynechává, jeho emblém je `mono` z týchž obrysů |
+| low | Release job volal `npx tsx` — přesně ten nepřipnutý vzorec, který se v témže PR odstranil z testu | Binárka z lockfilu (`node node_modules/tsx/dist/cli.mjs`), a totéž pro Playwright. Pravidlo je nově **vynucené**: třetí větev strážce workflow hlásí každé `npx` bez `--no-install` |
+| low | Pruh akcí (§37) neměl geometrickou kontrolu — překryv se mohl vrátit nepozorovaně | Smoke: sav s devítinabídkou (seed 514) ve všech čtyřech jazycích, každé tlačítko musí být disjunktní od jmenovky i od hromádky. Ověřeno, že bez `margin-bottom` kontrola spadne (čeština a francouzština) |
+| low | **Odmítnuto:** barvu rohového indexu srovnat s kresbou z panelu 3a | Neudělat. Panel kreslí kuli jako ČERVENOU rouli; kdyby ji následoval i index, měla by kule sedmu k nerozeznání od srdcové — a „červená" zdvojnásobuje sazby. Rozlišuje tvar **a** index, zlatá u kulí je z pásu. Důvod zapsán do `SuitDef` v `gen-cards.ts`, ať se to příště nečte jako rozejití |
+
+Negativní kontroly: vypnutá migrace v2, migrace bez omezení na fázi, vypnutá druhá větev
+strážce `GITHUB_OUTPUT`, vypnutý strážce řídicích znaků v `release-notes.ts`, změněná cesta
+žilky v `suitArt.ts`, zrušený `margin-bottom` u `#actions` — každá shodí právě svůj test.
+
+**Poučení:** test smazaný při přepisu souseda po sobě nenechá žádnou stopu kromě nepoužitých
+importů — a ty nikdo nehlídá. Tenhle konkrétní blok je jediné místo, kde se `release-notes.ts`
+vůbec spouští, takže jeho zmizení nebylo vidět nikde jinde než na tagu.
