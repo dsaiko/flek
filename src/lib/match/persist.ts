@@ -341,8 +341,18 @@ export function loadMatch(): GameState | null {
     if (!looksLikeGameState(parsed.state)) return null;
     if (!loadable(parsed.v, parsed.state.phase.name)) return null;
     assertValid(parsed.state); // semantická kontrola (karty, konto, talon)
-    // přepsat na aktuální verzi, ať se migrace neopakuje při každém načtení
-    if (parsed.v !== VERSION) saveMatch(parsed.state);
+    /*
+     * Přepsat na aktuální verzi, ať se migrace neopakuje při každém načtení —
+     * ale jen když od načtení nikdo jiný nezapsal.
+     *
+     * Záznam je sdílený mezi panely. Kdyby se zapisovalo naslepo, stačilo by
+     * otevřít hru ve druhém panelu: ten sav zmigruje a rozehraje, a první
+     * panel by pak přepsal jeho postup tím, co si přečetl na začátku — konto
+     * a archiv o kus zpátky. Jednotlivé operace nad localStorage atomické
+     * jsou, tahle dvojice čtení+zápis ne, takže se před zápisem ověří, že
+     * tam pořád leží TÝŽ řetězec.
+     */
+    if (parsed.v !== VERSION && localStorage.getItem(KEY) === raw) saveMatch(parsed.state);
     return parsed.state;
   } catch {
     return null;

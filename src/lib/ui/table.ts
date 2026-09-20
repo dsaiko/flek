@@ -49,6 +49,100 @@ const $ = <T extends HTMLElement>(root: HTMLElement, sel: string): T => {
   return el;
 };
 
+/** Hodiny a časovače — v testu se podstrčí řiditelné. */
+export interface BubbleClock {
+  now: () => number;
+  setTimeout: (fn: () => void, ms: number) => ReturnType<typeof setTimeout>;
+  clearTimeout: (t: ReturnType<typeof setTimeout>) => void;
+}
+
+/**
+ * Fronta bublin u sedadel — KDY se hláška vykreslí, ne jak.
+ *
+ * Hlášky chodí v dávkách (komentování, fleky), takže nová často přišla dřív, než
+ * se stihla přečíst ta předchozí — text u téhož sedadla probliknul. Každá proto
+ * dostane minimální čas na obrazovce a novější počká; čeká vždy jen ta poslední,
+ * aby bubliny nezaostávaly za hrou.
+ *
+ * Visící a čekající „Momentíček…" jsou DVA RŮZNÉ STAVY. Kdyby se hlídal jen ten
+ * první, tah AI by frontu nezrušil a „Momentíček…" by naskočil nad sedadlem,
+ * které už dávno táhlo — přesně to hlásil uživatel.
+ *
+ * Vlastní třída (a ne pár polí v `TableUI`) kvůli testu: tahle logika je celá
+ * o časovačích a bez DOM se jinak ověřit nedá.
+ */
+export class BubbleQueue {
+  private readonly pending = new Map<Seat, ReturnType<typeof setTimeout>>();
+  private readonly shownAt = new Map<Seat, number>();
+  private queuedThinking: Seat | null = null;
+
+  constructor(private readonly minMs: number, private readonly clock: BubbleClock = {
+    now: () => Date.now(),
+    setTimeout: (fn, ms) => setTimeout(fn, ms),
+    clearTimeout: (timer) => clearTimeout(timer),
+  }) {}
+
+  /** Hláška u sedadla: buď hned, nebo až doječte ta předchozí. */
+  request(seat: Seat, kind: 'talk' | 'thinking', paint: () => void): void {
+    const waiting = this.pending.get(seat);
+    if (waiting !== undefined) this.clock.clearTimeout(waiting);
+    // ve frontě čeká vždy jen poslední hláška — tahle tam případné „Momentíček…"
+    // střídá, takže ho přestáváme evidovat
+    if (this.queuedThinking === seat) this.queuedThinking = null;
+    const since = this.clock.now() - (this.shownAt.get(seat) ?? 0);
+    if (since < this.minMs) {
+      if (kind === 'thinking') this.queuedThinking = seat;
+      this.pending.set(seat, this.clock.setTimeout(() => {
+        this.pending.delete(seat);
+        if (this.queuedThinking === seat) this.queuedThinking = null;
+        paint();
+      }, this.minMs - since));
+      return;
+    }
+    this.pending.delete(seat);
+    paint();
+  }
+
+  /** Bublina naskočila — od téhle chvíle běží její čtecí čas. */
+  painted(seat: Seat): void {
+    this.shownAt.set(seat, this.clock.now());
+  }
+
+  /**
+   * Zruší „Momentíček…", které teprve ČEKÁ ve frontě.
+   *
+   * Volá se i tehdy, když nic nevisí — právě tak se totiž stihne zrušit dřív,
+   * než ho fronta vykreslí nad hotovým tahem.
+   */
+  cancelQueuedThinking(): void {
+    const queued = this.queuedThinking;
+    if (queued === null) return;
+    this.queuedThinking = null;
+    this.forget(queued);
+  }
+
+  /** Zahodí hlášku čekající u sedadla (bublina se zrovna sundává). */
+  forget(seat: Seat): void {
+    const waiting = this.pending.get(seat);
+    if (waiting === undefined) return;
+    this.clock.clearTimeout(waiting);
+    this.pending.delete(seat);
+  }
+
+  /** Nový zápas: nic starého nesmí doskočit do nového rozdání. */
+  clear(): void {
+    for (const timer of this.pending.values()) this.clock.clearTimeout(timer);
+    this.pending.clear();
+    this.shownAt.clear();
+    this.queuedThinking = null;
+  }
+
+  /** U koho „Momentíček…" čeká ve frontě (test, a jen pro čtení). */
+  get queuedSeat(): Seat | null {
+    return this.queuedThinking;
+  }
+}
+
 export class TableUI {
   private readonly root: HTMLElement;
   private readonly cb: TableCallbacks;
@@ -82,17 +176,8 @@ export class TableUI {
   private thinkTimer: ReturnType<typeof setTimeout> | null = null;
   /** U koho bublina „přemýšlím" právě visí (aby šla sundat, až tah přijde). */
   private thinkShown: Seat | null = null;
-  /**
-   * U koho „přemýšlím" teprve čeká ve frontě (`bubblePending`) na doječtení té
-   * předchozí. Visící a čekající bublina jsou dva různé stavy: kdyby se hlídal
-   * jen ten první, tah AI by frontu nezrušil a „Momentíček…" by naskočil nad
-   * sedadlem, které už dávno táhlo.
-   */
-  private thinkQueued: Seat | null = null;
-  /** Kdy naposledy bublina u sedadla naskočila (minimální čtecí čas). */
-  private readonly bubbleShownAt = new Map<Seat, number>();
-  /** Hláška čekající, až uplyne minimální čas té předchozí. */
-  private readonly bubblePending = new Map<Seat, ReturnType<typeof setTimeout>>();
+  /** Kdy se která hláška smí vykreslit (i rušení čekajícího „Momentíčku"). */
+  private readonly bubbles = new BubbleQueue(MIN_BUBBLE_MS);
   /** Karty na úvodní obrazovce — vybrané jednou, ať při překreslení nepřeskakují. */
   private introCards: Card[] | null = null;
   /** Pohled pro delegovaný klik na kartu (tlačítka se recyklují, ne převěšují). */
@@ -146,13 +231,10 @@ export class TableUI {
     // zápasu visela nad rozdáváním toho nového
     for (const timer of this.bubbleTimers.values()) clearTimeout(timer);
     this.bubbleTimers.clear();
-    for (const timer of this.bubblePending.values()) clearTimeout(timer);
-    this.bubblePending.clear();
-    this.bubbleShownAt.clear();
+    this.bubbles.clear();
     if (this.thinkTimer !== null) clearTimeout(this.thinkTimer);
     this.thinkTimer = null;
     this.thinkShown = null;
-    this.thinkQueued = null;
     this.recentTalk.length = 0;
     this.scoredLine = null;
     this.scoredSoundFor = null;
@@ -740,35 +822,9 @@ export class TableUI {
       : $(this.root, `#seat-${seat === this.seatAt('left') ? 'left' : 'right'} .bubble`);
   }
 
-  /**
-   * Bublina u sedadla (`html` už musí být escapované).
-   *
-   * Hlášky chodí v dávkách (komentování, fleky), takže nová často přišla dřív,
-   * než se stihla přečíst ta předchozí — text u téhož sedadla probliknul.
-   * Každá proto dostane minimální čas na obrazovce a novější počká ve frontě;
-   * čeká vždy jen ta poslední, aby bubliny nezaostávaly za hrou.
-   */
+  /** Bublina u sedadla (`html` už musí být escapované); o KDY se stará fronta. */
   private showBubble(seat: Seat, html: string, kind: 'talk' | 'thinking' = 'talk'): void {
-    const pending = this.bubblePending.get(seat);
-    if (pending !== undefined) clearTimeout(pending);
-    // ve frontě čeká vždy jen poslední hláška — tahle tam případné „Momentíček…"
-    // střídá, takže ho přestáváme evidovat
-    if (this.thinkQueued === seat) this.thinkQueued = null;
-    const since = Date.now() - (this.bubbleShownAt.get(seat) ?? 0);
-    if (since < MIN_BUBBLE_MS) {
-      if (kind === 'thinking') this.thinkQueued = seat;
-      this.bubblePending.set(
-        seat,
-        setTimeout(() => {
-          this.bubblePending.delete(seat);
-          if (this.thinkQueued === seat) this.thinkQueued = null;
-          this.paintBubble(seat, html, kind);
-        }, MIN_BUBBLE_MS - since),
-      );
-      return;
-    }
-    this.bubblePending.delete(seat);
-    this.paintBubble(seat, html, kind);
+    this.bubbles.request(seat, kind, () => this.paintBubble(seat, html, kind));
   }
 
   private paintBubble(seat: Seat, html: string, kind: 'talk' | 'thinking'): void {
@@ -776,7 +832,7 @@ export class TableUI {
     const el = this.bubbleEl(seat);
     el.innerHTML = html;
     el.classList.add('show');
-    this.bubbleShownAt.set(seat, Date.now());
+    this.bubbles.painted(seat);
     const prev = this.bubbleTimers.get(seat);
     if (prev) clearTimeout(prev);
     this.bubbleTimers.set(seat, setTimeout(() => el.classList.remove('show'), BUBBLE_MS));
@@ -815,24 +871,12 @@ export class TableUI {
   /** Sundá „Momentíček…", pokud zrovna visí (nebo čeká ve frontě). */
   private hideThinkingBubble(): void {
     // čekající se ruší i tehdy, když nic nevisí — právě tak se totiž stihne
-    // zrušit dřív, než ho `bubblePending` vykreslí nad hotovým tahem
-    const queued = this.thinkQueued;
-    if (queued !== null) {
-      this.thinkQueued = null;
-      const waiting = this.bubblePending.get(queued);
-      if (waiting !== undefined) {
-        clearTimeout(waiting);
-        this.bubblePending.delete(queued);
-      }
-    }
+    // zrušit dřív, než ho fronta vykreslí nad hotovým tahem
+    this.bubbles.cancelQueuedThinking();
     if (this.thinkShown === null) return;
     const seat = this.thinkShown;
     this.thinkShown = null;
-    const pending = this.bubblePending.get(seat);
-    if (pending !== undefined) {
-      clearTimeout(pending);
-      this.bubblePending.delete(seat);
-    }
+    this.bubbles.forget(seat);
     const prev = this.bubbleTimers.get(seat);
     if (prev) clearTimeout(prev);
     this.bubbleTimers.delete(seat);

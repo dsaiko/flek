@@ -113,3 +113,25 @@ export function suitArt(code: SuitCode, opts: { mono?: string; detail?: string }
 
 /** Rám, do kterého se `suitArt` vejde i se stínem kontury. */
 export const SUIT_ART_VIEWBOX = '-32 -32 64 64';
+
+/**
+ * Identita barvy v UI: rohový index karty, oděv figur, tinty.
+ *
+ * ZÁMĚRNĚ to nejsou odstíny z `SUIT_ART_COLORS`. Je to identita barvy, ne barva
+ * kresby. Panel 3a kreslí kuli jako ČERVENOU rouli se zlatým pásem a žalud jako
+ * červený oříšek se zeleným kloboučkem — kdyby se podle těla obarvil i index,
+ * měla by kule sedmu k nerozeznání od srdcové. A „červená" v mariáši
+ * zdvojnásobuje sazby (čl. II/3), takže je to přesně ta dvojice, která se plést
+ * nesmí. Kuli drží pohromadě zlatá ze pásu, žaludy hnědá; rozlišuje tedy tvar
+ * A index. Kdo to chce přebarvit podle kresby, ať napřed vygeneruje 7B vedle 7H
+ * a podívá se.
+ */
+export const SUIT_IDENT: Record<SuitCode, { color: string; index: string }> = {
+  H: { color: '#c62828', index: '#c62828' },
+  L: { color: '#2e7d32', index: '#2e7d32' },
+  B: { color: '#c8890a', index: '#a06d00' },
+  A: { color: '#7a4f2b', index: '#6d4c2b' },
+};
+
+/** Emblém na hrudi figury: bílá silueta na tmavém oděvu, detail v barvě suitu. */
+export const FIGURE_EMBLEM = '#ffffff';

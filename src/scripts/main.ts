@@ -322,9 +322,7 @@ soundsBtn.addEventListener('click', () => {
   saveSettings(settings);
   sounds.setEnabled(settings.sounds);
   if (settings.sounds) {
-    // až PO probuzení kontextu: `unlock()` jen spustí `resume()`, a zvuk
-    // poslaný hned za ním by narazil na ještě uspaný kontext a zahodil se
-    void sounds.unlock().then(() => sounds.play('deal')); // slyšitelné potvrzení
+    sounds.playWhenUnlocked('deal'); // slyšitelné potvrzení, až kontext naběhne
   }
 });
 

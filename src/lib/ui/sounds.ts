@@ -30,6 +30,15 @@ export interface Sounds {
    * kontext a zvuk by tiše zahodilo — kdo chce hrát rovnou z gesta, počká si.
    */
   unlock: () => Promise<void>;
+  /**
+   * Odemknout a AŽ POTOM přehrát — pro zvuk vyžádaný přímo gestem.
+   *
+   * Vlastní metoda, a ne `unlock().then(play)` na místě volání: to pořadí je
+   * celé, oč jde (`play()` hned za `unlock()` se zahodí), a jako řádek v
+   * obsluze tlačítka se nedá otestovat jinak než přes podvrženou `unlock`.
+   * Tady ho drží tentýž test, co ověřuje odemykání.
+   */
+  playWhenUnlocked: (name: SoundName) => void;
 }
 
 type Ctor = new () => AudioContext;
@@ -39,6 +48,7 @@ export const silentSounds: Sounds = {
   play: () => {},
   setEnabled: () => {},
   unlock: () => Promise.resolve(),
+  playWhenUnlocked: () => {},
 };
 
 /** Hlasitost je schválně nízko: „jemné, tiché, bez hudby" (§5.7). */
@@ -128,7 +138,7 @@ export function createSounds(enabled = true): Sounds {
     osc.stop(t0 + dur + 0.02);
   };
 
-  return {
+  const api: Sounds = {
     setEnabled: (value) => { on = value; },
     unlock: () => {
       // Vypnutý zvuk nesmí otevřít AudioContext: na mobilu tím probouzí zvukovou
@@ -210,5 +220,12 @@ export function createSounds(enabled = true): Sounds {
         /* jeden neúspěšný zvuk nesmí rozbít hru */
       }
     },
+    /*
+     * Až z příslibu, ne hned: `unlock()` jen spustí `resume()`, a zvuk poslaný
+     * těsně za ním by narazil na ještě uspaný kontext a tiše se zahodil.
+     * (`api` se čte až ve chvíli volání, tedy dávno po sestavení objektu.)
+     */
+    playWhenUnlocked: (name) => void api.unlock().then(() => api.play(name)),
   };
+  return api;
 }
