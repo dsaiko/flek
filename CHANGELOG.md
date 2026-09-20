@@ -4,6 +4,50 @@ Poznámky k vydání. Sekci pro daný tag z tohohle souboru vytáhne CI a použi
 jako text releasu na GitHubu (`.github/workflows/release.yml`) — nadpis sekce se
 stane názvem vydání. Nová verze = **přidat sekci sem** a až pak tagovat.
 
+## v0.0.7 — nové znaky karet a flek na každý závazek zvlášť
+
+Nová kresba listů, kulí, srdcí a žaludů podle vlastního návrhu — a oprava flekování, která se
+počítá do peněz: na kombinovaný závazek se flekuje každá jeho část samostatně.
+
+### Flek na každý závazek zvlášť
+
+Pravidla to říkají jasně (čl. V/4): „U kombinovaných závazků lze flekovat každý z nich
+samostatně." Hra to dřív nedodržela. Když obrana flekla hru a aktér řekl re, kolo skončilo —
+druhý flek obrany, třeba na sedmu, zůstal bez odpovědi a sedma se vyúčtovala na dvojnásobek
+místo čtyřnásobku. Kdo držel slovo, mluvil teď jen jednou.
+
+Nově drží hráč slovo tak dlouho, dokud má co říct: „flek a sto proti" se dá vyslovit v jednom
+tahu a na pořadí nezáleží. Vyúčtování tím sedí i u sedmy a sta v jedné hře.
+
+### Nové znaky karet
+
+Listy, kule, srdce a žaludy mají novou kresbu — plnobarevnou, s konturou, podle tradičního
+vzoru. Moderní sada je z ní přegenerovaná ve všech čtyřech jazykových variantách (česká,
+anglická, německá, francouzská), včetně es, figur a emblému na hrudi krále.
+
+Rohový index zůstává u kulí zlatý a u žaludů hnědý, i když kresba je červená: kdyby index
+kresbu následoval, byla by kulová sedma k nerozeznání od srdcové — a červená zdvojnásobuje sazby.
+
+### Co se stane s rozehranou hrou
+
+Konto, jméno i archiv odehraných her z v0.0.6 zůstávají. Ztratí se jediné: hra, která byla
+uložená **přímo uprostřed komentování**. Slovo v flecích se totiž počítá jinak než dřív a zpětně
+dopočítat, co by hráč řekl, kdyby se ho engine byl zeptal, nejde — taková hra se radši nenačte,
+než aby se dohrála za špatné sazby.
+
+### Drobnosti
+
+Soupeřův odložený trumf se počítal dvakrát: měl ve vějíři o rub víc a při sehrávce mu jedna karta
+nevysvětlitelně zmizela (potkalo to dvě hry ze tří). Nápověda a nastavení se zavírají navzájem
+v obou směrech. Bublina „Momentíček…" už nezůstane viset nad hráčem, který mezitím zahrál. Po
+zapnutí zvuku se ozve potvrzení. A řada tlačítek s plnou licitační nabídkou (devět tlačítek až po
+Durcha) už nezakrývá jmenovku hráče ani jeho pakl — ověřeno ve všech čtyřech jazycích.
+
+### Pod kapotou
+
+Vydávací workflow nedosazuje text z tohohle souboru do shellu a nenechává zapisovací token
+ležet po celou dobu běhu. Sav odmítne podvržený závazek, který by obešel minimum z licitace.
+
 ## v0.0.6 — převzetí podle pravidel a dvě review, která AI prohlédla do karet
 
 Třetí kolo review pravidel proti dokumentům ČSM, tentokrát dvěma nezávislými recenzenty. Oba potvrdili to hlavní: **AI do cizích karet nevidí** — dostává jen redigovaný pohled, simulace uvnitř hledání běží nad tímtéž pohledem a seed hledání nemá se seedem rozdání nic společného. Zbytek jsou opravy toho, kde se engine od pravidel odchýlil.
