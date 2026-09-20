@@ -15,7 +15,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { suitArt } from '../src/lib/ui/suitArt';
+import { FIGURE_EMBLEM, SUIT_IDENT, suitArt } from '../src/lib/ui/suitArt';
 
 const LANG: 'cs' | 'en' | 'de' | 'fr' =
   process.argv[2] === 'en' ? 'en' : process.argv[2] === 'de' ? 'de' : process.argv[2] === 'fr' ? 'fr' : 'cs';
@@ -55,22 +55,15 @@ interface SuitDef {
 }
 
 /*
- * `color`/`index` ZÁMĚRNĚ nekopírují odstíny z `SUIT_ART_COLORS`.
- *
- * Je to identita barvy, ne barva kresby. Panel 3a kreslí kuli jako ČERVENOU
- * rouli se zlatým pásem a žalud jako červený oříšek se zeleným kloboučkem.
- * Kdyby se podle těla obarvil i index, měla by kule červenou sedmu úplně
- * stejně jako srdce — a „červená" v mariáši zdvojnásobuje sazby (čl. II/3),
- * takže je to přesně ta dvojice, která se plést nesmí. Kuli drží pohromadě
- * zlatá ze pásu, žaludy hnědá. Rozlišuje tedy tvar A index; kdo to přebarví
- * podle kresby, ať napřed vygeneruje 7B vedle 7H a podívá se.
+ * `color`/`index` se berou ze `SUIT_IDENT` v `suitArt.ts` — a ZÁMĚRNĚ to nejsou
+ * odstíny kresby. Proč, je napsané tam.
  */
 
 const SUITS: SuitDef[] = [
-  { code: 'H', nameCs: 'červené', nameEn: 'hearts', nameDe: 'Herz', nameFr: 'cœur', color: '#c62828', index: '#c62828' },
-  { code: 'L', nameCs: 'zelené', nameEn: 'leaves', nameDe: 'Grün', nameFr: 'feuille', color: '#2e7d32', index: '#2e7d32' },
-  { code: 'B', nameCs: 'kule', nameEn: 'bells', nameDe: 'Schellen', nameFr: 'grelot', color: '#c8890a', index: '#a06d00' },
-  { code: 'A', nameCs: 'žaludy', nameEn: 'acorns', nameDe: 'Eichel', nameFr: 'gland', color: '#7a4f2b', index: '#6d4c2b' },
+  { code: 'H', nameCs: 'červené', nameEn: 'hearts', nameDe: 'Herz', nameFr: 'cœur', ...SUIT_IDENT.H },
+  { code: 'L', nameCs: 'zelené', nameEn: 'leaves', nameDe: 'Grün', nameFr: 'feuille', ...SUIT_IDENT.L },
+  { code: 'B', nameCs: 'kule', nameEn: 'bells', nameDe: 'Schellen', nameFr: 'grelot', ...SUIT_IDENT.B },
+  { code: 'A', nameCs: 'žaludy', nameEn: 'acorns', nameDe: 'Eichel', nameFr: 'gland', ...SUIT_IDENT.A },
 ];
 
 // ── symboly barev ────────────────────────────────────────────────────────────
@@ -165,7 +158,7 @@ function figureBody(suit: SuitDef, rank: RankDef): string {
     parts.push(
       `<path d="M76 322 C80 270 96 222 120 220 C144 222 160 270 164 322 Z" fill="${suit.color}"/>`,
     );
-    parts.push(placedSymbol(suit.code, CX, 272, 0.78, 0, '#ffffff', suit.color));
+    parts.push(placedSymbol(suit.code, CX, 272, 0.78, 0, FIGURE_EMBLEM, suit.color));
     parts.push(
       `<path d="M94 170 L94 144 L107 156 L120 138 L133 156 L146 144 L146 170 Z" fill="#e8b100" stroke="#a87c00" stroke-width="2"/>`,
       `<circle cx="94" cy="142" r="3.4" fill="#e8b100" stroke="#a87c00" stroke-width="1.6"/>`,

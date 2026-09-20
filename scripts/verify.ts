@@ -12,7 +12,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parse as parseYaml } from 'yaml';
 
-import { suitArt, type SuitCode } from '../src/lib/ui/suitArt';
+import { FIGURE_EMBLEM, SUIT_IDENT, suitArt, type SuitCode } from '../src/lib/ui/suitArt';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -67,25 +67,34 @@ console.log('PASS SVG bez externích referencí');
  * a celá sada testů zůstane zelená. Přesně to rozejití (žilka listu měla
  * v generátoru tři tahy, v ikonce jeden) byl důvod, proč `suitArt.ts` vznikl.
  *
- * Král se vynechává: jeho emblém je `mono` varianta a ta se skládá z týchž
- * obrysů, takže úpravu cesty zachytí ostatní hodnoty stejně spolehlivě.
+ * Král má na hrudi `mono` variantu, ne plnobarevnou — kontroluje se tedy proti
+ * ní. Vynechat ho nestačí: `mono()` a jeho napojení na generátor se můžou
+ * rozejít i tehdy, když se obrysy nehnou, a král je jediná karta, která tu
+ * větev kreslí.
  */
 {
   const setsOf = ['cards/modern', 'cards/modern-en', 'cards/modern-de', 'cards/modern-fr'];
-  const drawn = RANKS.filter((r) => r !== 'K');
   let checked = 0;
   for (const code of SUITS as SuitCode[]) {
     const art = suitArt(code);
+    // tytéž volby, jakými emblém kreslí `figureBody` v gen-cards.ts
+    const emblem = suitArt(code, { mono: FIGURE_EMBLEM, detail: SUIT_IDENT[code].color });
     for (const set of setsOf) {
-      for (const rank of drawn) {
+      for (const rank of RANKS) {
         const svg = readFileSync(join(ROOT, set, `${rank}${code}.svg`), 'utf8');
-        assert.ok(svg.includes(art), `${set}/${rank}${code}.svg nesedí se suitArt.ts — spusť \`make cards\``);
+        const want = rank === 'K' ? emblem : art;
+        assert.ok(svg.includes(want), `${set}/${rank}${code}.svg nesedí se suitArt.ts — spusť \`make cards\``);
         checked += 1;
       }
     }
   }
-  assert.equal(checked, setsOf.length * drawn.length * SUITS.length, 'kontrola musí projít všechny sady');
-  console.log(`PASS karty — znaky v sadách sedí se suitArt.ts (${checked} karet)`);
+  assert.equal(checked, setsOf.length * RANKS.length * SUITS.length, 'kontrola musí projít všechny sady');
+  // index se do karty píše taky ze sdílené palety — jinak by se dal rozejít bez alarmu
+  for (const code of SUITS as SuitCode[]) {
+    const svg = readFileSync(join(ROOT, `cards/modern/7${code}.svg`), 'utf8');
+    assert.ok(svg.includes(`fill="${SUIT_IDENT[code].index}"`), `index na 7${code} nesedí se SUIT_IDENT`);
+  }
+  console.log(`PASS karty — znaky i indexy v sadách sedí se suitArt.ts (${checked} karet)`);
 }
 
 // ── engine: kódování karet a pořadí ─────────────────────────────────────────
@@ -2965,6 +2974,95 @@ const KULE = 2 as const;
     console.log('PASS odložený trumf — stranou místo ruky, lícem dolů u soupeře, do talonu nesmí');
   }
 
+  /*
+   * Fronta bublin: „Momentíček…", které ČEKÁ, musí jít zrušit dřív, než ho
+   * fronta vykreslí. Uživatel hlásil přesně tenhle případ — bublina naskočila
+   * nad sedadlem, které už dávno táhlo, protože se hlídala jen ta VISÍCÍ.
+   *
+   * Hodiny i časovače se podstrkují: kontrola je o tom, co se stane mezi
+   * „přišel tah" a „doběhl odklad", a čekat na to doopravdy by znamenalo test,
+   * který jednou za čas probliká.
+   */
+  {
+    const { BubbleQueue } = await import('../src/lib/ui/table');
+    const MIN = 1100;
+    /*
+     * Hodiny NEZAČÍNAJÍ na nule: `Date.now()` je v ostrém provozu velké číslo,
+     * takže „žádná bublina tu ještě nebyla" vyjde jako dávno. S nulou by se
+     * první hláška ocitla v minimálním čase té neexistující předchozí a čekala
+     * by — test by tak měřil něco, co v prohlížeči nikdy nenastane.
+     */
+    const START = 1_700_000_000_000;
+    let clock = START;
+    let nextId = 1;
+    const timers = new Map<number, { at: number; fn: () => void }>();
+    const fake = {
+      now: () => clock,
+      setTimeout: ((fn: () => void, ms: number) => {
+        const id = nextId += 1;
+        timers.set(id, { at: clock + ms, fn });
+        return id as unknown as ReturnType<typeof setTimeout>;
+      }) as never,
+      clearTimeout: ((id: unknown) => void timers.delete(id as number)) as never,
+    };
+    /** Posun hodin — spustí, co mezitím mělo doběhnout. */
+    const advance = (ms: number): void => {
+      clock += ms;
+      for (const [id, timer] of [...timers]) {
+        if (timer.at <= clock) { timers.delete(id); timer.fn(); }
+      }
+    };
+
+    const painted: string[] = [];
+    const q = new BubbleQueue(MIN, fake);
+
+    // hláška, kterou nic nepředchází, jde na plátno hned
+    q.request(1, 'talk', () => { painted.push('talk1'); q.painted(1); });
+    assert.deepEqual(painted, ['talk1'], 'první hláška se kreslí bez odkladu');
+
+    // „Momentíček…" hned po ní musí počkat na dočtení
+    q.request(1, 'thinking', () => { painted.push('think'); q.painted(1); });
+    assert.deepEqual(painted, ['talk1'], 'druhá hláška v minimálním čase čeká');
+    assert.equal(q.queuedSeat, 1, 'a eviduje se jako čekající „Momentíček…"');
+
+    // tah přišel dřív, než odklad doběhl — čekající se musí zrušit
+    q.cancelQueuedThinking();
+    assert.equal(q.queuedSeat, null, 'po tahu už nic nečeká');
+    advance(MIN * 2);
+    assert.deepEqual(painted, ['talk1'], '„Momentíček…" se nesmí vykreslit nad hotovým tahem');
+
+    // …a bez zrušení se vykreslit MUSÍ, jinak by kontrola procházela vždycky
+    clock = START; timers.clear(); painted.length = 0;
+    const q2 = new BubbleQueue(MIN, fake);
+    q2.request(1, 'talk', () => { painted.push('talk1'); q2.painted(1); });
+    q2.request(1, 'thinking', () => { painted.push('think'); q2.painted(1); });
+    advance(MIN * 2);
+    assert.deepEqual(painted, ['talk1', 'think'], 'nezrušený odklad se po uplynutí času dokreslí');
+
+    // běžná hláška čekající „Momentíček…" střídá — jinak by ho zrušil cizí tah
+    clock = START; timers.clear(); painted.length = 0;
+    const q3 = new BubbleQueue(MIN, fake);
+    q3.request(2, 'talk', () => { painted.push('a'); q3.painted(2); });
+    q3.request(2, 'thinking', () => { painted.push('think'); q3.painted(2); });
+    q3.request(2, 'talk', () => { painted.push('b'); q3.painted(2); });
+    assert.equal(q3.queuedSeat, null, 'novější hláška „Momentíček…" z fronty vystřídala');
+    q3.cancelQueuedThinking(); // tah u jiného sedadla nesmí tuhle hlášku shodit
+    advance(MIN * 2);
+    assert.deepEqual(painted, ['a', 'b'], 've frontě čeká vždy jen poslední hláška, a ta se dokreslí');
+
+    // nový zápas: nic starého nesmí doskočit do nového rozdání
+    clock = START; timers.clear(); painted.length = 0;
+    const q4 = new BubbleQueue(MIN, fake);
+    q4.request(0, 'talk', () => { painted.push('x'); q4.painted(0); });
+    q4.request(0, 'talk', () => painted.push('y'));
+    q4.clear();
+    advance(MIN * 2);
+    assert.deepEqual(painted, ['x'], 'po `clear()` nesmí doskočit nic z minulého zápasu');
+    assert.equal(timers.size, 0, 'a nesmí zůstat viset časovač');
+
+    console.log('PASS bubliny — čekající „Momentíček…" se ruší tahem, nezrušený se dokreslí');
+  }
+
   // ── vějíř v betlu/durchu: desítka patří pod spodka, ne vedle esa ────────
   {
     const { handAside, handOrderMode } = await import('../src/lib/ui/table');
@@ -3624,8 +3722,21 @@ const KULE = 2 as const;
     cold.play('deal');
     assert.ok(started > 1, 'po dojití příslibu z unlock() se zvuk ozvat MUSÍ');
 
+    /*
+     * A totéž pro `playWhenUnlocked` — to je ta cesta, kterou jde potvrzení po
+     * zapnutí zvuku v nastavení. Kdyby se vrátila na `unlock(); play()`, zvuk
+     * by narazil na uspaný kontext a uživatel by po zapnutí neslyšel nic.
+     */
+    const fresh = createSounds(true);
+    started = 0;
+    fresh.playWhenUnlocked('deal');
+    assert.equal(started, 1, 'hned po zavolání zazní jen odemykací ticháč — vyžádaný zvuk ještě ne');
+    // dvakrát: `resume()` dojde v jednom úkolu, `then` na něm v dalším
+    await new Promise((r) => setTimeout(r, 5));
+    assert.ok(started > 1, 'jakmile kontext naběhne, potvrzení se ozvat MUSÍ');
+
     if (orig === undefined) delete g.AudioContext; else g.AudioContext = orig;
-    console.log('PASS zvuky — autoplay policy, odemknutí příslibem, vypínání a všech šest zvuků');
+    console.log('PASS zvuky — autoplay policy, odemknutí příslibem, potvrzení po zapnutí, všech šest zvuků');
   }
 
   // ── komentář k vyúčtování se escapuje (jde do innerHTML) ──────────────
@@ -4189,6 +4300,28 @@ console.log('PASS vzdání — platí se celý stojící závazek, mimo legalAct
   // …a nesmí to být tím, že by ten stav byl vadný sám o sobě
   store.set('flek.match.v1', JSON.stringify({ ...v2Fleks, v: SAV_V }));
   assert.notEqual(load(), null, 'tentýž stav ve v3 projít musí — odmítá se verze, ne tvar');
+
+  /*
+   * Migrace nesmí přepsat, co mezitím zapsal jiný panel. Záznam je sdílený:
+   * druhý panel může tentýž sav zmigrovat a rozehrát dřív, než se první dostane
+   * k zápisu — a ten by mu pak konto i archiv vrátil o kus zpátky.
+   */
+  {
+    const stale = JSON.stringify({ v: 2, state: conceded });
+    const newer = JSON.stringify({ v: SAV_V, state: next }); // co mezitím zapsal druhý panel
+    store.set('flek.match.v1', stale);
+    const real = store.get.bind(store);
+    // čtení uvnitř `loadMatch`: první dá starý sav, druhé (kontrolní) už ten cizí
+    let reads = 0;
+    store.get = ((k: string) => {
+      reads += 1;
+      if (k === 'flek.match.v1' && reads === 2) store.set('flek.match.v1', newer);
+      return real(k);
+    }) as typeof store.get;
+    assert.notEqual(load(), null, 'sav se i tak načte — o co jde, je ten zápis');
+    store.get = real;
+    assert.equal(store.get('flek.match.v1'), newer, 'migrace nesmí přepsat novější zápis z jiného panelu');
+  }
 
   // a neznámá verze zůstává odmítnutá (migruje se jen z v2)
   store.set('flek.match.v1', JSON.stringify({ ...okSave, v: 1 }));
@@ -5472,16 +5605,36 @@ console.log('PASS sav — v2 mimo komentování se migruje, rozehrané fleky z v
    * rozplétat je regulárním výrazem je prohraná bitva, tak to dělá knihovna
    * (`yaml`, kotvy a flow mapy vyřeší sama).
    */
-  const runScripts = (yamlText: string): string[] => {
-    const doc = parseYaml(yamlText) as { jobs?: Record<string, { steps?: { run?: unknown }[] }> } | null;
-    const out: string[] = [];
-    for (const job of Object.values(doc?.jobs ?? {})) {
-      for (const step of job?.steps ?? []) {
-        if (typeof step?.run === 'string') out.push(step.run);
+  interface WfStep { uses?: unknown; with?: unknown; run?: unknown }
+  interface WfJob { name: string; contents: string | null; steps: WfStep[] }
+
+  const parseJobs = (yamlText: string): WfJob[] => {
+    const doc = parseYaml(yamlText) as {
+      permissions?: unknown;
+      jobs?: Record<string, { permissions?: unknown; steps?: unknown }>;
+    } | null;
+    /** Právo `contents` daného bloku `permissions:` — `write-all` počítáme taky. */
+    const contentsOf = (p: unknown): string | null => {
+      if (p === 'write-all') return 'write';
+      if (p === 'read-all') return 'read';
+      if (p !== null && typeof p === 'object') {
+        const c = (p as Record<string, unknown>).contents;
+        return typeof c === 'string' ? c : null;
       }
-    }
-    return out;
+      return null;
+    };
+    const top = contentsOf(doc?.permissions);
+    return Object.entries(doc?.jobs ?? {}).map(([name, job]) => ({
+      name,
+      // job si právo buď řekne sám, nebo zdědí to z celého workflow
+      contents: contentsOf(job?.permissions) ?? top,
+      steps: (Array.isArray(job?.steps) ? job.steps : [])
+        .filter((s): s is WfStep => s !== null && typeof s === 'object'),
+    }));
   };
+
+  const runScripts = (yamlText: string): string[] =>
+    parseJobs(yamlText).flatMap((j) => j.steps.map((s) => s.run).filter((r): r is string => typeof r === 'string'));
 
   /** Co se ve skriptu nesmí objevit, s vysvětlením proč. */
   const complaints = (script: string, where: string): string[] => {
@@ -5509,6 +5662,38 @@ console.log('PASS sav — v2 mimo komentování se migruje, rozehrané fleky z v
        */
       if (/(^|[\s;&|(])npx\s/.test(line) && !line.includes('--no-install')) {
         out.push(`${where}: „${line.trim()}" — npx si balík doinstaluje z registru, volej binárku z node_modules`);
+      }
+    }
+    return out;
+  };
+
+  /**
+   * Co se nesmí objevit ve STAVBĚ jobu — tohle `run:` řádky neuvidí.
+   *
+   * Token s `contents: write` nesmí být na runneru, kde běží kód projektu.
+   * Nestačí ho nedat do `.git/config` (`persist-credentials: false`): postinstall
+   * skript kterékoli závislosti si může podstrčit vlastní `gh` a přidat si
+   * adresář do `$GITHUB_PATH`, a krok s tokenem pak zavolá jeho. Drží to jedině
+   * dělba na dva joby — a ta se dá zrušit jediným smazaným řádkem, takže ji
+   * musí hlídat test.
+   */
+  const jobComplaints = (job: WfJob, where: string): string[] => {
+    const out: string[] = [];
+    const writes = job.contents === 'write';
+    for (const step of job.steps) {
+      if (typeof step.uses === 'string' && step.uses.startsWith('actions/checkout')) {
+        const w = (step.with !== null && typeof step.with === 'object' ? step.with : {}) as Record<string, unknown>;
+        if (w['persist-credentials'] !== false) {
+          out.push(`${where} (${job.name}): checkout bez \`persist-credentials: false\` — token zůstane v .git/config na celý job`);
+        }
+        if (writes) out.push(`${where} (${job.name}): job s \`contents: write\` si stahuje repozitář — kód projektu patří do jobu, který zapisovat nesmí`);
+      }
+      /*
+       * `gh` z image runneru je v pořádku; `npm`, `make`, `node` a spol. znamenají
+       * kód projektu a jeho závislostí, tedy přesně to, před čím token chráníme.
+       */
+      if (writes && typeof step.run === 'string' && /(^|[\s;&|(])(npm|npx|yarn|pnpm|make|node)\s/.test(step.run)) {
+        out.push(`${where} (${job.name}): \`contents: write\` a k tomu kód projektu — podstrčený \`gh\` by dostal token`);
       }
     }
     return out;
@@ -5579,18 +5764,68 @@ console.log('PASS sav — v2 mimo komentování se migruje, rozehrané fleky z v
     [], 'volání z node_modules ani `--no-install` stěžovat nesmí',
   );
 
+  /*
+   * A stavba jobu. Tohle je ta kontrola, která PŘESKOČENÝ KROK nepromine:
+   * checkout `run:` nemá, takže ho předchozí strážce míjel — a přesně v něm
+   * sedí `persist-credentials`.
+   */
+  {
+    const wf = (...lines: string[]) => lines.join('\n');
+    const bare = parseJobs(wf(
+      'permissions:', '  contents: write',
+      'jobs:', '  a:', '    steps:', '      - uses: actions/checkout@v4',
+    ));
+    const bareSays = bare.flatMap((j) => jobComplaints(j, 'x'));
+    assert.equal(bareSays.length, 2, `holý checkout v zapisujícím jobu má vyvolat dvě stížnosti, ne ${bareSays.length}`);
+    assert.ok(bareSays.some((s) => s.includes('persist-credentials')), 'a jedna z nich musí být o `persist-credentials`');
+    assert.ok(bareSays.some((s) => s.includes('stahuje repozitář')), 'a druhá o tom, že tenhle job nemá co checkoutovat');
+
+    // právo zděděné z workflow se počítá stejně jako to, co si job řekne sám
+    const inherited = parseJobs(wf('permissions:', '  contents: write', 'jobs:', '  a:', '    steps:', '      - run: npm ci'));
+    assert.equal(inherited[0].contents, 'write', 'právo se dědí z workflow, když si job vlastní neřekne');
+    assert.equal(jobComplaints(inherited[0], 'x').length, 1, '`npm ci` v zapisujícím jobu musí vadit');
+
+    // a job, který si řekne o čtení, to zděděné právo přebíjí
+    const narrowed = parseJobs(wf(
+      'permissions:', '  contents: write',
+      'jobs:', '  a:', '    permissions:', '      contents: read',
+      '    steps:', '      - uses: actions/checkout@v4',
+      '        with:', '          persist-credentials: false',
+      '      - run: npm ci', '      - run: make all',
+    ));
+    assert.deepEqual(jobComplaints(narrowed[0], 'x'), [], 'čtoucí job smí stahovat repozitář i stavět projekt');
+
+    // …a zapisující job bez checkoutu a bez závislostí projít musí
+    const publish = parseJobs(wf(
+      'jobs:', '  b:', '    permissions:', '      contents: write',
+      '    steps:', '      - uses: actions/download-artifact@v4',
+      '      - run: gh release create "$GITHUB_REF_NAME" --notes-file release-notes.md',
+    ));
+    assert.deepEqual(jobComplaints(publish[0], 'x'), [], 'samotné `gh` z image runneru je v pořádku');
+  }
+
   const dir = join(ROOT, '.github/workflows');
   const files = readdirSync(dir).filter((f) => f.endsWith('.yml') || f.endsWith('.yaml'));
   assert.ok(files.length > 0, 'nenašel se žádný workflow — test by nic nehlídal');
   let scripts = 0;
+  let checkouts = 0;
   for (const file of files) {
-    for (const script of runScripts(readFileSync(join(dir, file), 'utf8'))) {
+    const where = `.github/workflows/${file}`;
+    const text = readFileSync(join(dir, file), 'utf8');
+    for (const script of runScripts(text)) {
       scripts += 1;
-      const found2 = complaints(script, `.github/workflows/${file}`);
+      const found2 = complaints(script, where);
       assert.equal(found2.length, 0, found2[0]);
+    }
+    for (const job of parseJobs(text)) {
+      const found3 = jobComplaints(job, where);
+      assert.equal(found3.length, 0, found3[0]);
+      checkouts += job.steps.filter((s) => typeof s.uses === 'string' && s.uses.startsWith('actions/checkout')).length;
     }
   }
   assert.ok(scripts > 0, 'v žádném workflow se nenašel `run:` — parser asi nedošel k `jobs`');
+  // kdyby `uses:` přestalo docházet až ke krokům, kontrola stavby by tiše nic nedělala
+  assert.ok(checkouts > 0, 'v žádném workflow se nenašel checkout — parser asi nedošel ke krokům `uses:`');
   console.log(`PASS workflow — run: bez dosazovaných výrazů, spolknutých návratových kódů a npx (${scripts} skriptů)`);
 }
 

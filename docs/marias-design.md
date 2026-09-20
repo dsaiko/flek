@@ -1994,3 +1994,31 @@ strážce `GITHUB_OUTPUT`, vypnutý strážce řídicích znaků v `release-note
 **Poučení:** test smazaný při přepisu souseda po sobě nenechá žádnou stopu kromě nepoužitých
 importů — a ty nikdo nehlídá. Tenhle konkrétní blok je jediné místo, kde se `release-notes.ts`
 vůbec spouští, takže jeho zmizení nebylo vidět nikde jinde než na tagu.
+
+### Fixpoint review PR #10, šesté kolo (2026-09-18, po `0bc75e4`)
+
+Osm nálezů (dva popisují totéž), všechny sedí, všechny opravené. Poprvé v téhle sérii nepřibyla
+žádná chyba v pravidlech ani v enginu — všechno se točí kolem toho, co bylo bez testu.
+
+| Závažnost | Nález | Oprava |
+|---|---|---|
+| high | `persist-credentials: false` nestačí. Token s `contents: write` byl pořád na runneru, kde běží `npm ci`, instalace prohlížečů a `make all`; postinstall skript si může podstrčit vlastní `gh` a přidat si adresář do `$GITHUB_PATH` — a poslední krok pak zavolá jeho | **Dva joby.** `overit` s `contents: read` staví a vyrábí text vydání, `vydat` s `contents: write` na čistém runneru jen spustí `gh` z image (žádný checkout, žádné závislosti). Text si předají artefaktem |
+| high ×2 | `persist-credentials: false` samo bylo bez negativní kontroly: strážce workflow četl jen těla `run:`, a checkout žádné nemá. Guard, který tiše přeskočí krok — přesně to, před čím varuje jeho vlastní komentář | Strážce prochází i `uses:` a `with:`. Hlídá dvě pravidla: každý checkout musí mít `persist-credentials: false`, a job s `contents: write` nesmí stahovat repozitář ani spouštět `npm`/`make`/`node`. Fixtury na obojí, plus kontrola, že se v repozitáři nějaký checkout vůbec našel |
+| medium | Migrace savu z v2 byla nechráněné čtení-uprav-zapiš nad sdíleným localStorage. Druhý panel mohl tentýž sav mezitím zmigrovat a rozehrát; první by mu konto i archiv vrátil o kus zpátky | Před zápisem se ověří, že pod klíčem leží pořád TÝŽ řetězec. Test podstrčí cizí zápis mezi obě čtení |
+| low | Kontrola karet vynechávala krále — a král je jediná karta, která kreslí `mono` větev. Rozejití `mono()` nebo jeho napojení na generátor by prošlo | Králové v kontrole jsou, proti `suitArt(code, { mono: FIGURE_EMBLEM, detail: … })`. Paleta identity se přestěhovala do `suitArt.ts` jako `SUIT_IDENT`, takže ji generátor i test berou z jednoho místa (128 karet) |
+| low ×2 | Rušení čekajícího „Momentíčku" bylo jediné místo v celém PR bez negativní kontroly. Smoke ho nechytí: zrušená bublina by se vykreslila až po `MIN_BUBBLE_MS`, mimo okno, ve kterém se kouká | Logika fronty vytažena do `BubbleQueue` s podstrčitelnými hodinami a časovači. Pět případů: první hláška hned, druhá čeká, tah čekající zruší, NEzrušená se dokreslí, `clear()` nenechá doskočit nic z minulého zápasu |
+| low | Potvrzovací zvuk po zapnutí zvuků stál na pořadí `unlock().then(play)` napsaném v obsluze tlačítka — odtud se to dá ověřit jedině podvrženou `unlock` | Pořadí se přestěhovalo do `sounds.playWhenUnlocked()`, kde ho drží tentýž test, co ověřuje odemykání (s podvrženým `AudioContext`, tedy prohlížečovým API, ne naším kódem). Obsluha tlačítka je teď jeden řádek |
+
+Negativní kontroly: smazané `persist-credentials`, joby zpátky do jednoho, zápis migrace naslepo,
+rozbité `mono()`, změněná paleta indexu, vypnuté rušení čekající bubliny, `clear()` bez zastavení
+časovačů, `playWhenUnlocked` zpátky na `unlock(); play()` — každá shodí právě svůj test.
+
+**Poučení:** dvakrát po sobě vyšlo najevo, že kontrola nekouše, protože jí chyběl vzorek, na
+kterém by MOHLA kousnout: strážce `GITHUB_OUTPUT` měl ve všech vzorcích i `${{ }}`, strážce
+workflow zase neuměl číst nic než `run:`. Napsat test ke správné opravě nestačí — musí se zkusit
+i ta špatná verze, jinak se neví, co test opravdu měří.
+
+**A ještě jedno:** oprava, která je jen ŘÁDEK NA SPRÁVNÉM MÍSTĚ (pořadí `unlock().then(play)`
+v obsluze tlačítka, zrušení fronty uvnitř privátní metody), se nedá otestovat, aniž by se
+podstrčilo něco vlastního. Správná reakce není test odpustit, ale přesunout to pořadí do funkce,
+která se zavolat dá — `playWhenUnlocked`, `BubbleQueue`. Test pak měří kód, ne atrapu.

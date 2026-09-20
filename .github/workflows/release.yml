@@ -3,26 +3,37 @@
 # Text vydání se NEGENERUJE ze seznamu commitů (hráč z něj nic nemá) — bere se
 # sekce z CHANGELOG.md. Chybějící sekce nebo verze v package.json, která
 # neodpovídá tagu, vydání zastaví: obojí znamená, že tag vznikl omylem.
+#
+# DVA JOBY, a je to schválně. Token s právem `contents: write` nesmí být na
+# stejném runneru jako `npm ci`, instalace prohlížečů a `make all`. Nestačí ho
+# nedat do `.git/config`: postinstall skript kterékoli závislosti může podstrčit
+# vlastní `gh` a přidat si adresář do `$GITHUB_PATH`, a poslední krok by pak to
+# cizí `gh` zavolal s tokenem v ruce. Jediná obrana, která tohle drží, je runner,
+# na kterém se žádný kód projektu nespustí — proto se vydání odděluje.
+#
+#   overit  (contents: read)  — npm ci, make all, text vydání; token jen ke čtení
+#   vydat   (contents: write) — čistý runner, žádné závislosti, jen `gh`
 name: release
 
 on:
   push:
     tags: ['v*']
 
-permissions:
-  contents: write
+# implicitně nic navíc: práva si každý job říká sám
+permissions: {}
 
 jobs:
-  release:
+  overit:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      title: ${{ steps.notes.outputs.title }}
     steps:
       # `persist-credentials: false`: checkout jinak zapíše do .git/config
-      # hlavičku s tokenem, a ten má kvůli `contents: write` právo zapisovat.
-      # Zůstal by tam po celý job, tedy i pod `npm ci` (postinstall skripty
-      # celého stromu závislostí), instalací prohlížečů a `make all`. Jedno
-      # kompromitované vydání kterékoli z nich by si ho odtud přečetlo. Token
-      # se tu nepotřebuje k ničemu — vydání ho dostane až v posledním kroku
-      # přes `env:`, kde platí jen pro ten jediný příkaz.
+      # hlavičku s tokenem. Tady má sice jen právo číst, ale je to token — a
+      # v jobu, kde běží postinstall skripty celého stromu závislostí, nemá co
+      # dělat. Ke stažení veřejného repozitáře ho nepotřebuje nikdo.
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
@@ -67,6 +78,26 @@ jobs:
           SMOKE_RESTART_MS: 9000
         run: make all
 
+      # Text vydání si odnese druhý job. Jinak by ho musel vyrobit sám — a to
+      # znamená `npm ci`, tedy přesně ten cizí kód, kvůli kterému se dělí.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-notes
+          path: release-notes.md
+          if-no-files-found: error
+
+  vydat:
+    needs: overit
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      # ŽÁDNÝ checkout, žádné `npm ci`, žádný kód projektu. Na tomhle runneru
+      # se spustí jen `gh` z image GitHubu — nemá to co podstrčit.
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-notes
+
       # Titulek jde přes proměnnou prostředí, ne přes `${{ }}` v těle `run:`.
       # Výraz se dosazuje do skriptu JEŠTĚ PŘED tím, než ho shell rozebere, a
       # titulek pochází z nadpisu v CHANGELOG.md (scripts/release-notes.ts bere
@@ -75,5 +106,7 @@ jobs:
       - name: Vydání
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TITLE: ${{ steps.notes.outputs.title }}
+          # bez checkoutu tu není git remote, ze kterého si `gh` repozitář bere
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TITLE: ${{ needs.overit.outputs.title }}
         run: gh release create "$GITHUB_REF_NAME" --title "$RELEASE_TITLE" --notes-file release-notes.md
