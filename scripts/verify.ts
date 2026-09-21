@@ -5663,8 +5663,15 @@ console.log('PASS sav — v2 mimo komentování se migruje, rozehrané fleky z v
   /* Kolikrát na tom v PŘIROZENÉ hře doopravdy záleželo — jen do hlášky testu.
    * Že to bývá nula, je přesně důvod, proč jsou (D) a (E) postavené ručně. */
   let mattered = 0;
+  /*
+   * Rozpočet na KAŽDOU variantu zvlášť. Se sdíleným by stačilo, aby ho vyčerpal
+   * volený (jde první), a licitovaný by se nespustil vůbec — a jediný strážce
+   * (`cases >= 8`) by pořád prošel. Test, který tiše neměří, je přesně to, co
+   * si §39 vyčítá jinde.
+   */
+  const perVariant: Record<string, number> = { voleny: 0, licitovany: 0 };
   for (const variant of ['voleny', 'licitovany'] as const) {
-    for (let seed = 1; seed <= 140 && cases < 24; seed += 1) {
+    for (let seed = 1; seed <= 140 && perVariant[variant] < 12; seed += 1) {
       let st: StC = apC(initC(cfgC(variant), (seed % 3) as SeatC), { type: 'deal', seed });
       let moveNo = 0;
       let guard = 0;
@@ -5700,6 +5707,7 @@ console.log('PASS sav — v2 mimo komentování se migruje, rozehrané fleky z v
               if (best.delta > silent.delta + 1e-9) mattered += 1;
             }
             cases += 1;
+            perVariant[variant] += 1;
             break; // jedno rozdání = jeden případ, ať je vzorek pestrý
           }
         }
@@ -5720,7 +5728,12 @@ console.log('PASS sav — v2 mimo komentování se migruje, rozehrané fleky z v
     }
   }
 
-  assert.ok(cases >= 8, `málo případů „vše za mnou" (${cases}) — kontrola by nic neověřila`);
+  for (const variant of ['voleny', 'licitovany'] as const) {
+    assert.ok(
+      perVariant[variant] >= 4,
+      `málo případů „vše za mnou" ve variantě ${variant} (${perVariant[variant]}) — ta by se neověřila`,
+    );
+  }
 
   /*
    * Dvě věci, na kterých plán stojí, se v přirozené hře NEPOTKAJÍ — a kdyby se
@@ -5742,35 +5755,146 @@ console.log('PASS sav — v2 mimo komentování se migruje, rozehrané fleky z v
     const { trickWinner: winnerC } = await import('../src/lib/rules/tricks');
     const TRUMP = 0 as const; // červené
 
-    /** Stav tři štychy před koncem, kde `mine` jsou VŠECHNY zbylé trumfy. */
-    const mkClaim = (mine: readonly number[]): StC => {
-      const opp1 = [8, 9, 10];
-      const opp2 = [11, 12, 13];
-      const talonC = [14, 15];
+    /**
+     * Stav tři štychy před koncem, stavěný tak, aby se dal ohýbat.
+     *
+     * Výchozí podoba: sedadlo 0 je aktér barevné hry, drží `mine` (typicky
+     * všechny zbylé trumfy), soupeři jen cizí barvy a zbytek balíčku leží
+     * v sedmi odehraných štychách. Přes `opts` se dá přesunout karta mezi
+     * ruku soupeře a talon, změnit závazek nebo předat talon jinému sedadlu —
+     * tím se dostanou na kontrolu i větve, které přirozená hra nepotká.
+     */
+    const mkClaim = (mine: readonly number[], opts: {
+      mode?: 'hra' | 'betl' | 'durch';
+      trump?: 0 | null;
+      declarer?: SeatC;
+      /** Karta, která `mine` přebije — kam se položí. */
+      beater?: { card: number; where: 'talon' | 'opponent' };
+      talonOwner?: SeatC | null;
+      /** `talonKnowledge` sedadla 0 (default: talon, když ho drží). */
+      knows0?: number[];
+      leader?: SeatC;
+    } = {}): StC => {
+      const mode = opts.mode ?? 'hra';
+      const trump = opts.trump === undefined ? (0 as const) : opts.trump;
+      const declarer = opts.declarer ?? 0;
+      let opp1 = [8, 9, 10];
+      let opp2 = [11, 12, 13];
+      let talonC = [14, 15];
+      if (opts.beater) {
+        // přebíječ musí někde být — vždycky na úkor jedné „neškodné" karty
+        if (opts.beater.where === 'talon') talonC = [opts.beater.card, 15];
+        else opp1 = [opts.beater.card, 9, 10];
+      }
       const held = [...mine, ...opp1, ...opp2, ...talonC];
+      assert.equal(new Set(held).size, held.length, 'stav si nesmí kartu zdvojit');
       const gone = DECK_C.filter((c) => !held.includes(c));
       assert.equal(gone.length, 21, 'sedm odehraných štychů = 21 karet');
       const playedC: { plays: { seat: SeatC; card: number }[]; winner: SeatC }[] = [];
       const wonC: [number[], number[], number[]] = [[], [], []];
       for (let i = 0; i < 7; i += 1) {
         const plays = ([0, 1, 2] as SeatC[]).map((seat, k) => ({ seat, card: gone[i * 3 + k] }));
-        const w = winnerC(plays, TRUMP, 'hra');
+        const w = winnerC(plays, trump, mode);
         playedC.push({ plays, winner: w });
         wonC[w].push(...plays.map((x) => x.card));
       }
+      const owner = opts.talonOwner === undefined ? (0 as SeatC | null) : opts.talonOwner;
+      const know0 = opts.knows0 ?? (owner === 0 ? talonC.slice() : []);
+      const lead = opts.leader ?? 0;
       return {
         config: cfgC('voleny'), dealer: 2, seed: 1,
         hands: [mine.slice(), opp1, opp2], unseen: [], talon: talonC.slice(),
-        revealedTrump: null, talonOwner: 0, talonKnowledge: [talonC.slice(), [], []],
+        revealedTrump: null, talonOwner: owner, talonKnowledge: [know0, [], []],
         history: [], handResults: [], ledger: [0, 0, 0], handNo: 0,
         // sedma i kilo `null` = NEhlášené, takže `legalActions` nic nebrzdí
-        contract: { mode: 'hra', trump: TRUMP, declarer: 0, sedma: null, kilo: null, dveSedmy: false },
+        contract: { mode, trump, declarer, sedma: null, kilo: null, dveSedmy: false },
         phase: {
-          name: 'tricks', trickNo: 7, leader: 0, toAct: 0,
+          name: 'tricks', trickNo: 7, leader: lead, toAct: lead,
           trick: [], played: playedC, won: wonC, marriages: [],
         },
       } as unknown as StC;
     };
+
+    /*
+     * (F) KDY SE NABÍDKA NESMÍ OBJEVIT.
+     *
+     * Do teď nic netvrdilo, že `claimPlan` někdy vrátí `null` — a bez toho
+     * nešlo odlišit poctivou podmínku od té, která kouká, kam nemá. Přirozená
+     * smyčka to nezachytí ze své podstaty: dívá se jen na sedadla, kde už
+     * nabídka padla.
+     */
+    {
+      const trumpKing = cardC(0, KRAL_C);
+      const trumpAce = cardC(0, ESO_C);
+      const mineNoAce = [trumpKing, cardC(0, R10_C), cardC(0, R7_C)];
+
+      // (i) jediný přebíječ leží v talonu, který hráč NEZNÁ → nabídka nesmí přijít
+      const blind = mkClaim(mineNoAce, { beater: { card: trumpAce, where: 'talon' }, talonOwner: 1 });
+      assert.equal(
+        claimPlan(viewC(blind, 0)), null,
+        'neznámý talon se musí počítat jako karty, které soupeř MŮŽE mít',
+      );
+
+      // (ii) tentýž přebíječ v ruce soupeře → taky ne (poctivá podmínka)
+      const held = mkClaim(mineNoAce, { beater: { card: trumpAce, where: 'opponent' }, talonOwner: 1 });
+      assert.equal(claimPlan(viewC(held, 0)), null, 'trumfové eso u soupeře nabídku vylučuje');
+
+      // (iii) a když hráč talon ZNÁ, protože ho sám odložil, nabídka přijít MUSÍ —
+      //       jinak by (i) procházelo i tehdy, kdyby funkce vracela pořád null
+      const knows = mkClaim(mineNoAce, {
+        beater: { card: trumpAce, where: 'talon' }, talonOwner: 0,
+      });
+      assert.ok(
+        claimPlan(viewC(knows, 0)) !== null,
+        'vlastní odložený talon je mimo hru — nabídka platit musí',
+      );
+
+      /*
+       * (iv) `talonKnowledge` NENÍ „co leží mimo hru". Při převzetí ve voleném
+       * si nový aktér talon vezme do ruky a původnímu tazateli ta znalost
+       * zůstane. Kdo by odečítal ji, vyškrtne si karty, které soupeř drží.
+       * (Dnes nedosažitelné — po převzetí se hraje betl nebo durch a obránce
+       * se v durchu na výnos nedostane —, ale smysl funkce to drží.)
+       */
+      const stale = mkClaim(mineNoAce, {
+        beater: { card: trumpAce, where: 'opponent' }, talonOwner: null, knows0: [trumpAce],
+      });
+      assert.equal(
+        claimPlan(viewC(stale, 0)), null,
+        '„kdysi jsem tu kartu viděl v talonu" neznamená, že je mimo hru',
+      );
+    }
+
+    /*
+     * (G) Betl: brát štychy je tam prohra, takže nabídka nesmí přijít NIKDY —
+     * a podmínka sama je na módu nezávislá, `beats()` odpoví „nikdo mě
+     * nepřebije" i betlovému aktérovi s nejvyššími kartami.
+     */
+    {
+      // žaludy (3): soupeři drží zelené (8–15), takže se ruce nepřekryjí
+      const top = [cardC(3, ESO_C), cardC(3, KRAL_C), cardC(3, SVRSEK_C)];
+      const st = mkClaim(top, { mode: 'betl', trump: null });
+      assert.equal(claimPlan(viewC(st, 0)), null, 'v betlu se „vše za mnou" nenabízí');
+      assert.equal(shouldAnnounce(viewC(st, 0), top[1]), false, 'a v betlu se nehlásí ani hlášky');
+    }
+
+    /*
+     * (H) Durch: podporovaný mód s JINOU cestou kódem (bez trumfu se přeskočí
+     * větev se sedmou a řadí se přirozeným pořadím, kde desítka klesá pod
+     * spodka). Jestli ho přirozená smyčka potká, je věc náhody — tady je jistý.
+     */
+    {
+      const top = [cardC(3, ESO_C), cardC(3, KRAL_C), cardC(3, SVRSEK_C)];
+      const st = mkClaim(top, { mode: 'durch', trump: null });
+      const plan = claimPlan(viewC(st, 0));
+      assert.ok(plan !== null, 'v durchu s nejvyššími kartami nabídka platit musí');
+      const out = playOut(st, 0, plan, true);
+      assert.ok(out !== null && out.alwaysLed, 'a aktér musí vynášet do všech zbylých štychů');
+      for (const alt of permutations(plan)) {
+        const got = playOut(st, 0, alt, true);
+        if (got !== null) assert.ok(out.delta >= got.delta - 1e-9, 'plán v durchu musí být optimální');
+      }
+    }
 
     // (D) tichá sedma — vynést ji první znamená přijít o ni
     {
@@ -5800,9 +5924,74 @@ console.log('PASS sav — v2 mimo komentování se migruje, rozehrané fleky z v
         `trumfová hláška musí být znát: s hláškou ${withIt.delta}, bez ní ${without.delta}`,
       );
     }
+  /*
+   * Controller: pojistky kolem „vše za mnou" (§39).
+   *
+   * Smoke klikne na tlačítko a počká na zúčtování — to je šťastná cesta. Odmítnutí
+   * mimo výnos, zhasnutí při novém rozdání a hlavně to, že se nezahraje ani jedna
+   * karta navíc, tím ověřené není. `claimDelayMs` vzniklo přesně kvůli tomuhle
+   * testu, tak ať ho něco používá.
+   */
+  {
+    const { MatchController: MCC } = await import('../src/lib/match/controller');
+    const { think: thinkMC } = await import('../src/lib/ai/think');
+
+    const driverC = {
+      think: async (req: Parameters<typeof thinkMC>[0] & { requestId: number }) =>
+        thinkMC({ view: req.view, difficulty: 'easy', seed: req.seed, budgetMs: 0 }),
+      cancel: () => {},
+    };
+    const napC = (ms: number) => new Promise((r) => setTimeout(r, ms));
+    const mkController = (st: StC) => new MCC(driverC, {
+      config: cfgC('voleny'), humanSeat: 0, difficulty: 'easy', budgetMs: 0,
+      seedSource: () => 7, aiDelayMs: 0, claimDelayMs: 0,
+    }, st);
+
+    // (1) uprostřed rozehraného štychu se nabídka odmítá
+    {
+      const st = mkClaim([cardC(0, ESO_C), cardC(0, R10_C), cardC(0, R7_C)]);
+      const mid = {
+        ...st,
+        phase: { ...(st.phase as object), toAct: 1, trick: [{ seat: 0, card: cardC(0, ESO_C) }] },
+      } as unknown as StC;
+      const c = mkController(mid);
+      assert.equal(c.claimRest(), false, 'doprostřed štychu se „vše za mnou" nabídnout nesmí');
+      c.stop();
+    }
+
+    // (2) na výnosu se přijme a dohraje se PŘESNĚ plán — ani karta navíc
+    {
+      const st = mkClaim([cardC(0, ESO_C), cardC(0, R10_C), cardC(0, R7_C)]);
+      const plan = claimPlan(viewC(st, 0));
+      assert.ok(plan !== null, 'testovací stav musí nabídku mít');
+      const c = mkController(st);
+      assert.equal(c.claimRest(), true, 'na výnosu se „vše za mnou" přijmout musí');
+      for (let i = 0; i < 200 && c.state.phase.name !== 'scored'; i += 1) await napC(2);
+      assert.equal(c.state.phase.name, 'scored', 'dohrávka musí dojít k zúčtování');
+      const mine = c.state.history.filter((a) => a.type === 'play' && a.seat === 0).map((a) => (a as { card: number }).card);
+      assert.deepEqual(mine, plan, 'zahrát se musí přesně plán, ve stejném pořadí');
+      c.stop();
+    }
+
+    // (3) po dohrání příznak zhasne — jinak by doskočila do další hry
+    {
+      const st = mkClaim([cardC(0, ESO_C), cardC(0, R10_C), cardC(0, R7_C)]);
+      const c = mkController(st);
+      assert.equal(c.isClaiming, false, 'před kliknutím se nedohrává');
+      assert.equal(c.claimRest(), true, 'nabídka platí');
+      assert.equal(c.isClaiming, true, 'po přijetí dohrávka běží');
+      for (let i = 0; i < 200 && c.state.phase.name !== 'scored'; i += 1) await napC(2);
+      assert.equal(c.state.phase.name, 'scored', 'dohrávka musí dojít k zúčtování');
+      assert.equal(c.isClaiming, false, 'a po zúčtování musí příznak zhasnout');
+      c.stop();
+    }
+    }
   }
 
-  console.log(`PASS vše za mnou — plán je optimální (${cases} přirozených případů, z toho ${mattered}× na pořadí záleželo; tichá sedma a hláška zvlášť)`);
+  console.log(
+    `PASS vše za mnou — plán je optimální (volený ${perVariant.voleny}, licitovaný ${perVariant.licitovany} případů, `
+    + `z toho ${mattered}× na pořadí záleželo; betl, durch, tichá sedma a hláška zvlášť)`,
+  );
 }
 
 
