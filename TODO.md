@@ -25,7 +25,13 @@ talon, odhodi, pak hlasi betl/durch), poradi mluveni ve smeru hry od aktera, str
 licitovanem na botach, talon ve vyuctovani licitovaneho betlu/durchu rubem. Odlozeno: vynosova
 karta betlu/durchu licem dolu pred ohlasenim (IV/6–7), „sto proti“ proti hlasenemu stu.
 
-"vse za mnou"
+~~"vse za mnou"~~ ✅ tlacitko v sehravce, kdyz uz hraci nikdo zadny stych
+nevezme (design doc §39). Podminka se pocita z POHLEDU hrace, ne ze stavu —
+jinak by prozrazovala cizi karty i tim, ze se tlacitko neukaze. Zbytek se
+doopravdy dohraje (obrana smi hlasit hlasky i pri odhozu, CSM cl. III/3),
+plan jen radi vlastni ruku: ticha sedma nakonec, hlasit co jde.
+Odlozeno: "nic za mnou" pro betl — aktér nevynasi, dukaz je tezsi; a nevime,
+jestli to original umel (patri k overeni v DOSBoxu).
 
 ~~pri betlu/durchu - nemela by byt ruka desitka razena jinak?~~ ✅ vejir se ted
 radi podle rezimu hry: v betlu/durchu klesa desitka mezi spodka a devitku

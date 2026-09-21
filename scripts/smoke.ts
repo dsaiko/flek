@@ -14,6 +14,8 @@ import { apply, initialState } from '../src/lib/rules/engine';
 import { legalActions } from '../src/lib/rules/legal';
 import { defaultConfig } from '../src/lib/rules/sazby';
 import { view } from '../src/lib/rules/view';
+import { claimPlan } from '../src/lib/rules/claim';
+import { think } from '../src/lib/ai/think';
 import { VERSION as SAVE_VERSION } from '../src/lib/match/persist';
 import { TALK_TABLES } from '../src/lib/ui/tableTalk';
 
@@ -1070,6 +1072,49 @@ if (cspViolations.length > 0) {
   console.log('Nabídka licitace (9 tlačítek) se ve všech čtyřech jazycích vyhne jmenovce i hromádce');
 }
 
+/*
+ * „Vše za mnou" (§39): tlačítko se v sehrávce ukáže, kliknutí dohraje zbytek
+ * bez dalšího klikání a hra dojde k zúčtování. Na geometrii ani na pravidla
+ * to není — ta drží verify; tohle je o tom, že je to napojené: `claimPlan`
+ * v UI, `claimRest()` v controlleru a smyčka, která sama posílá karty.
+ */
+{
+  const claim = await browser.newPage({ viewport: { width: 1400, height: 900 } });
+  claim.on('dialog', (d) => void d.accept());
+  await claim.goto(url);
+  await claim.evaluate(([match, settings]) => {
+    localStorage.setItem('flek.match.v1', match);
+    localStorage.setItem('flek.settings.v1', settings);
+  }, [claimSave(), JSON.stringify({ variant: 'licitovany', sounds: false })]);
+  await claim.reload();
+
+  const button = claim.locator('#actions .action-btn', { hasText: /Vše za mnou/i });
+  try {
+    await button.waitFor({ timeout: 15000 });
+  } catch {
+    const shown = (await claim.locator('#actions').innerText()).replace(/\s+/g, ' ').trim();
+    console.error(`CHYBA: tlačítko „Vše za mnou" se neukázalo (v liště je: „${shown}")`);
+    await claim.close();
+    await browser.close();
+    process.exit(1);
+  }
+  const handBefore = await claim.locator('#hand .card-btn').count();
+  await button.click();
+  try {
+    // zúčtování: bez jediného dalšího kliknutí
+    await claim.waitForSelector('#center-float .felt-panel:not(.warn)', { timeout: 20000 });
+  } catch {
+    const left = await claim.locator('#hand .card-btn').count();
+    console.error(`CHYBA: „Vše za mnou" hru nedohrálo — v ruce zbývá ${left} z ${handBefore} karet`);
+    await claim.screenshot({ path: join(outDir, 'smoke-claim-fail.png') });
+    await claim.close();
+    await browser.close();
+    process.exit(1);
+  }
+  await claim.close();
+  console.log(`Vše za mnou: tlačítko dohrálo ${handBefore} karet bez dalšího kliknutí`);
+}
+
 await browser.close();
 
 // vyčerpání smyčky NENÍ úspěch — jinak by test procházel, i když hra uvízne
@@ -1202,6 +1247,29 @@ function auctionSave(): string {
     throw new Error(`scénář pro nabídku licitace nedal devět možností (fáze ${st.phase.name}, ${offer.length})`);
   }
   return JSON.stringify({ v: SAVE_VERSION, state: st });
+}
+
+/**
+ * Sav, kde je na tahu ČLOVĚK a platí nabídka „Vše za mnou" (§39).
+ *
+ * Staví se enginem se stejnou AI, jaká hraje v prohlížeči (pevný počet
+ * iterací, ne časový rozpočet — jinak by stav vycházel pokaždé jinak).
+ * Licitovaný, seed 5: člověku zbývají čtyři karty a nikdo mu je nevezme.
+ */
+function claimSave(): string {
+  let st = apply(initialState(defaultConfig('licitovany'), 2), { type: 'deal', seed: 5 });
+  let moveNo = 0;
+  let guard = 0;
+  while (st.phase.name !== 'scored' && (guard += 1) < 200) {
+    const plan = claimPlan(view(st, 0));
+    if (plan !== null && plan.length >= 3) return JSON.stringify({ v: SAVE_VERSION, state: st });
+    const actor = ([0, 1, 2] as const).find((s) => legalActions(view(st, s)).length > 0);
+    if (actor === undefined) break;
+    st = apply(st, think({
+      view: view(st, actor), difficulty: 'normal', seed: 5000 + (moveNo += 1), budgetMs: 5000, iterations: 40,
+    }).action);
+  }
+  throw new Error('scénář pro „vše za mnou" nenastal');
 }
 
 async function tableClip(): Promise<{ x: number; y: number; width: number; height: number }> {

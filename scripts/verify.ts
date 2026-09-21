@@ -5584,6 +5584,229 @@ console.log('PASS sav — v2 mimo komentování se migruje, rozehrané fleky z v
 }
 
 /*
+ * „Vše za mnou" (§39) — nabídka nesmí prozradit cizí karty a plán nesmí stát
+ * hráče peníze.
+ *
+ * Druhé je to podstatnější: tlačítko hráč zmáčkne proto, aby nemusel klikat,
+ * ne proto, aby hrál hůř. Kontroluje se tedy VÝSLEDEK — vyúčtování po plánu
+ * se porovná se VŠEMI ostatními pořadími vlastní ruky. Kdyby plán vynesl
+ * trumfovou sedmu dřív, přišel by o tichou sedmu, a tahle kontrola to uvidí
+ * jako menší částku, ne jako „jiné pořadí".
+ */
+{
+  const { claimPlan, shouldAnnounce } = await import('../src/lib/rules/claim');
+  const { initialState: initC, apply: apC } = await import('../src/lib/rules/engine');
+  const { legalActions: legalC } = await import('../src/lib/rules/legal');
+  const { defaultConfig: cfgC } = await import('../src/lib/rules/sazby');
+  const { view: viewC } = await import('../src/lib/rules/view');
+  const { think: thinkC } = await import('../src/lib/ai/think');
+  type StC = ReturnType<typeof initC>;
+  type SeatC = 0 | 1 | 2;
+
+  /** Pevná politika soupeřů: hlásit, co jde, jinak první legální karta. */
+  const opponentMove = (st: StC, seat: SeatC) => {
+    const acts = legalC(viewC(st, seat));
+    return acts.find((a) => a.type === 'play' && a.announceMarriage) ?? acts[0];
+  };
+
+  /**
+   * Dohraj od `st`, kde `me` hraje karty v pořadí `order`, a vrať jeho deltu —
+   * nebo null, když je to pořadí nelegální (některou kartu v tu chvíli hrát
+   * nesmí, třeba hlášenou sedmu před posledním štychem).
+   */
+  const playOut = (
+    st: StC, me: SeatC, order: readonly number[], announce: boolean,
+  ): { delta: number; alwaysLed: boolean } | null => {
+    let s = st;
+    let i = 0;
+    let guard = 0;
+    /*
+     * Drží `me` po celou dobu výnos? To je přesně to, co nabídka slibuje: kdo
+     * bere všechny zbylé štychy, vynáší do všech. Kdyby byla podmínka
+     * v `claimPlan` slabá, soupeř by jeden štych sebral a hráč by se octl
+     * uprostřed rozehraného štychu — tohle to chytí.
+     */
+    let alwaysLed = true;
+    while (s.phase.name === 'tricks' && (guard += 1) < 60) {
+      const actor = ([0, 1, 2] as SeatC[]).find((x) => legalC(viewC(s, x)).length > 0);
+      if (actor === undefined) break;
+      if (actor === me) {
+        if (s.phase.trick.length > 0) alwaysLed = false;
+        const v = viewC(s, me);
+        const want = order[i];
+        i += 1;
+        const wish = announce && shouldAnnounce(v, want);
+        const act = legalC(v).find((a) => a.type === 'play' && a.card === want && a.announceMarriage === wish)
+          ?? legalC(v).find((a) => a.type === 'play' && a.card === want);
+        if (act === undefined) return null; // tohle pořadí legální není
+        s = apC(s, act);
+      } else {
+        s = apC(s, opponentMove(s, actor));
+      }
+    }
+    if (s.phase.name !== 'scored') return null;
+    return { delta: s.handResults[s.handResults.length - 1].delta[me], alwaysLed };
+  };
+
+  /** Všechna pořadí ruky (ruka je na konci hry krátká, tak to projde celé). */
+  const permutations = (cards: readonly number[]): number[][] => {
+    if (cards.length <= 1) return [cards.slice()];
+    const out: number[][] = [];
+    for (let k = 0; k < cards.length; k += 1) {
+      const rest = [...cards.slice(0, k), ...cards.slice(k + 1)];
+      for (const tail of permutations(rest)) out.push([cards[k], ...tail]);
+    }
+    return out;
+  };
+
+  let cases = 0;
+  /* Kolikrát na tom v PŘIROZENÉ hře doopravdy záleželo — jen do hlášky testu.
+   * Že to bývá nula, je přesně důvod, proč jsou (D) a (E) postavené ručně. */
+  let mattered = 0;
+  for (const variant of ['voleny', 'licitovany'] as const) {
+    for (let seed = 1; seed <= 140 && cases < 24; seed += 1) {
+      let st: StC = apC(initC(cfgC(variant), (seed % 3) as SeatC), { type: 'deal', seed });
+      let moveNo = 0;
+      let guard = 0;
+      while (st.phase.name !== 'scored' && (guard += 1) < 200) {
+        if (st.phase.name === 'tricks') {
+          const me = ([0, 1, 2] as SeatC[]).find((s2) => claimPlan(viewC(st, s2)) !== null);
+          const plan = me === undefined ? null : claimPlan(viewC(st, me));
+          // jen krátké ruce: permutací je faktoriál, delší by test protáhl bez užitku
+          if (me !== undefined && plan !== null && plan.length >= 2 && plan.length <= 5) {
+            const best = playOut(st, me, plan, true);
+            assert.ok(best !== null, 'plán „vše za mnou" musí být celý legální');
+            assert.ok(
+              best.alwaysLed,
+              `„vše za mnou" slíbilo štychy, které nepřišly (${variant}, seed ${seed})`,
+            );
+
+
+            // (B) žádné jiné pořadí nesmí vydělat víc
+            for (const alt of permutations(plan)) {
+              const got = playOut(st, me, alt, true);
+              if (got === null) continue; // nelegální pořadí se nepočítá
+              assert.ok(
+                best.delta >= got.delta - 1e-9,
+                `plán „vše za mnou" není optimální: ${best.delta} vs ${got.delta} (${variant}, seed ${seed})`,
+              );
+              if (got.delta < best.delta - 1e-9) mattered += 1;
+            }
+
+            // (C) nehlásit hlášky nesmí být lepší — a někdy to musí být znát
+            const silent = playOut(st, me, plan, false);
+            if (silent !== null) {
+              assert.ok(best.delta >= silent.delta - 1e-9, 'nehlásit hlášky nesmí vydělat víc');
+              if (best.delta > silent.delta + 1e-9) mattered += 1;
+            }
+            cases += 1;
+            break; // jedno rozdání = jeden případ, ať je vzorek pestrý
+          }
+        }
+        const actor = ([0, 1, 2] as SeatC[]).find((s2) => legalC(viewC(st, s2)).length > 0);
+        if (actor === undefined) break;
+        /*
+         * `iterations`, NE `budgetMs`: časový rozpočet dá na každém stroji (a
+         * v každém běhu) jiný počet iterací, takže by AI hrála pokaždé jinak,
+         * test by sbíral jiné případy a jednou za čas by probliknul. Pevný
+         * počet iterací je deterministický; `budgetMs` je tu jen jako strop,
+         * aby se pomalý stroj nezasekl.
+         */
+        st = apC(st, thinkC({
+          view: viewC(st, actor), difficulty: 'normal',
+          seed: seed * 1000 + (moveNo += 1), budgetMs: 5000, iterations: 40,
+        }).action);
+      }
+    }
+  }
+
+  assert.ok(cases >= 8, `málo případů „vše za mnou" (${cases}) — kontrola by nic neověřila`);
+
+  /*
+   * Dvě věci, na kterých plán stojí, se v přirozené hře NEPOTKAJÍ — a kdyby se
+   * na ně čekalo, kontrola by tiše neměřila nic:
+   *
+   *  - TICHÁ sedma: v 1000 rozdáních nepadlo ani jedno „vše za mnou" s trumfovou
+   *    sedmou, kterou hráč NEhlásil. Kdo má tolik trumfů, ten ji ohlásí — a
+   *    hlášenou hlídá `legalActions`, takže permutace výš na ní kousnout nemůžou.
+   *    Pravidlo „sedma nakonec" z `claimPlan` je potřeba právě a jen pro tu tichou.
+   *  - Nehlášená HLÁŠKA v ruce: kdo ji drží, obvykle ji stihne hlásit dřív.
+   *
+   * Oba stavy se proto staví natvrdo: hráč drží všechny zbylé trumfy, soupeři
+   * jen cizí barvy (takže nabídka platí) a zbytek balíčku leží v sedmi
+   * odehraných štychách.
+   */
+  {
+    const { DECK: DECK_C, card: cardC, R7: R7_C, R10: R10_C, ESO: ESO_C, KRAL: KRAL_C, SVRSEK: SVRSEK_C } =
+      await import('../src/lib/cards');
+    const { trickWinner: winnerC } = await import('../src/lib/rules/tricks');
+    const TRUMP = 0 as const; // červené
+
+    /** Stav tři štychy před koncem, kde `mine` jsou VŠECHNY zbylé trumfy. */
+    const mkClaim = (mine: readonly number[]): StC => {
+      const opp1 = [8, 9, 10];
+      const opp2 = [11, 12, 13];
+      const talonC = [14, 15];
+      const held = [...mine, ...opp1, ...opp2, ...talonC];
+      const gone = DECK_C.filter((c) => !held.includes(c));
+      assert.equal(gone.length, 21, 'sedm odehraných štychů = 21 karet');
+      const playedC: { plays: { seat: SeatC; card: number }[]; winner: SeatC }[] = [];
+      const wonC: [number[], number[], number[]] = [[], [], []];
+      for (let i = 0; i < 7; i += 1) {
+        const plays = ([0, 1, 2] as SeatC[]).map((seat, k) => ({ seat, card: gone[i * 3 + k] }));
+        const w = winnerC(plays, TRUMP, 'hra');
+        playedC.push({ plays, winner: w });
+        wonC[w].push(...plays.map((x) => x.card));
+      }
+      return {
+        config: cfgC('voleny'), dealer: 2, seed: 1,
+        hands: [mine.slice(), opp1, opp2], unseen: [], talon: talonC.slice(),
+        revealedTrump: null, talonOwner: 0, talonKnowledge: [talonC.slice(), [], []],
+        history: [], handResults: [], ledger: [0, 0, 0], handNo: 0,
+        // sedma i kilo `null` = NEhlášené, takže `legalActions` nic nebrzdí
+        contract: { mode: 'hra', trump: TRUMP, declarer: 0, sedma: null, kilo: null, dveSedmy: false },
+        phase: {
+          name: 'tricks', trickNo: 7, leader: 0, toAct: 0,
+          trick: [], played: playedC, won: wonC, marriages: [],
+        },
+      } as unknown as StC;
+    };
+
+    // (D) tichá sedma — vynést ji první znamená přijít o ni
+    {
+      const st = mkClaim([cardC(TRUMP, ESO_C), cardC(TRUMP, R10_C), cardC(TRUMP, R7_C)]);
+      const plan = claimPlan(viewC(st, 0));
+      assert.ok(plan !== null, 'se všemi zbylými trumfy musí nabídka platit');
+      assert.equal(plan[plan.length - 1], cardC(TRUMP, R7_C), 'trumfová sedma patří na konec plánu');
+      const byPlan = playOut(st, 0, plan, true);
+      const sevenFirst = playOut(st, 0, [cardC(TRUMP, R7_C), cardC(TRUMP, ESO_C), cardC(TRUMP, R10_C)], true);
+      assert.ok(byPlan !== null && sevenFirst !== null, 'obě pořadí musí jít dohrát');
+      assert.ok(
+        byPlan.delta > sevenFirst.delta,
+        `tichá sedma musí být znát: podle plánu ${byPlan.delta}, se sedmou první ${sevenFirst.delta}`,
+      );
+    }
+
+    // (E) nehlášená trumfová hláška — bez ohlášení se hra prohraje
+    {
+      const st = mkClaim([cardC(TRUMP, KRAL_C), cardC(TRUMP, SVRSEK_C), cardC(TRUMP, R7_C)]);
+      const plan = claimPlan(viewC(st, 0));
+      assert.ok(plan !== null, 'nabídka musí platit i s králem a svrškem');
+      const withIt = playOut(st, 0, plan, true);
+      const without = playOut(st, 0, plan, false);
+      assert.ok(withIt !== null && without !== null, 'obě varianty musí jít dohrát');
+      assert.ok(
+        withIt.delta > without.delta,
+        `trumfová hláška musí být znát: s hláškou ${withIt.delta}, bez ní ${without.delta}`,
+      );
+    }
+  }
+
+  console.log(`PASS vše za mnou — plán je optimální (${cases} přirozených případů, z toho ${mattered}× na pořadí záleželo; tichá sedma a hláška zvlášť)`);
+}
+
+
+/*
  * Vydávací workflow: do těla `run:` nepatří výraz `${{ }}`.
  *
  * GitHub ho dosadí do textu skriptu JEŠTĚ PŘED tím, než ho shell rozebere —
