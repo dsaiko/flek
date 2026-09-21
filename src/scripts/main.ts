@@ -133,6 +133,7 @@ const table = new TableUI($('table'), {
   },
   onDeal: () => controller.dealNext(),
   onNewMatch: () => newMatch(),
+  onClaim: () => void controller.claimRest(),
   onVariant: (variant) => {
     if (settings.variant === variant) return;
     settings.variant = variant;

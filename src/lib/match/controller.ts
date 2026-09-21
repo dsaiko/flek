@@ -10,6 +10,7 @@ import type { Difficulty } from '../ai/heuristics';
 import { playPolicy } from '../ai/heuristics';
 import type { ThinkStats } from '../ai/ismcts';
 import { Random } from '../random';
+import { claimPlan, shouldAnnounce } from '../rules/claim';
 import { apply, initialState } from '../rules/engine';
 import { legalActions, passSettlesWithoutPlay } from '../rules/legal';
 import type { GameState, PlayerAction, PlayerView, RulesConfig, Seat } from '../rules/types';
@@ -61,6 +62,13 @@ export interface MatchOptions {
    * (aby šla ověřit i cesta, kdy selže i fallback).
    */
   fallbackPolicy?: (v: PlayerView, rng: Random) => PlayerAction;
+  /**
+   * Prodleva mezi kartami při „vše za mnou" (§39); výchozí 260 ms.
+   *
+   * Není nula schválně: hráč si zvolil, že se to dohraje za něj, ne že to
+   * zmizí. Karty mají padat tak, aby se dalo koukat, co se stalo.
+   */
+  claimDelayMs?: number;
 }
 
 /** Kolik selhání za sebou se snese, než se AI smyčka vzdá (ochrana proti zacyklení). */
@@ -85,6 +93,8 @@ export class MatchController {
   private readonly aiSeedBase: number;
   /** pořadové číslo AI tahu v tomto zápase (seedy jdou z něj, ne z historie) */
   private aiMoveNo = 0;
+  /** Běží „vše za mnou" (§39)? Platí do konce rozdání, pak se zhasne. */
+  private claiming = false;
 
   constructor(driver: AiDriver, opts: MatchOptions, resumeState?: GameState) {
     this.driver = driver;
@@ -131,6 +141,8 @@ export class MatchController {
    * a smyčka by se už nikdy nerozjela.
    */
   dispatch(action: PlayerAction): void {
+    // nové rozdání zhasíná „vše za mnou" — plán platil pro minulou hru
+    if (action.type === 'deal') this.claiming = false;
     const next = apply(this.state, action);
     this.cancelPending();
     this.state = next;
@@ -159,11 +171,65 @@ export class MatchController {
     }
   }
 
+  /**
+   * „Vše za mnou" (§39) — zbylé štychy jsou hráčovy, dohraje se to za něj.
+   *
+   * NEPOČÍTÁ výsledek: hra se doopravdy dohraje kartu po kartě, AI odpovídá
+   * jako vždycky (a hlásí si své hlášky, o kterých hráč vědět nemůže — ČSM
+   * čl. III/3), takže vyúčtování vyjde stejně jako při ručním dohrání.
+   *
+   * Nabídku si UI ověřuje samo přes `claimPlan`; tady se ověřuje znovu, ať
+   * zdrojem pravdy zůstane pohled hráče a ne stav tlačítka.
+   */
+  claimRest(): boolean {
+    if (claimPlan(this.humanView()) === null) return false;
+    this.claiming = true;
+    this.playClaimed();
+    return true;
+  }
+
+  /** Dohrává „vše za mnou" právě teď? (UI podle toho zkracuje animace.) */
+  get isClaiming(): boolean {
+    return this.claiming;
+  }
+
+  /**
+   * Jedna karta z plánu, pokud je hráč na tahu a nabídka pořád platí.
+   *
+   * Přepočítává se z aktuálního pohledu při každém tahu, ne jednou na začátku:
+   * kdyby se stav mezitím pohnul jinak, než plán čekal, dohrávka se prostě
+   * zastaví a hráč doklikne zbytek sám — nikdy se nezahraje karta, kterou
+   * `legalActions` v tu chvíli nenabízí.
+   */
+  private playClaimed(): void {
+    if (!this.claiming || this.stopped) return;
+    if (this.state.phase.name !== 'tricks') { this.claiming = false; return; }
+    const v = this.humanView();
+    const plan = claimPlan(v);
+    if (plan === null || plan.length === 0) return; // není na tahu, nebo už nabídka neplatí
+    const next = plan[0];
+    const legal = legalActions(v);
+    const wanted = legal.find(
+      (a) => a.type === 'play' && a.card === next && a.announceMarriage === shouldAnnounce(v, next),
+    ) ?? legal.find((a) => a.type === 'play' && a.card === next);
+    if (wanted === undefined) { this.claiming = false; return; }
+    const historyLen = this.state.history.length;
+    setTimeout(() => {
+      if (this.stopped || this.state.history.length !== historyLen) return;
+      try {
+        this.dispatch(wanted);
+      } catch {
+        this.claiming = false; // stav se pohnul jinak — zbytek doklikne člověk
+      }
+    }, this.opts.claimDelayMs ?? 260);
+  }
+
   private afterChange(): void {
     this.opts.autosave?.(this.state);
     for (const fn of this.listeners) fn(this.state);
     void this.maybeRunAi();
     this.maybeAutoGood();
+    this.playClaimed();
   }
 
   /** Když člověk nemá žádnou volbu (jen „dobrá"/pas), potvrď za něj po pauze. */

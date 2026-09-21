@@ -60,6 +60,14 @@ const STRINGS = {
   kilo: { cs: 'Kilo', en: 'Hundred', de: 'Hundert', fr: 'Cent' },
   sedmaProti: { cs: 'Sedma proti', en: 'Seven against', de: 'Sieben dagegen', fr: 'Sept contre' },
   kiloProti: { cs: 'Sto proti', en: 'Hundred against', de: 'Hundert dagegen', fr: 'Cent contre' },
+  /* „Vše za mnou" (§39) — zbylé štychy jsou jisté, hru dohraje program. */
+  claimRest: { cs: 'Vše za mnou', en: 'The rest is mine', de: 'Der Rest gehört mir', fr: 'Le reste est à moi' },
+  claimHint: {
+    cs: 'Zbylé štychy už ti nikdo nevezme — dohraje se to za tebe.',
+    en: 'Nobody can take another trick from you — the rest plays itself.',
+    de: 'Keiner nimmt dir noch einen Stich — der Rest spielt sich von selbst.',
+    fr: 'Personne ne peut plus te prendre un pli — le reste se joue tout seul.',
+  },
   trump: { cs: 'Trumfy', en: 'Trumps', de: 'Trumpf', fr: 'Atout' },
   talon: { cs: 'Talon', en: 'Talon', de: 'Talon', fr: 'Talon' },
   result: { cs: 'Zúčtování', en: 'Settlement', de: 'Abrechnung', fr: 'Décompte' },

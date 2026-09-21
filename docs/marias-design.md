@@ -2022,3 +2022,86 @@ i ta špatná verze, jinak se neví, co test opravdu měří.
 v obsluze tlačítka, zrušení fronty uvnitř privátní metody), se nedá otestovat, aniž by se
 podstrčilo něco vlastního. Správná reakce není test odpustit, ale přesunout to pořadí do funkce,
 která se zavolat dá — `playWhenUnlocked`, `BubbleQueue`. Test pak měří kód, ne atrapu.
+
+## 39. „Vše za mnou" (2026-09-21)
+
+Pocta originálu: ve FLEK!/RE! se hra, která je rozhodnutá, nedohrávala. Uživatel to popsal jako
+„už mi zbývají v ruce jen trumfy, program to dohraje sám".
+
+### Podmínka není „jen trumfy"
+
+„Jen trumfy" ani nestačí (soupeř může držet vyšší trumf), ani není nutné (můžu držet nejvyšší
+karty ve dvou barvách). Správná formulace: **vynáším a žádná karta, kterou může soupeř držet,
+nepřebije žádnou moji.** Ptá se na to `beats()` z `tricks.ts`, ne vlastní kopie pravidla.
+
+### Počítá se to z pohledu hráče, ne ze stavu
+
+`claimPlan(v: PlayerView)`, nikdy `GameState`. Kdyby podmínka koukala do cizích rukou,
+prozrazovala by je — **a to i tím, že se tlačítko neukáže**: „držím trumfového krále a nabídka
+nepřišla" znamená „někdo drží eso". Je to přesně ta past, kterou u předávání slova ve flecích
+prošla trumfová sedma (§35–§36).
+
+Talon, který hráč nezná (obrana), se proto počítá konzervativně jako karty, které soupeř mít
+**může**. Nabídka přijde méně často, nikdy ale špatně.
+
+### Uhrát všechny štychy ≠ mít rozhodnuté vyúčtování
+
+Tohle je důvod, proč se výsledek **nepočítá napřímo**, ale zbytek se doopravdy dohraje:
+
+- Obrana smí hlásit hlášky i u karty, kterou jen odhazuje (ČSM čl. III/3 — „v okamžiku, kdy tuto
+  kartu odehrává", žádná podmínka výnosu; viz i zamítnutý nález i2 výš). Jestli nějakou drží,
+  se z pohledu hráče zjistit nedá.
+- Tichá sedma se platí (`scoring.ts`), a `legalActions` ji na rozdíl od hlášené **nehlídá** —
+  kdo ji vynese první, přijde o ni.
+- Vlastní hlášky se musí ohlásit.
+
+Plán tedy jen řadí vlastní ruku (sedma nakonec, hlásit, co jde) a UI pak posílá karty jednu po
+druhé; AI odpovídá jako vždycky a hlásí si své hlášky. Vyúčtování vyjde stejně jako při ručním
+dohrání, protože to ručním dohráním je — jen bez klikání.
+
+### Tlačítko, ne automatika
+
+Rozhodnuto uživatelem: originál to dělal sám, tady je to **tlačítko**. Hra se nemá rozjet bez
+vyzvání. `claimRest()` v controlleru pak posílá karty po 260 ms (ne hned — hráč si zvolil, že to
+za něj dohraje, ne že to zmizí) a při každé kartě si nabídku ověří znovu; kdyby stav uhnul, prostě
+se zastaví a zbytek doklikne člověk.
+
+### Jak často to přijde
+
+Měřeno skutečnou AI, 120 rozdání na variantu: **volený 9 %, licitovaný 29 %** rozdání (to je
+libovolné sedadlo; pro člověka zhruba třetina z toho), průměrně ušetří 2,5–2,9 karet. V licitovaném
+to tedy stojí za to, ve voleném je to spíš třešnička.
+
+### Testy
+
+- **Optimalita, ne jen legalita.** Ve 24 přirozených případech se vyúčtování podle plánu porovná
+  se **všemi ostatními pořadími** vlastní ruky; žádné nesmí vydělat víc. A hráč musí po celou dobu
+  držet výnos (`alwaysLed`) — to je přesně to, co nabídka slibuje.
+- **Tichá sedma a nehlášená hláška se staví ručně.** V 1000 rozdáních nepadl ani jeden případ, kdy
+  by hráč mohl říct „vše za mnou" a držel přitom NEhlášenou trumfovou sedmu — kdo má tolik trumfů,
+  ten ji ohlásí, a hlášenou hlídá `legalActions`. Totéž u hlášek. Čekat na ně by znamenalo test,
+  který tiše neměří nic (v přirozených případech je počítadlo `mattered` nula), takže oba stavy
+  jsou postavené natvrdo: hráč drží všechny zbylé trumfy, zbytek balíčku leží v odehraných
+  štychách. Bez ohlášení trumfové hlášky se ta hra prohraje (8 vs 0).
+- **AI v testu jede na `iterations`, ne na `budgetMs`.** Časový rozpočet dá na každém stroji jiný
+  počet iterací, takže by test sbíral jiné případy a jednou za čas probliknul. (Chyceno až tím, že
+  dva běhy po sobě daly jiné počty.)
+- Smoke: seedovaný sav (licitovaný, seed 5), tlačítko se ukáže a čtyři karty se dohrají bez
+  dalšího kliknutí.
+
+Negativní kontroly: sedma na začátku plánu, vypnuté hlášení, podmínka ignorující cizí trumfy,
+`claimRest()` bez efektu, skryté tlačítko — každá shodí právě svůj test.
+
+### Co se NEUDĚLALO
+
+- **„Nic za mnou"** (betlový protějšek — aktér prokazatelně neuhraje žádný štych). Odloženo:
+  v betlu aktér nevynáší, takže důkaz musí řešit i vynucené přebití, a je to podstatně těžší než
+  „vynáším a nikdo mě nepřebije". Že to originál uměl, navíc nevíme — `docs/original-notes.md`
+  o tom mlčí a stojí jen na videu. Patří to k ověření v DOSBoxu (§7 bod 4), kde stojí za to
+  zapsat i to, jestli originál nechává tichou sedmu na poslední štych.
+- **Kontrola proti všem možným rozložením cizích karet.** Zkoušel jsem nabídku ověřovat i proti
+  determinizacím (rozdat neviděné karty jinak a ověřit, že štychy pořád sedí). Je to silnější
+  tvrzení než „platí na tomhle rozdání", jenže se mi ji nepodařilo přimět kousnout — každá chyba,
+  kterou jsem do podmínky vnesl, spadla dřív na skutečném rozdání, a u chyby, proti které je ta
+  kontrola postavená (únik znalosti talonu), nechytila nic ani ona. Kontrolu bez negativní kontroly
+  jsem radši nenechal: budí dojem, že hlídá i to, co nehlídá.

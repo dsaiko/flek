@@ -15,6 +15,7 @@ import { view } from '../rules/view';
 import { backSrc, cardName, cardSrc, suitIcon, suitName, type Pattern } from './cardAssets';
 import { aiNames, currentLang, flekName, fmtMoney, marriageWarn, t, type Lang } from './i18n';
 import { discardWarnings } from './discardWarnings';
+import { claimPlan } from '../rules/claim';
 import { playChoice } from './playChoice';
 import { silentSounds, type Sounds } from './sounds';
 import { tableTalk, talkFires, type TalkSet, type TalkSituation } from './tableTalk';
@@ -26,6 +27,13 @@ export interface TableCallbacks {
   onAction: (action: PlayerAction) => void;
   onDeal: () => void;
   onNewMatch: () => void;
+  /**
+   * „Vše za mnou" (§39) — zbytek dohraje controller sám.
+   *
+   * NENÍ to `PlayerAction`: pravidla nic takového neznají, hra se doopravdy
+   * dohraje kartu po kartě. Proto vlastní callback, a ne `onAction`.
+   */
+  onClaim?: () => void;
   /** Výběr varianty na úvodní obrazovce (mockup „1a Úvod"). */
   onVariant?: (variant: 'voleny' | 'licitovany') => void;
 }
@@ -1111,6 +1119,19 @@ export class TableUI {
           }
         }
         break;
+
+      case 'tricks': {
+        /*
+         * Jediné tlačítko v sehrávce. Nabídka se počítá z pohledu hráče
+         * (`claimPlan`), takže ani to, že tlačítko NENÍ vidět, nic neprozrazuje
+         * o cizích kartách — viz claim.ts.
+         */
+        if (this.cb.onClaim && claimPlan(v) !== null) {
+          const b = btn(t('claimRest'), () => this.cb.onClaim?.());
+          b.title = t('claimHint');
+        }
+        break;
+      }
 
       default:
         break;
