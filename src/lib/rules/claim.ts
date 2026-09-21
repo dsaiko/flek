@@ -28,13 +28,21 @@ import { beats, orderMode } from './tricks';
 /**
  * Karty, které MŮŽE držet někdo jiný.
  *
- * Všechno, co hráč nevidí ve své ruce, neviděl padnout a nezná z talonu.
+ * Všechno, co hráč nevidí ve své ruce, neviděl padnout a neleží mu v talonu.
  * Talon, který hráč nezná (obrana), tu schválně ZŮSTÁVÁ — leží sice mimo hru,
  * ale hráč to neví, a počítat s tím by znamenalo vědět něco navíc.
+ *
+ * Odečítá se `v.talon`, NE `v.talonKnown`. Znalost talonu se totiž nemaže:
+ * `talonKnowledge` je „co kdy které sedadlo v talonu vidělo", a při převzetí
+ * ve voleném (`talonOnTakeover: 'retake'`) si nový aktér ten talon VEZME DO
+ * RUKY (engine.ts) — původnímu tazateli ale v `talonKnowledge` zůstane. Kdo by
+ * odečítal jeho, vyškrtne si karty, které soupeř doopravdy drží, a nabídne
+ * štychy, které nemá jisté. `v.talon` je proti tomu „co leží mimo hru PRÁVĚ
+ * TEĎ": je nenulový přesně pro aktuálního držitele talonu.
  */
 function possibleOpponentCards(v: PlayerView): Card[] {
   const seen = new Set<Card>(v.hand);
-  for (const c of v.talonKnown) seen.add(c);
+  for (const c of v.talon ?? []) seen.add(c);
   if (v.revealedTrump !== null) seen.add(v.revealedTrump);
   if (v.phase.name === 'tricks') {
     for (const trick of v.phase.played) for (const p of trick.plays) seen.add(p.card);

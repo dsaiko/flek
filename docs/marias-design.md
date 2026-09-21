@@ -2105,3 +2105,32 @@ Negativní kontroly: sedma na začátku plánu, vypnuté hlášení, podmínka i
   kterou jsem do podmínky vnesl, spadla dřív na skutečném rozdání, a u chyby, proti které je ta
   kontrola postavená (únik znalosti talonu), nechytila nic ani ona. Kontrolu bez negativní kontroly
   jsem radši nenechal: budí dojem, že hlídá i to, co nehlídá.
+
+### Fixpoint review PR #11, první kolo (2026-09-22, po `b639e68`)
+
+Devět nálezů, všechny sedí, všechny opravené. Jeden z nich je chyba v kódu, zbytek díry v testech —
+a dvě z nich přesně toho druhu, který si tenhle dokument vyčítá jinde.
+
+| Závažnost | Nález | Oprava |
+|---|---|---|
+| high ×2 | **Nic netvrdilo, že `claimPlan` někdy vrátí `null`.** Konzervativní počítání neznámého talonu je ta hlavní pojistka proti úniku, a nešla odlišit od podmínky, která kouká, kam nemá: přirozená smyčka se dívá jen na sedadla, kde nabídka UŽ padla, a `alwaysLed` projde i u nabídky navíc, protože talonové karty stejně nikdo nezahraje | Případ (F): přebíječ v neznámém talonu → `null`; tentýž v ruce soupeře → `null`; a když hráč talon sám odložil → nabídka **musí** přijít (jinak by (i) procházelo i s funkcí, co vrací pořád `null`) |
+| medium | **Chyba, ne jen test.** `possibleOpponentCards` odečítalo `v.talonKnown`, jenže to není „co leží mimo hru" — je to „co kdy které sedadlo v talonu vidělo", a při převzetí ve voleném si nový aktér talon VEZME DO RUKY, zatímco původnímu tazateli znalost zůstane. Ten by si pak vyškrtl karty, které soupeř drží | Odečítá se `v.talon` (nenulový přesně pro aktuálního držitele). Pro aktéra je to tentýž soubor, pro tazatele po převzetí se to vrátí ke konzervativnímu počítání. Pojistka (F-iv) to drží. **Dosažitelné to nebylo** — po převzetí se hraje betl nebo durch a obránce se v durchu na výnos nedostane (aktér vynáší a hra končí jeho první ztrátou) —, ale smysl funkce to spravuje |
+| medium | Pojistky controlleru nemělo nic pokryté: smoke klikne a čeká na zúčtování, to je šťastná cesta. `claimDelayMs` přitom vzniklo právě pro test a nikdo ho nepoužíval | Tři kontroly se synchronním driverem: doprostřed štychu se nabídka odmítne, na výnosu se zahraje **přesně plán a ani karta navíc**, a po zúčtování příznak zhasne |
+| medium | Strážce `if (mode === 'betl') return null` nikdy nic netvrdilo — a podmínka sama je na módu nezávislá, `beats()` odpoví „nikdo mě nepřebije" i betlovému aktérovi | Případ (G): v betlu `null`, a `shouldAnnounce` mimo barevnou hru `false` |
+| low | Durch je podporovaný mód s JINOU cestou kódem (bez trumfu se přeskočí větev se sedmou, řadí se přirozeným pořadím), ale jestli ho přirozená smyčka potká, byla věc náhody | Případ (H): durch natvrdo, včetně porovnání se všemi pořadími |
+| low | Smoke čeká pevných 20 s, ale `claimSave()` bral plán `>= 3` bez horní meze a pouští živou AI — jedna změna heuristiky a scénář se překlopí na šest karet, smoke spadne hláškou „nedohrálo", i když by to jen ještě hrálo | Mez `<= 4` a do savu se seedí `difficulty: 'easy'` (`playPolicy` bez hledání) |
+| low | `isClaiming` byl nový veřejný getter bez jediného čtenáře, a jeho komentář sliboval zkracování animací, které nikde není | Komentář opraven (žádný slib navíc) a getter používají kontroly controlleru |
+| low | Rozpočet 24 případů byl SDÍLENÝ oběma variantami, volený jde první — kdyby ho sám vyčerpal, licitovaný by se nespustil vůbec a `cases >= 8` by pořád prošlo | Rozpočet na každou variantu zvlášť, minimum se vyžaduje u obou, a hláška je vypisuje odděleně |
+
+Při tom vypadla i jedna věc navíc: pojistka „nové rozdání zhasíná dohrávku" v `dispatch` byla
+**nedosažitelná** — `playClaimed` příznak zhasne, jakmile fáze není `tricks`, a rozdávat jde jen
+z `idle`/`scored`. Nedosažitelnou pojistku nejde otestovat, tak je pryč.
+
+Negativní kontroly: vrácené `talonKnown`, smazaný betl guard, `shouldAnnounce` mimo barevnou hru,
+prázdná množina možných karet soupeře, `claimRest()` bez kontroly nabídky — každá shodí právě svůj
+test.
+
+**Poučení:** u nové funkce jsem otestoval, že dělá, co má, ale ne že to **odmítne**, když nemá.
+Celá bezpečnost „vše za mnou" stojí na tom, kdy nabídka NEPŘIJDE, a přesně to nešlo odlišit od
+funkce, která si vidí do cizích karet. Pozitivní případ je vždycky ten první, co člověka napadne;
+ten negativní je ten, co drží slib.

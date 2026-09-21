@@ -141,8 +141,6 @@ export class MatchController {
    * a smyčka by se už nikdy nerozjela.
    */
   dispatch(action: PlayerAction): void {
-    // nové rozdání zhasíná „vše za mnou" — plán platil pro minulou hru
-    if (action.type === 'deal') this.claiming = false;
     const next = apply(this.state, action);
     this.cancelPending();
     this.state = next;
@@ -188,7 +186,13 @@ export class MatchController {
     return true;
   }
 
-  /** Dohrává „vše za mnou" právě teď? (UI podle toho zkracuje animace.) */
+  /**
+   * Probíhá právě dohrávka „vše za mnou"?
+   *
+   * Zhasíná ji `playClaimed`, jakmile fáze není `tricks` — proto tu NENÍ žádná
+   * pojistka při novém rozdání: rozdávat jde jen z `idle`/`scored`, a tam už
+   * je příznak dávno dole. Nedosažitelnou pojistku by nešlo otestovat.
+   */
   get isClaiming(): boolean {
     return this.claiming;
   }

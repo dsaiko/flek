@@ -1085,7 +1085,12 @@ if (cspViolations.length > 0) {
   await claim.evaluate(([match, settings]) => {
     localStorage.setItem('flek.match.v1', match);
     localStorage.setItem('flek.settings.v1', settings);
-  }, [claimSave(), JSON.stringify({ variant: 'licitovany', sounds: false })]);
+    /*
+     * `difficulty: 'easy'` — `playPolicy` bez hledání. Na tom, co se testuje
+     * (tlačítko dohraje zbytek), to nic nemění, ale ubere z dohrávky vteřiny
+     * hledání ISMCTS na každou odpověď soupeře.
+     */
+  }, [claimSave(), JSON.stringify({ variant: 'licitovany', difficulty: 'easy', sounds: false })]);
   await claim.reload();
 
   const button = claim.locator('#actions .action-btn', { hasText: /Vše za mnou/i });
@@ -1262,7 +1267,15 @@ function claimSave(): string {
   let guard = 0;
   while (st.phase.name !== 'scored' && (guard += 1) < 200) {
     const plan = claimPlan(view(st, 0));
-    if (plan !== null && plan.length >= 3) return JSON.stringify({ v: SAVE_VERSION, state: st });
+    /*
+     * Horní mez je podstatná: čekání níž je pevných 20 s, ale cena dohrávky
+     * roste s každou kartou (odklad + dvě odpovědi AI + dokreslení štychu).
+     * Bez ní by stačila změna heuristiky, scénář by se překlopil na šest karet
+     * a smoke by spadl hláškou „nedohrálo", i když by to jen ještě hrálo.
+     */
+    if (plan !== null && plan.length >= 3 && plan.length <= 4) {
+      return JSON.stringify({ v: SAVE_VERSION, state: st });
+    }
     const actor = ([0, 1, 2] as const).find((s) => legalActions(view(st, s)).length > 0);
     if (actor === undefined) break;
     st = apply(st, think({
