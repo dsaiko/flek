@@ -4,6 +4,30 @@ Poznámky k vydání. Sekci pro daný tag z tohohle souboru vytáhne CI a použi
 jako text releasu na GitHubu (`.github/workflows/release.yml`) — nadpis sekce se
 stane názvem vydání. Nová verze = **přidat sekci sem** a až pak tagovat.
 
+## v0.0.8 — vše za mnou
+
+Pocta originálu: ve FLEK!/RE! se hra, která je rozhodnutá, nedohrávala. Teď ji nemusíš dohrávat
+ani tady.
+
+### Vše za mnou
+
+Když už ti zbylé štychy nikdo nevezme, objeví se v sehrávce tlačítko **Vše za mnou** a zbytek se
+dohraje za tebe. Nejčastěji to potkáš, když ti v ruce zůstanou samé trumfy a žádný vyšší už není
+ve hře — ale platí to obecně: stačí, že vynášíš a na žádnou tvoji kartu nikdo nic nemá.
+
+Není to odhad. Nabídka se počítá jen z toho, co vidíš ty sám: ze své ruky a z karet, které už
+padly. Talon, do kterého jsi nekoukal, se počítá jako karty, které soupeř mít **může** — takže
+nabídka přijde o něco méně často, zato nikdy neslíbí štych, který bys nedostal. A protože se
+počítá z tvého pohledu, neprozrazuje ti nic o cizích kartách ani tím, že se neobjeví.
+
+Hra se doopravdy dohraje, kartu po kartě — jen bez klikání. Obrana si tak pořád může hlásit své
+hlášky a vyúčtování vyjde stejně, jako kdybys to doklikal sám. Tvoje karty přitom padají ve
+správném pořadí: trumfová sedma zůstane na poslední štych (i tichá se platí) a hlášky se ohlásí.
+
+V licitovaném to přijde skoro v každé třetí hře, ve voleném zhruba v každé desáté.
+
+Betl zatím ne — tam se nevynáší a „neuhraju ani štych" se dokazuje podstatně hůř.
+
 ## v0.0.7 — nové znaky karet a flek na každý závazek zvlášť
 
 Nová kresba listů, kulí, srdcí a žaludů podle vlastního návrhu — a oprava flekování, která se
