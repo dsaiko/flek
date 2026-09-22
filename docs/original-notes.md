@@ -650,3 +650,20 @@ Dvě sedmy 30× nesedí ani na ČSM (40×), ani na nic jiného v návrhu.
 
 → **`SAZBY_FLEK` musí mít vlastní tabulku**, `SAZBY_CSM` sdílet nelze. Liší se přesně tři
 položky: betl, durch, dvě sedmy.
+
+## Převzetí ve voleném (FLEK!) — `talonOnTakeover` změřeno
+
+Ve voleném se obrana vyjadřuje dialogem **„Co ty na to ?"** s tlačítky **[Dobrá] [Špatná]**
+(bublina forhonta u toho hlásí **„BARVA ?"**, druhý obránce **„Jsem zticha"**).
+
+Po volbě **„Špatná"** (tedy převzetí) následuje:
+
+1. přebírající hráč má rázem **12 karet** — **talon si bere DO RUKY**,
+2. hláška **„Odhoď talon"**, odhodí dvě (odhozené leží lícem nahoru stranou),
+3. dialog **„Co teď budeš hrát ?"** s volbou **[Betl] [Durch]** — barevná hra už na výběr NENÍ.
+
+To je **přesně** to, co u nás dělá engine od v0.0.6 podle ČSM čl. VII/1 (§34 návrhu):
+obránce má jen `good`/`take`, po `take` zvedne talon, odhodí a ve fázi `declare` volí
+betl nebo durch. Implementovali jsme to nezávisle, jen z pravidel — a originál to má stejně.
+
+→ `talonOnTakeover` = **přebírající talon dostává do ruky** (ne že zůstane ležet).
