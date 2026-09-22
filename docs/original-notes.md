@@ -599,3 +599,54 @@ určitě zlepší a odešlete-li registrační kartu, dám Vám vědět.
 
 Stojí to tu za citaci: tenhle projekt dělá po třiceti letech přesně to, oč Pivoňka prosil —
 popisuje konkrétní situace a porovnává je s pravidly.
+
+## Durch: 20× — a sazebník je tím uzavřený
+
+Durch se povedlo vylicitovat až přes **žebříček**, ne přes řetěz otázek (v otázkách mě soupeři
+pokaždé přehodili). Postup, který funguje: na první otázku „Ano" → otevře se mřížka →
+šipkami na `Durch` → Enter.
+
+Stejně jako betl se i **durch ukončí, jakmile je rozhodnutý** — hned po prvním štychu, který
+aktér nevzal, a v ruce mu zůstává deset karet.
+
+```
+Vyúčtování:
+
+Durch                        2.00 Kč
+Prohrál jsi                  4.00 Kč
+Máš nyní celkem             92.00 Kč
+```
+
+`2,00 ÷ 0,10 = 20× hra`; `Prohrál jsi 4,00` = 2 × 2,00, aktér platí oběma ✓.
+
+Pozn.: v **durchu vynáší aktér**, v **betlu nikoli** (tam vynesl soupeř).
+
+## SAZEBNÍK ORIGINÁLU RE! — ÚPLNÝ
+
+Základ **hra = 0,10 Kč**. Všechno ostatní je jeho násobek:
+
+| závazek | sazba | originál | ČSM | shoda |
+|---|---|---|---|---|
+| hra | 0,10 | 1× | 1× | ✓ |
+| sedma | 0,20 | 2× | 2× | ✓ |
+| kilo | 0,40 | 4× | 4× | ✓ |
+| **betl** | **1,00** | **10×** | 15× | ✗ |
+| **durch** | **2,00** | **20×** | 30× | ✗ |
+| **dvě sedmy** | **3,00** | **30×** | 40× | ✗ |
+
+**Klíčové zjištění: betl 10× a durch 20× jsou přesně poměry KŘÍŽOVÉHO mariáše**, které návrh
+(§10 bod 1) zmiňuje jako odchylku varianty, kterou nehrajeme — originál je ale používá.
+Dvě sedmy 30× nesedí ani na ČSM (40×), ani na nic jiného v návrhu.
+
+**Násobky** (společné všem závazkům):
+- flek: **×2 za každý** (popisek „Nx flek" = 2^N, ověřeno až po 9× flek)
+- červená: **×2** na součet složek
+- prohrané kilo: **× 2^(schodek/10 + 1)**
+- aktér platí **každému soupeři zvlášť** (×2); obrana inkasuje/platí jeden podíl
+- počáteční konto 100,00 Kč v RE!, 20,00 Kčs ve FLEK!; smí jít do minusu
+
+**Strojově ověřeno** proti všem vyúčtováním posbíraným v této session (10 kontrol, včetně
+řetězu konta). Model: `sazba × 2^fleků × (2 když červená) × (2 pro aktéra)`.
+
+→ **`SAZBY_FLEK` musí mít vlastní tabulku**, `SAZBY_CSM` sdílet nelze. Liší se přesně tři
+položky: betl, durch, dvě sedmy.
