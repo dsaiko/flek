@@ -4,6 +4,43 @@ Poznámky k vydání. Sekci pro daný tag z tohohle souboru vytáhne CI a použi
 jako text releasu na GitHubu (`.github/workflows/release.yml`) — nadpis sekce se
 stane názvem vydání. Nová verze = **přidat sekci sem** a až pak tagovat.
 
+## v0.0.10 — originál změřen
+
+**Samotná hra se v tomhle vydání nemění.** Mění se, co o originálu víme.
+
+FLEK! a RE! od Pivoňka Software jsme doteď znali z videa a z pravidel. Teď běžely v DOSBoxu
+a daly se pořádně změřit — rozdání po rozdání, vyúčtování po vyúčtování.
+
+### Sazebník je jinde, než jsme mysleli
+
+Základ je desetihaléř a běžné závazky odpovídají soutěžním pravidlům přesně: sedma je dvakrát
+hra, sto čtyřikrát. Ale **betl, durch a dvě sedmy originál platí levněji** — 10×, 20× a 30×
+místo 15×, 30× a 40×. U betlu a durchu jsou to dokonce sazby křížového mariáše, který se tady
+vůbec nehraje.
+
+### Odpovědi na staré otázky
+
+- RE! opravdu umí **dvě sedmy**, včetně pomocné barvy („zelená trumf, žaludská pomocná").
+- Kdo **přebírá hru**, bere si talon do ruky, odhodí znovu a pak smí hlásit jen betl nebo durch.
+- **Fleků** pustí originál nejmíň devět; my se zastavíme na čtyřech.
+- Do talonu smí trumf, ale **ne desítka** — na to hra odsekne „To nejde, ostrou do talonu!".
+  V betlu desítku odložit můžeš.
+
+### Kde jsme to trefili
+
+Fleky na každou komponentu zvlášť, vyrovnání hry proti neflekované sedmě bez sehrávky,
+i celý postup přebírání — to všechno tu vzniklo jen z pravidel, bez koukání na originál.
+A sedí to.
+
+Potvrdilo se i to, co slibovalo vydání v0.0.8: **rozhodnutou hru originál nedohrával.**
+Betl i durch v něm padnou v okamžiku, kdy je o nich rozhodnuto, a hráči zůstane karta v ruce.
+
+### Pocta
+
+Všechno se měřilo na licencované kopii RE! **č. 40456, která patřila Josefu Saikovi** — otci,
+kterému je Flek! věnován. Pivoňka na závěrečné obrazovce prosí hráče, ať mu píšou o situacích,
+kdy program „urází kartiboha". Po třiceti letech je `docs/original-notes.md` ten dopis.
+
 ## v0.0.9 — čitelná licitace
 
 Licitovaný mariáš umí nabídnout devět závazků najednou a do teď to bylo devět stejných tlačítek
