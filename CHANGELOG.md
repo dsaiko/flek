@@ -4,6 +4,29 @@ Poznámky k vydání. Sekci pro daný tag z tohohle souboru vytáhne CI a použi
 jako text releasu na GitHubu (`.github/workflows/release.yml`) — nadpis sekce se
 stane názvem vydání. Nová verze = **přidat sekci sem** a až pak tagovat.
 
+## v0.0.9 — čitelná licitace
+
+Licitovaný mariáš umí nabídnout devět závazků najednou a do teď to bylo devět stejných tlačítek
+s plným textem přes celou šířku stolu. Nedalo se z toho poznat, co je vyšší, a „Sedma" se lišila
+od „Sedma ♥" jedním znakem na konci.
+
+### Závazky jako boxy
+
+Nabídka teď vypadá jako žebřík krátkých boxů — **7**, **100**, **100+7** —, jak je ukazoval
+FLEK!. Plný název najdeš, když nad tlačítkem chvíli podržíš myš.
+
+**Červená se pozná barvou.** Dvojnásobná sazba je červená a se srdcem, místo aby se lišila slovem
+navíc na konci.
+
+**Co patří k sobě, drží při sobě.** Sedmy jsou slepené dohromady, sta taky — a jdou přesně
+v pořadí, v jakém se přehazují, takže se řada čte zleva doprava jako „čím dál výš".
+
+**Betl a durch stojí stranou**, tmavě a verzálkami: jsou to hry bez trumfů, kde nejde o body,
+ale o štychy.
+
+Řada se tím zúžila zhruba na polovinu a vejde se na jeden řádek i v angličtině a němčině, kde se
+dřív zalamovala na dva.
+
 ## v0.0.8 — vše za mnou
 
 Pocta originálu: ve FLEK!/RE! se hra, která je rozhodnutá, nedohrávala. Teď ji nemusíš dohrávat
