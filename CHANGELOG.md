@@ -4,6 +4,34 @@ Poznámky k vydání. Sekci pro daný tag z tohohle souboru vytáhne CI a použi
 jako text releasu na GitHubu (`.github/workflows/release.yml`) — nadpis sekce se
 stane názvem vydání. Nová verze = **přidat sekci sem** a až pak tagovat.
 
+## v0.0.11 — sazebník originálu
+
+Minulé vydání změřilo, kolik se v originálu za co platí. Teď se podle toho dá hrát.
+
+### Co originál počítá jinak
+
+Hra, sedma a sto stojí stejně jako v soutěžních pravidlech. **Betl, durch a dvě sedmy jsou ale
+v originálu levnější** — 10×, 20× a 30× místo 15×, 30× a 40×. A prohrané sto se **zdvojnásobuje**
+za každých deset bodů, místo aby se přičítalo lineárně.
+
+Originál taky nezná **limit**: soutěžní pravidla stropují jedno rozdání na pětisetnásobek
+základu, jenže v RE! se jedno rozdání vyrovnalo na šestnáctitisícinásobek. A **fleků** pustí
+nejmíň devět tam, kde soutěžní licitovaný končí na botách.
+
+### Jak si to zapnout
+
+Přidej do adresy **`?sazby=flek`** — třeba `flek.saiko.cz/?sazby=flek`. Funguje to stejně jako
+`?seed=`, a když se v parametru upíšeš, hra se prostě vrátí k soutěžnímu sazebníku místo aby
+odmítla rozdat.
+
+**V nastavení to zatím není.** Přepnout sazebník uprostřed zápasu znamená pohnout kontem
+a zaslouží si to vlastní rozmyšlení, ne jen další přepínač.
+
+### Co se nezměnilo
+
+Výchozí sazebník zůstává soutěžní — kdo si nic nepřidá do adresy, hraje jako dosud.
+A dvě sedmy zůstávají vypnuté, i když je originál umí: to už není otázka ceny, ale pravidel.
+
 ## v0.0.10 — originál změřen
 
 **Samotná hra se v tomhle vydání nemění.** Mění se, co o originálu víme.
