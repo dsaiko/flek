@@ -485,3 +485,45 @@ Zbytek rozpisu sedí: sedma 0,20 neflekovaná; červená zdvojnásobuje součet
 (51,20 + 0,20) × 2 = 102,80 ✓; `Získal jsi` je jeden podíl, protože jsem byl v obraně.
 
 Další varianta flavouru pro červený násobek: **„Bylo to v srdcích:"**.
+
+## Betl: originál rozhodnuté rozdání NEDOHRÁVÁ
+
+Ověřeno (RE!, `BETL` s flekem, aktérem jsem byl já). Soupeř vynesl zeleného spodka, já držel
+zelené eso. Hra nejdřív odmítla nižší kartu hláškou:
+
+> **„A co zelené eso ?"**
+
+— tedy **povinné přebití v betlu, a originál rovnou jmenuje kartu**, kterou chce
+(naše varování říká jen důvod). Jakmile jsem eso zahrál a štych vzal, betl byl prohraný a hra:
+
+1. ukázala bublinu **„A je to !"**,
+2. **přešla rovnou na vyúčtování** — v ruce mi přitom zůstávalo **devět karet**,
+3. zbylé štychy se **vůbec nehrály**.
+
+```
+Vyúčtování:
+
+Flekovaný betl:              2.00 Kč
+Ztratil jsi                  4.00 Kč
+Máš nyní celkem            196.00 Kč
+```
+
+### Dva závěry
+
+**1. Sazba betlu je 10× hra, ne 15×.**
+`Flekovaný betl 2,00` = základ × 2 (flek) → základ betlu **1,00 Kč = 10× hra (0,10)**.
+ČSM má betl **15×**; poměr 10×/20× uvádí návrh (§10 bod 1) jako odchylku *křížového* mariáše,
+který nehrajeme. **Originál přesto počítá 10×.** Pro `SAZBY_FLEK` to znamená vlastní poměry,
+ne sdílený `SAZBY_CSM`. Durch zatím neměřen — ověřit, jestli je 20× (a ne 30×).
+`Ztratil jsi 4,00` = 2 × 2,00, aktér platí oběma ✓; konto 200,00 − 4,00 = 196,00 ✓.
+
+**2. K našemu „vše za mnou" (§39).**
+Nabídku nároku, kterou by hráč sám vyvolal („vše/nic za mnou"), jsem v originálu **nikde
+neviděl** — ani v betlu, ani v barevné hře. Co originál má, je **automatické ukončení, jakmile
+je výsledek rozhodnutý**: betl padne v okamžiku, kdy aktér vezme štych, a dál se nehraje.
+Je to jiný mechanismus než náš (tam nárok hlásí hráč), ale stejná myšlenka — rozhodnuté
+rozdání nedohrávat.
+
+Pozor na rozdíl oproti našemu rozhodnutí z §39: my zbytek **doopravdy dohráváme**, protože
+obrana smí hlásit hlášky i u odhazované karty (ČSM čl. III/3). V betlu se ale hlášky nepočítají
+(čl. IV/1), takže tam ten důvod odpadá — a originál toho využívá.
