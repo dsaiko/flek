@@ -296,9 +296,25 @@ Stálo tě to                  2.40 Kč
 Máš nyní celkem             84.80 Kč
 ```
 
-## Sazebník originálu RE! — odvozený ze čtyř vyúčtování
+### Vyúčtování č. 5 — prohraná stovka s flekem, trumf ♥ (rozhodující vzorek)
 
-**Sazby (na jednoho soupeře):**
+Závazek `100 ♥`, flek. Bodové boxy: **`80+40=120`** a **`10`**.
+Bublina: **„Zanech mariáše, běž hrát kuličky"**.
+
+```
+Vyúčtování:
+
+Prohraná stovka, flek:       819.20 Kč
+Barva lásky je drahá:       1638.40 Kč
+Stálo tě to                 3276.80 Kč
+Máš nyní celkem            -3192.00 Kč
+```
+
+Konto spadlo z 84,80 na −3192,00, tj. **konto smí jít do minusu**.
+
+## Sazebník originálu RE! — odvozený z pěti vyúčtování
+
+**Sazby (na jednoho soupeře), poměry shodné s ČSM:**
 
 | položka | sazba | poměr k hře |
 |---|---|---|
@@ -306,29 +322,48 @@ Máš nyní celkem             84.80 Kč
 | **sedma** | **0,20 Kč** | 2× |
 | **kilo** | **0,40 Kč** | 4× |
 
-→ **poměry jsou shodné s ČSM** (sedma 2×, sto 4×). Liší se jen základ: **0,10 Kč**.
-
 **Násobky:**
 - **flek**: ×2 za každý flek
-- **červená** („Barva lásky je drahá"): ×2 na celý součet
-- **prohrané kilo**: ×2 za každých 10 bodů schodku (**nikoli lineárně jako soutěžní ČSM**)
-- **aktér platí každému soupeři zvlášť** → celková částka je ×2
+- **červená** („Barva lásky je drahá"): ×2 na součet komponent
+- **prohrané kilo**: **× 2^(schodek/10 + 1)** — tedy zdvojnásobení za každých 10 bodů schodku
+  do sta, plus jedno zdvojnásobení navíc už za samotnou prohru
+- **aktér platí každému soupeři zvlášť** → ×2 na konci
 
-**Kontrola na všech čtyřech vyúčtováních:**
+**Kontrola na všech pěti vyúčtováních** (aktérovy body v závorce):
 
 | # | rozpis | výpočet | sedí |
 |---|---|---|---|
-| 1 | `Hra 0,20` + `Sedma 0,20`, celkem 0 | hra 0,10×2 (flek) prohraná, sedma 0,20 vyhraná → 0 | ✓ |
+| 1 | `Hra 0,20` + `Sedma 0,20`, celkem 0 | 0,10×2 prohraná vs 0,20 vyhraná → 0 | ✓ |
 | 2 | `Hra, 2x flek 0,40` + `Sedma, flek 0,40`, celkem 0 | 0,10×4 vs 0,20×2 → 0 | ✓ |
-| 3 | `Prohrané kilo 6,40`, celkem 12,80 | aktér měl 40, schodek 60?→ viz níž; 0,40×16 = 6,40; ×2 = 12,80 | ✓ |
-| 4 | 0,20 + 0,40, červená 1,20, celkem 2,40 | (0,10×2 + 0,20×2) = 0,60; ×2 červená = 1,20; ×2 soupeři = 2,40 | ✓ |
+| 3 | `Prohrané kilo 6,40`, celkem 12,80 (aktér 70) | 0,40 × 2^(30/10+1)=16 → 6,40; ×2 soupeři | ✓ |
+| 4 | 0,20 + 0,40, červená 1,20, celkem 2,40 (aktér 40) | (0,10×2 + 0,20×2)=0,60; ×2 červená; ×2 soupeři | ✓ |
+| 5 | `Prohraná stovka, flek 819,20`, celkem 3276,80 (aktér 10) | 0,40 × 2^(90/10+1)=1024 → 409,60; ×2 flek = 819,20; ×2 červená; ×2 soupeři | ✓ |
 
-**Jak číst bodové boxy — OPRAVENO.** Původně jsem tipl, že aktérův box je ten s vyšším
-číslem; vyúčtování č. 4 to vyvrátilo. Správně: box je CELKEM té strany, hlášky jsou v něm
-sčítance, a **aktérův je ten, který vychází z peněz** — u č. 4 `20+20=40` (prohrál obojí),
-u č. 3 `20+40=60`. Kontrola součtu bodů ze štychů (musí dát 90) platí u obou čtení, takže
-sama o sobě NESTAČÍ; rozhoduje až rozpad částky.
+Pozn.: `0,40 × 2^(n+1)` a `0,80 × 2^n` dávají tytéž částky, takže z dat nejde rozhodnout,
+jestli je „kilo" 4× hra se zdvojnásobením navíc, nebo rovnou 8×. Zapsáno v ČSM-konzistentní
+podobě (kilo 4×), protože ostatní poměry ČSM sedí přesně.
 
-**Zbývá dopočítat:** u č. 3 vyšel násobek 16 = 2⁴, tedy schodek 40 bodů při aktérových 60.
-To by znamenalo, že se kilo počítá od 100 (100 − 60 = 40). Sedí, ale stojí to na jediném
-vzorku — před zápisem do presetu `SAZBY_FLEK` ověřit ještě jedním prohraným kilem.
+### Jak číst bodové boxy — OPRAVENO PODRUHÉ
+
+Box je CELKEM té strany, hlášky jsou v něm sčítance (`20+40=60` = 20 ze štychů + hláška 40).
+Body ze štychů obou stran dají vždy 90.
+
+**Aktérův box NEJDE poznat podle toho, že je vyšší ani nižší** — u č. 3 to byl vyšší (70),
+u č. 4 a č. 5 nižší (40, resp. 10). Rozhodne jedině rozpad částky.
+
+Poctivě: tuhle sekci jsem přepisoval dvakrát. Nejdřív jsem přiřazení tipl podle kontroly
+„součet dá 90", což nic nedokazuje (splní ho obě čtení). Pak jsem ho „opravil" podle
+jediného dalšího vzorku a opravil špatně. Teprve pátý rozpis, kde částky vyšly na desetník,
+model uzavřel. **Poučení: u tohohle se nedá usuzovat z jednoho vzorku.**
+
+### Hlášky posbírané po cestě
+
+Licitace: „Jsem docela zticha", „Sedma ?", „Máš sedmu ?", „Čekám", „Je to na tobě",
+„Poslouchám", „Nuže", „Nic nepovím", „Chceš se kouknout ?"
+Fleky: „Na hru", „Na hru větší", „Dáš si větší ?", „Nemám, co bych dodal",
+„Co vy na to, vážení", „Nic", „Jsem potichu"
+Sehrávka: „Hraj !", „Hraješ", „Vynášíš", „To nejde, ostrou do talonu!"
+Talon: „Odlož talon" / „Odhoď talon" (obměňuje se), „Ještě jednu"
+Konec: „Nula od nuly pojde", „Je to zadarmo", „Zanech mariáše, běž hrát kuličky",
+„Zobrazit průběh hry ?", „Chceš vidět štychy ?", „Pokračujeme ?"
+Rýmovačka u sedmy v zelené: „Sedma zelená, neposečená, slunce na ni svítí"
