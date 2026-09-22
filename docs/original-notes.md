@@ -527,3 +527,75 @@ rozdání nedohrávat.
 Pozor na rozdíl oproti našemu rozhodnutí z §39: my zbytek **doopravdy dohráváme**, protože
 obrana smí hlásit hlášky i u odhazované karty (ČSM čl. III/3). V betlu se ale hlášky nepočítají
 (čl. IV/1), takže tam ten důvod odpadá — a originál toho využívá.
+
+## Dvě sedmy: originál je umí doopravdy, a platí 30× (ne 40×)
+
+Soupeř vylicitoval **dvě sedmy**; bublina ohlásila **„zelená trumf, žaludská pomocná"**
+a odznak závazku ukázal **obě barvy** (`♠ + ♣`). Není to tedy jen položka v žebříčku —
+závazek je implementovaný včetně pomocné barvy.
+
+Jako obrana jsem na něj flekoval, soupeř dal RE!, a takhle to skončilo:
+
+```
+Vyúčtování:
+
+6x flek na dvě sedmy       192.00 Kč
+Tratíš                     192.00 Kč
+Máš nyní celkem              4.00 Kč
+```
+
+`192,00 ÷ 2⁶ = 3,00` → **dvě sedmy = 30× hra** (hra 0,10).
+`Tratíš` = jeden podíl, protože jsem byl v obraně; konto 196,00 − 192,00 = 4,00 ✓.
+
+### Sazebník: kde se originál rozchází s ČSM
+
+| závazek | originál RE! | poměr | ČSM |
+|---|---|---|---|
+| hra | 0,10 | 1× | 1× ✓ |
+| sedma | 0,20 | 2× | 2× ✓ |
+| kilo | 0,40 | 4× | 4× ✓ |
+| **betl** | **1,00** | **10×** | 15× ✗ |
+| **dvě sedmy** | **3,00** | **30×** | 40× ✗ |
+| durch | ? | ? | 30× |
+
+Základní trojice sedí s ČSM přesně; **rozcházejí se až „speciální" závazky**. Poměr betlu
+10× uvádí návrh (§10 bod 1) jako odchylku křížového mariáše — originál ji používá, i když
+křížový mariáš nehraje. Dvě sedmy 30× nesedí ani na jedno.
+
+**`SAZBY_FLEK` tedy nemůže sdílet `SAZBY_CSM`** — potřebuje vlastní tabulku aspoň pro
+betl, durch a dvě sedmy.
+
+**Durch zůstává NEZMĚŘENÝ.** Pokus o něj skončil tím, že soupeř přehodil na dvě sedmy
+a závazek sebral. Podle vzoru (betl 10× tam, kde ČSM má 15×) by durch mohl být 20×,
+ale to je dohad, ne měření — nezapisovat do presetu bez ověření.
+
+### Drobnost k UI
+
+Tlačítka flekovacího dialogu se pojmenovávají **podle skutečných komponent závazku**:
+u `107` to bylo `[OK] [Na 100] [Na 7] [Obojí]`, u sedmy `[OK] [Na hru] [Na 7] [Obojí]`,
+u jednosložkových závazků jen `[OK] [Flek]`.
+
+Další hlášky: „Kdo se bojí, nesmí do lesa", „Ještě jednou, pane vrchní",
+„Račte se vyjádřit, holoubkové", „Čekám na Vaše nabídky", „Vidíš aspoň sedmu ?",
+„Jsem jediné ucho, velevážení", „Já se řídit nebudu", „Dostanu", „Tady je".
+
+## Autorská obrazovka při ukončení RE!
+
+```
+Je mi potěšením, pokud se Vám program RE! líbí
+
+Autor:
+Jaroslav Pivoňka
+<adresa vypuštěna>
+
+Pravověrné mariášníky snažně prosím:
+
+Zašlete připomínky ke kvalitě hry s popisem konkrétních situací,
+kdy program podle Vašeho názoru urází kartiboha. Časem se to
+určitě zlepší a odešlete-li registrační kartu, dám Vám vědět.
+```
+
+(Adresa vypuštěna ze stejného důvodu jako u licenčního řádku — repo je veřejné.)
+
+Stojí to tu za citaci: tenhle projekt dělá po třiceti letech přesně to, oč Pivoňka prosil —
+popisuje konkrétní situace a porovnává je s pravidly.
