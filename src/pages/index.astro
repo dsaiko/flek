@@ -849,6 +849,39 @@ const version = pkg.version;
   .action-note { align-self: center; color: #ffe9a8; font-size: 13px; max-width: 420px; }
   .action-btn:not(:disabled):hover { filter: brightness(1.04); }
 
+  /* ── licitační žebřík (§40) ──────────────────────────────────────────────
+     Devět plnotextových tlačítek v řadě se nedalo přečíst a zabralo celou
+     šířku sukna. Závazky se proto ukazují jako KRÁTKÉ BOXY, jak je ukazoval
+     FLEK! („100 ♞", „BETL“): číslo místo slova, červená barvou místo dalšího
+     slova, a rodiny slepené k sobě — ty jdou v témž pořadí jako žebříček,
+     takže se dá číst zleva doprava jako „čím dál výš“. */
+  .bid-ladder { display: inline-flex; align-items: stretch; flex-wrap: wrap; justify-content: center;
+    gap: clamp(6px, 1.2cqh, 14px); }
+  .bid-group { display: inline-flex; border-radius: 9px; overflow: hidden;
+    box-shadow: 0 2px 0 rgba(0,0,0,.25); }
+  .bid-chip {
+    font-family: inherit; font-weight: 700;
+    font-size: clamp(14px, 2.3cqh, 28px); line-height: 1.25;
+    /* užší boky než u .action-btn: obsah je číslo, ne věta */
+    padding: clamp(8px, 1.55cqh, 19px) clamp(14px, 3cqh, 34px);
+    border: 0; cursor: pointer; background: #eafcf6; color: #0a4a52;
+    display: inline-flex; align-items: center; gap: 6px;
+    /* číslice stejné šířky: „100“ vedle „7“ neposkakuje */
+    font-variant-numeric: tabular-nums;
+  }
+  /* uvnitř skupiny dlaždice sousedí — dělí je vlasová linka, ne mezera */
+  .bid-group .bid-chip + .bid-chip { box-shadow: inset 1px 0 0 rgba(10,74,82,.18); }
+  /* samostatná dlaždice (betl, durch) má vlastní rám */
+  .bid-ladder > .bid-chip { border-radius: 9px; box-shadow: 0 2px 0 rgba(0,0,0,.25); }
+  /* červená = dvojnásobná sazba; pozná se BARVOU, ne slovem */
+  .bid-chip.red { color: var(--bid-red, #c8302a); background: #fdeeed; }
+  /* betl/durch: bezbarvý závazek, hraje se o štychy — jiný svět než zbytek žebříku */
+  /* verzálky jako v boxu „BETL“ z FLEK!; menší písmo, ať slovo nepřeroste čísla */
+  .bid-chip.mode { background: #0a4a52; color: #eafcf6;
+    text-transform: uppercase; letter-spacing: .06em; font-size: clamp(12px, 2cqh, 24px); }
+  .bid-chip:hover { filter: brightness(1.05); }
+  .bid-chip svg { flex: none; display: block; }
+
   /* pevná výška ruky — stůl se nesmí zmenšovat s ubývajícími kartami */
   #hand { display: flex; justify-content: center; align-items: flex-end; padding: 10px 0 6px; overflow: visible;
     min-height: calc(var(--card-w) * 1.85); }

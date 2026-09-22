@@ -2134,3 +2134,40 @@ test.
 Celá bezpečnost „vše za mnou" stojí na tom, kdy nabídka NEPŘIJDE, a přesně to nešlo odlišit od
 funkce, která si vidí do cizích karet. Pozitivní případ je vždycky ten první, co člověka napadne;
 ten negativní je ten, co drží slib.
+
+## 40. Licitační žebřík místo devíti pilulek (2026-09-22)
+
+Plná nabídka v licitovaném má devět možností a do teď to bylo devět stejných tlačítek s plným
+textem v jedné řadě: „Dobrá (pas) · Sedma · Sedma ♥ · Sto · Sto a sedma · Sto ♥ · Sto a sedma ♥ ·
+Betl · Durch". Uživatel to poslal se slovy „tohle se nedá". Právem: nic nenapovídalo, co je vyšší,
+„Sedma" a „Sedma ♥" se lišily jedním znakem na konci, a řada zabrala celou šířku sukna.
+
+### Co se změnilo
+
+**Čísla místo slov.** Závazek se ukazuje jako krátký box — `7`, `100`, `100+7` —, jak to dělal
+FLEK! („100 ♞", „BETL"). Plný název zůstává v `title`.
+
+**Červená se pozná barvou, ne dalším slovem.** Dvojnásobná sazba je vidět na první pohled
+(červený text, světle červené pozadí, srdce), místo aby se lišila příponou.
+
+**Rodiny slepené k sobě.** Sedma (1–2), sto (3–6), betl (7), durch (8) — rodiny jdou přesně
+v pořadí žebříčku `bidRank`, takže seskupení neodporuje tomu, co je vyšší, a čte se to zleva
+doprava jako „čím dál výš". Uvnitř skupiny dlaždice sousedí, dělí je vlasová linka.
+
+**Betl a durch jsou jiný svět.** Bezbarvé závazky, kde se nehraje na body — tmavá dlaždice
+a verzálky, opět po vzoru boxu „BETL" z originálu.
+
+Řada se tím zúžila zhruba na polovinu a ve všech čtyřech jazycích se vejde na jeden řádek
+(dřív se angličtina a němčina zalomily na dva).
+
+### Pozor: jedna kontrola tím ztratila zuby
+
+Smoke z §37 hlídá, že nabídka nepřekrývá jmenovku hráče ani pakl. Její negativní kontrola —
+zrušit `margin-bottom` u `#actions` — **po téhle změně neshodí nic**: řada je teď tak malá, že
+na jmenovku nedosáhne, ani když pruh zmizí. Kontrola sice pořád tvrdí správnou věc, ale to, co ji
+drží, už není pruh.
+
+Přibylo proto tvrzení, které měří přímo to, oč v redesignu jde: **nabídka se musí vejít na jeden
+řádek** ve všech čtyřech jazycích. To zuby má — když se dlaždice zase roztáhnou, řada se zalomí
+na tři řádky a smoke to řekne. Pruh z §37 zůstává, protože platí pro všechny fáze (fleky mají
+popisky pořád dlouhé), ale pro licitaci je od téhle chvíle jen pojistka navíc.

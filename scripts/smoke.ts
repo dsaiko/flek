@@ -1017,12 +1017,14 @@ if (cspViolations.length > 0) {
     }, [payload, JSON.stringify({ variant: 'licitovany', sounds: false })]);
     await bid.reload();
     try {
+      // `button`, ne `.action-btn`: žebřík licitace (§40) skládá nabídku
+      // z dlaždic `.bid-chip`, jen „Dobrá (pas)" zůstala obyčejným tlačítkem
       await bid.waitForFunction(
-        () => document.querySelectorAll('#actions .action-btn').length >= 9,
+        () => document.querySelectorAll('#actions button').length >= 9,
         undefined, { timeout: 15000 },
       );
     } catch {
-      const n = await bid.locator('#actions .action-btn').count();
+      const n = await bid.locator('#actions button').count();
       console.error(`CHYBA: licitovaný sav se neobnovil — nabídka má ${n} tlačítek místo devíti (${lang})`);
       await bid.close();
       await browser.close();
@@ -1036,7 +1038,7 @@ if (cspViolations.length > 0) {
      * jako u `addInitScript` nahoře).
      */
     const boxes = await bid.evaluate(() => ({
-      buttons: [...document.querySelectorAll('#actions .action-btn')].map((b) => {
+      buttons: [...document.querySelectorAll('#actions button')].map((b) => {
         const r = b.getBoundingClientRect();
         return { label: (b.textContent ?? '').trim(), x: r.x, y: r.y, w: r.width, h: r.height };
       }),
@@ -1049,6 +1051,20 @@ if (cspViolations.length > 0) {
         return { x: r.x, y: r.y, w: r.width, h: r.height };
       })[0] ?? null,
     }));
+    /*
+     * Nabídka se musí vejít na JEDEN řádek.
+     *
+     * Do §40 tohle netvrdilo nic a nešlo: devět plnotextových tlačítek se
+     * v angličtině a němčině zalomilo na dva řádky a jediné, co je drželo mimo
+     * jmenovku, byl pruh z §37. Po zúžení na dlaždice je řada tak malá, že na
+     * jmenovku nedosáhne ani bez pruhu — kontrola překryvu tím ztratila zuby.
+     * Tohle je to, co redesign doopravdy slibuje, a co se zase pokazí, jakmile
+     * se popisky natáhnou.
+     */
+    const tops = new Set(boxes.buttons.map((b) => Math.round(b.y)));
+    if (tops.size > 1) {
+      worst.push(`${lang}: nabídka se zalomila na ${tops.size} řádky`);
+    }
     for (const [name, target] of [['jmenovku', boxes.meta], ['hromádku', boxes.pile]] as const) {
       if (target === null || target.w === 0) continue; // prvek se v téhle fázi nekreslí
       for (const b of boxes.buttons) {
@@ -1069,7 +1085,7 @@ if (cspViolations.length > 0) {
     await browser.close();
     process.exit(1);
   }
-  console.log('Nabídka licitace (9 tlačítek) se ve všech čtyřech jazycích vyhne jmenovce i hromádce');
+  console.log('Nabídka licitace (9 tlačítek) je ve všech čtyřech jazycích na jednom řádku a vyhne se jmenovce i hromádce');
 }
 
 /*

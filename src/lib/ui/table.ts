@@ -10,7 +10,7 @@ import { sortHand, suitOf, card as mkCard, KRAL, SVRSEK, type Card, type OrderMo
 import { legalActions, passSettlesWithoutPlay, trumplessChoicePending } from '../rules/legal';
 import { orderMode, trickWinner } from '../rules/tricks';
 import type { Contract, GameMode, GameState, PlayerAction, PlayerView, Seat } from '../rules/types';
-import { forhont } from '../rules/types';
+import { bidRank, forhont } from '../rules/types';
 import { view } from '../rules/view';
 import { backSrc, cardName, cardSrc, suitIcon, suitName, type Pattern } from './cardAssets';
 import { aiNames, currentLang, flekName, fmtMoney, marriageWarn, t, type Lang } from './i18n';
@@ -1074,14 +1074,55 @@ export class TableUI {
         break;
       }
 
-      case 'bidding':
-        for (const a of legal) {
-          if (a.type !== 'bid') continue;
-          btn(a.bid === 'pass' ? t('pass') : bidLabel(a.bid), () => this.cb.onAction(a), {
-            primary: a.bid === 'pass',
-          });
+      case 'bidding': {
+        /*
+         * Licitační žebřík (§40), ne devět stejných pilulek v řadě.
+         *
+         * Nabídka je uspořádaná: sedma < sedma ♥ < sto < sto a sedma < sto ♥ <
+         * sto a sedma ♥ < betl < durch. Rodiny přitom jdou v tomtéž pořadí, tak
+         * se dají slepit do skupin, aniž by to odporovalo žebříčku. Červená
+         * varianta se pozná BARVOU (platí dvojnásob), ne dalším slovem navíc.
+         */
+        const pass = legal.find((a) => a.type === 'bid' && a.bid === 'pass');
+        if (pass) btn(t('pass'), () => this.cb.onAction(pass), { primary: true });
+
+        const bids = legal
+          .filter((a): a is Extract<PlayerAction, { type: 'bid' }> => a.type === 'bid' && a.bid !== 'pass')
+          .sort((x, y) => bidRank(x.bid as Exclude<typeof x.bid, 'pass'>) - bidRank(y.bid as Exclude<typeof y.bid, 'pass'>));
+        if (bids.length === 0) break;
+
+        const ladder = document.createElement('div');
+        ladder.className = 'bid-ladder';
+        bar.appendChild(ladder);
+
+        let group: HTMLElement | null = null;
+        let groupKey = '';
+        for (const a of bids) {
+          const bid = a.bid as Exclude<typeof a.bid, 'pass'>;
+          const family = BID_FAMILY[bid.kind];
+          const chip = document.createElement('button');
+          chip.type = 'button';
+          // bezbarvý závazek (betl/durch) vypadá jinak — hraje se o štychy, ne o body
+          chip.className = `bid-chip${family === undefined ? ' mode' : ''}${bid.cervena ? ' red' : ''}`;
+          const glyph = BID_GLYPH[bid.kind] ?? bidLabel({ kind: bid.kind, cervena: false });
+          chip.innerHTML = bid.cervena ? `${esc(glyph)} ${suitIcon(0)}` : esc(glyph);
+          chip.title = bidLabel(bid); // plný název zůstává dostupný
+          chip.addEventListener('click', () => this.cb.onAction(a));
+          if (family === undefined) {
+            ladder.appendChild(chip); // samostatná dlaždice
+            group = null; groupKey = '';
+          } else {
+            if (group === null || groupKey !== family) {
+              group = document.createElement('div');
+              group.className = 'bid-group';
+              ladder.appendChild(group);
+              groupKey = family;
+            }
+            group.appendChild(chip);
+          }
         }
         break;
+      }
 
       case 'takeover': {
         // aktér se v téhle fázi PTÁ („Barva?"), obrana odpovídá („Dobrá")
@@ -1416,6 +1457,35 @@ const BID_LABEL_CS: Record<string, string> = {
   sedma: 'Sedma', sto: 'Sto', 'sto-sedma': 'Sto a sedma',
   betl: 'Betl', durch: 'Durch', 'dve-sedmy': 'Dvě sedmy', 'dve-sedmy-sto': 'Dvě sedmy a sto',
 };
+/**
+ * Krátký glyf závazku pro licitační žebřík (§40).
+ *
+ * Nejsou to zkratky pro zkratku: devět plnotextových tlačítek v řadě („Sto
+ * a sedma ♥" vedle „Sto a sedma") se nedalo přečíst a zabralo celou šířku
+ * sukna. FLEK! ukazoval závazky jako KRÁTKÉ BOXY („100 ♞", „BETL"), tak se to
+ * sem vrací. Plný název zůstává v `title` tlačítka.
+ *
+ * Nezávislé na jazyce: číslo je číslo, a „Betl"/„Durch" se ve všech čtyřech
+ * jazycích píšou skoro stejně (viz BID_LABEL_*).
+ */
+const BID_GLYPH: Record<string, string> = {
+  sedma: '7', sto: '100', 'sto-sedma': '100+7',
+  'dve-sedmy': '7+7', 'dve-sedmy-sto': '100+7+7',
+};
+
+/**
+ * Do které skupiny závazek patří. Rodiny jdou PŘESNĚ v pořadí žebříčku
+ * (`bidRank`): sedma 1–2, sto 3–6, betl 7, durch 8 — takže seskupení
+ * neodporuje tomu, co je vyšší, a hráč to může číst zleva doprava.
+ *
+ * Betl a durch dostávají každý svou dlaždici a jiný vzhled: jsou to bezbarvé
+ * závazky, kde se nehraje na body, tedy něco jiného než celý zbytek žebříku.
+ */
+const BID_FAMILY: Record<string, string> = {
+  sedma: 'sedma', sto: 'sto', 'sto-sedma': 'sto',
+  'dve-sedmy': 'dve-sedmy', 'dve-sedmy-sto': 'dve-sedmy',
+};
+
 const BID_LABEL_FR: Record<string, string> = {
   sedma: 'Sept', sto: 'Cent', 'sto-sedma': 'Cent et sept',
   betl: 'Bettel', durch: 'Durch', 'dve-sedmy': 'Deux sept',
