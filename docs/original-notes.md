@@ -203,10 +203,10 @@ Odznak závazku ukazuje barvu symbolem, např. `7 ♠` pro zelenou.
 Po volbě „Na 7" (v situaci, kdy aktér předtím zvýšil jen „Na hru") hra nabídku přijala,
 soupeři odpověděli bublinami **„Nic"** a **„Jsem potichu"** a rozdání přešlo do sehrávky.
 
-Z toho ale NELZE uzavřít, jak originál drží žebříčky po komponentách: **hra nikde nezobrazuje
-dosaženou úroveň fleku**. Jediná spolehlivá půda je **vyúčtování na konci**, kde jsou násobky
-vypsané. Pozorování z průběhu licitace je proto třeba vždy párovat se závěrečným rozpisem,
-jinak si člověk domýšlí.
+UPŘESNĚNO později: číst se to z obrazovky **dá**, jen ne z bublin — signál nese **sada tlačítek
+v dialogu**. Když aktér zvýšil jen hru, dialog se zúžil z `[OK] [Na hru] [Na 7] [Obojí]`
+na pouhé `[OK] [Na 7]`; jakmile soupeři zvýšili obojí, vrátil se celý. Sada tlačítek tedy
+odpovídá tomu, co u nás počítá `raisableFleks`. Přesný počet fleků pak řekne až vyúčtování.
 
 ### Přechodné bubliny a jak je nepropást
 
@@ -421,3 +421,67 @@ z videa („Základ 0,20 Kč", viz výš v tomhle souboru) — ta vznikla dopaso
 
 **Ovládání v sehrávce:** Enter na nelegální kartu se spolkne (musí se ctít barva), takže
 proklikat rozdání jen Entery nejde — je nutné mezi pokusy posouvat kurzor.
+
+### Betl: desítka do talonu SMÍ (protikontrola k „ostrou do talonu")
+
+V betlu (RE!, závazek `BETL`) šla desítka srdcová do talonu **bez protestu** — karta se odložila
+a hra pokračovala na „Ještě jednu". Táž akce v barevné hře je odmítnutá hláškou
+„To nejde, ostrou do talonu!".
+
+To je čistá protikontrola k dřívějšímu pozorování a potvrzuje ČSM čl. IV/11 tak, jak to máme
+v §27 návrhu (zákaz odkládat esa a desítky platí jen u her s trumfem; v betlu/durchu se hlášky
+nepočítají a zákaz odpadá).
+
+Betl se navíc ohlašuje **bez volby trumfu** — po výběru závazku jde rovnou „Odhoď talon".
+
+### Sazby vypsané přímo, bez násobků (definitivní potvrzení)
+
+Rozdání vyrovnané bez sehrávky, kde nebyl žádný flek, takže hra vypsala holé sazby:
+
+```
+Jako by se hrálo:
+
+Hra                          0.10 Kč
+Sedma                        0.20 Kč
+Červená je dražší:           0.60 Kč
+Tratíš                       0.60 Kč
+```
+
+**`Hra 0.10` a `Sedma 0.20` jsou tu uvedené přímo** — základ už není odvozený, hra ho říká sama.
+Červená zdvojnásobuje součet složek: (0,10 + 0,20) × 2 = 0,60 ✓.
+`Tratíš 0,60` je jeden podíl, protože jsem byl v obraně (aktér by platil dvakrát).
+
+Další varianta flavouru pro červený násobek: **„Červená je dražší:"** (vedle „Barva lásky je drahá").
+
+### Strop fleků: RE! pustí nejmíň DEVĚT
+
+Rozdání, kde jsem jako obrana stupňoval flek, jak to šlo:
+
+```
+Vyúčtování:
+
+Hra, 9x flek:               51.20 Kč
+Prohraná sedma:              0.20 Kč
+Bylo to v srdcích:         102.80 Kč
+Získal jsi                 102.80 Kč
+Máš nyní celkem            200.60 Kč
+```
+
+Bodové boxy: `30+40=70` a `60+20=80`.
+
+**`Hra, 9x flek: 51,20` = 0,10 × 2⁹ = 51,20 přesně.** Z toho plyne dvojí:
+
+1. **Popisek „Nx flek" znamená doslova N fleků a násobek je 2^N.** Zpětně to potvrzuje
+   i dřívější zápisy: `Hra, 2x flek 0,40` = 0,10 × 2², `Hra, flek 0,20` = 0,10 × 2¹
+   (holé „flek" bez čísla = jeden).
+2. **RE! nemá strop na 4 (boty).** Devět fleků prošlo, a devítka NENÍ strop — jen tam
+   licitace skončila. Skutečný strop (pokud nějaký je) zůstává neznámý.
+
+Pro srovnání: náš `defaultConfig` má `maxFlekLevel` 4 pro licitovaný (boty, ČSM čl. IV)
+a 5 pro volený (kalhoty). Preset `SAZBY_FLEK` by tohle měl odlišit — originál je štědřejší.
+Starší poznámka z videa („fleky jdou nejméně do 2^6") je tím překonaná směrem nahoru.
+
+Zbytek rozpisu sedí: sedma 0,20 neflekovaná; červená zdvojnásobuje součet
+(51,20 + 0,20) × 2 = 102,80 ✓; `Získal jsi` je jeden podíl, protože jsem byl v obraně.
+
+Další varianta flavouru pro červený násobek: **„Bylo to v srdcích:"**.
