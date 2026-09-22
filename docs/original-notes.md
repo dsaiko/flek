@@ -51,7 +51,9 @@ projito po snímcích 2026-08-21. Doplní se pozorováním v DOSBoxu.
 `819.20 = 0.20 Kč × 4 (kilo) × 2^6 (6× flek) × 2^4 (kilo prohrané o 40 bodů — zdvojnásobování)`
 `1638.40 = 2 × 819.20` (aktér platí oběma soupeřům)
 
-- **Základ 0,20 Kč**, kilo = 4× hra ✓ (ČSM shodné)
+- ~~**Základ 0,20 Kč**~~ — **NEPLATÍ**, změřeno 0,10 Kč v RE! i ve FLEK!.
+  Tenhle řádek vznikl dopasováním rozkladu na jediné číslo; viz sekce o FLEK! níž.
+- kilo = 4× hra ✓ (ČSM shodné)
 - **Kilo se škáluje ZDVOJNÁSOBOVÁNÍM za každých 10 bodů** (ne lineárně jako soutěžní ČSM)
   → preset `SAZBY_FLEK` má mít `kiloScaling: 'double'`
 - Platba aktéra oběma soupeřům odpovídá našemu `delta` modelu ✓
@@ -367,3 +369,55 @@ Talon: „Odlož talon" / „Odhoď talon" (obměňuje se), „Ještě jednu"
 Konec: „Nula od nuly pojde", „Je to zadarmo", „Zanech mariáše, běž hrát kuličky",
 „Zobrazit průběh hry ?", „Chceš vidět štychy ?", „Pokračujeme ?"
 Rýmovačka u sedmy v zelené: „Sedma zelená, neposečená, slunce na ni svítí"
+
+## Licenční řádek při ukončení
+
+Po ukončení RE! vypíše do konzole:
+
+```
+(c) 1991-1993 J.Pivoňka
+RE!    1.1        #40456
+Licence: Josef SAIKO * <adresa vypuštěna>
+```
+
+Kopie, ze které jsou všechna tahle pozorování, je **licencovaná kopie č. 40456 Josefa Saika** —
+otce autora tohoto projektu, jemuž je Flek! věnován. Pivoňka v `NEJPRVE.CTI` psal, že „každá
+kopie programu RE! je určena pro jediného majitele a je také individuálně identifikovatelná
+číslem i jménem uživatele"; tady je to vidět.
+
+(Adresa z licenčního řádku se do repozitáře záměrně nezapisuje — repo je veřejné.)
+
+## FLEK! (volený, v1.12) — a oprava staré domněnky o základu
+
+Vyúčtování z FLEK!, kde jsem byl v obraně (závazek soupeře `hra ♠`, flekovaný).
+Bodové boxy: **`50`** a **`40+40=80`** (body ze štychů 50 + 40 = 90 ✓).
+
+```
+Vyúčtování:
+
+Hra, flek:                   0.20 Kčs
+Získal jsi                   0.20 Kčs
+Máš nyní celkem             20.20 Kčs
+```
+
+**Základ je stejný jako v RE!: hra 0,10, s flekem 0,20.** Tím padá dřívější domněnka
+z videa („Základ 0,20 Kč", viz výš v tomhle souboru) — ta vznikla dopasováním rozkladu
+`0.20 × 4 × 2^6 × 2^4` na jediné číslo 819,20, a na totéž číslo sedí i náš model
+`0.40 × 2^10 × 2`. Jeden vzorek nerozhodne; dva programy měřené zvlášť ano.
+
+**Rozdíly FLEK! vs RE!:**
+
+| | FLEK! v1.12 (1992) | RE! 1.1 (1993) |
+|---|---|---|
+| varianta | volený | licitovaný |
+| měna | **Kčs** (československá) | **Kč** |
+| počáteční konto | **20,00** | **100,00** |
+| základ hry | 0,10 | 0,10 |
+| „IQ" | posuvník 0–100 | posuvník ve **vteřinách** 0–40" |
+| licenční řádek při ukončení | ne | ano (jméno + číslo kopie) |
+
+`Získal jsi 0,20` je **jeden podíl** (obrana inkasuje od aktéra), zatímco u aktéra se
+částka násobí dvěma (platí oběma). Model z RE! tím platí i pro FLEK!.
+
+**Ovládání v sehrávce:** Enter na nelegální kartu se spolkne (musí se ctít barva), takže
+proklikat rozdání jen Entery nejde — je nutné mezi pokusy posouvat kurzor.
