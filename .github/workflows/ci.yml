@@ -1,0 +1,53 @@
+# Pull request do main → `make all` (verify + build + smoke v Chromiu i WebKitu).
+#
+# Dřív běželo `make all` jen při vydání, takže rozbitý PR se poznal až na tagu.
+#
+# Spouštěč je `pull_request`, NIKDY `pull_request_target`. Ten druhý běží
+# v kontextu cílového repozitáře — s tokenem, který smí zapisovat, a se
+# secrets —, a jakmile si stáhne kód z PR, spouští ho z forku kdokoli. Tady
+# navíc `npm ci` pouští postinstall skripty celého stromu závislostí. Hlídá to
+# test ve `scripts/verify.ts`.
+#
+# Kroky jsou tytéž jako v jobu `overit` v release.yml, jen bez kontroly verze
+# a textu vydání — na PR ještě žádný tag není.
+name: ci
+
+on:
+  pull_request:
+    branches: [main]
+
+# implicitně nic navíc: práva si job říká sám
+permissions: {}
+
+# nový push do téhož PR zruší rozběhnutý starší běh
+concurrency:
+  group: ci-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  overit:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      # token v .git/config nepatří do jobu, kde běží postinstall skripty
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      # chromium i webkit: smoke jede v obou (Safari chytá jiné chyby layoutu)
+      - name: Prohlížeče pro smoke testy
+        run: node node_modules/playwright/cli.js install --with-deps chromium webkit
+
+      - name: make all
+        env:
+          # sdílený runner je pomalejší než vývojářský stroj (viz scripts/smoke.ts)
+          SMOKE_RESTART_MS: 9000
+        run: make all

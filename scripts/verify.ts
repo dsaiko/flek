@@ -6287,14 +6287,44 @@ console.log('PASS sav — v2 mimo komentování se migruje, rozehrané fleky z v
     assert.deepEqual(jobComplaints(publish[0], 'x'), [], 'samotné `gh` z image runneru je v pořádku');
   }
 
+  /*
+   * Spouštěče. `pull_request_target` běží v kontextu CÍLOVÉHO repozitáře —
+   * s tokenem, který smí zapisovat, a se secrets — a stačí mu stáhnout kód
+   * z PR, aby ho z forku spustil kdokoli (tady navíc s postinstall skripty
+   * celého `npm ci`). PR testy proto jedou na `pull_request`, a ten druhý
+   * spouštěč nesmí do žádného workflow přibýt ani omylem.
+   */
+  const triggersOf = (yamlText: string): string[] => {
+    const on = (parseYaml(yamlText) as { on?: unknown } | null)?.on;
+    if (typeof on === 'string') return [on];
+    if (Array.isArray(on)) return on.filter((t): t is string => typeof t === 'string');
+    if (on !== null && typeof on === 'object') return Object.keys(on);
+    return [];
+  };
+  // všechny tři zápisy `on:`, a klíč `on` musí zůstat řetězcem (YAML 1.1 by z něj udělal `true`)
+  assert.deepEqual(triggersOf('on: pull_request_target\njobs: {}'), ['pull_request_target']);
+  assert.deepEqual(triggersOf('on: [push, pull_request_target]\njobs: {}'), ['push', 'pull_request_target']);
+  assert.deepEqual(
+    triggersOf('on:\n  pull_request_target:\n    branches: [main]\n  push:\njobs: {}'),
+    ['pull_request_target', 'push'],
+  );
+  assert.deepEqual(triggersOf('jobs: {}'), [], 'workflow bez `on:` nemá žádný spouštěč');
+
   const dir = join(ROOT, '.github/workflows');
   const files = readdirSync(dir).filter((f) => f.endsWith('.yml') || f.endsWith('.yaml'));
+  let prWorkflows = 0;
   assert.ok(files.length > 0, 'nenašel se žádný workflow — test by nic nehlídal');
   let scripts = 0;
   let checkouts = 0;
   for (const file of files) {
     const where = `.github/workflows/${file}`;
     const text = readFileSync(join(dir, file), 'utf8');
+    const triggers = triggersOf(text);
+    assert.ok(
+      !triggers.includes('pull_request_target'),
+      `${where}: \`pull_request_target\` pouští kód z PR s tokenem cílového repozitáře — použij \`pull_request\``,
+    );
+    if (triggers.includes('pull_request')) prWorkflows += 1;
     for (const script of runScripts(text)) {
       scripts += 1;
       const found2 = complaints(script, where);
@@ -6309,7 +6339,12 @@ console.log('PASS sav — v2 mimo komentování se migruje, rozehrané fleky z v
   assert.ok(scripts > 0, 'v žádném workflow se nenašel `run:` — parser asi nedošel k `jobs`');
   // kdyby `uses:` přestalo docházet až ke krokům, kontrola stavby by tiše nic nedělala
   assert.ok(checkouts > 0, 'v žádném workflow se nenašel checkout — parser asi nedošel ke krokům `uses:`');
-  console.log(`PASS workflow — run: bez dosazovaných výrazů, spolknutých návratových kódů a npx (${scripts} skriptů)`);
+  // kdyby parser spouštěčů přestal číst `on:`, kontrola `pull_request_target` by tiše nic nehlídala
+  assert.ok(prWorkflows > 0, 'žádný workflow neběží na `pull_request` — buď zmizely PR testy, nebo parser nečte `on:`');
+  console.log(
+    `PASS workflow — run: bez dosazovaných výrazů, spolknutých návratových kódů a npx (${scripts} skriptů), `
+    + `PR testy na pull_request, ne pull_request_target`,
+  );
 }
 
 /*

@@ -2171,3 +2171,26 @@ Přibylo proto tvrzení, které měří přímo to, oč v redesignu jde: **nabí
 řádek** ve všech čtyřech jazycích. To zuby má — když se dlaždice zase roztáhnou, řada se zalomí
 na tři řádky a smoke to řekne. Pruh z §37 zůstává, protože platí pro všechny fáze (fleky mají
 popisky pořád dlouhé), ale pro licitaci je od téhle chvíle jen pojistka navíc.
+
+## 41. Testy na každém pull requestu (2026-09-23)
+
+Do teď běželo `make all` v CI jen při vydání (`release.yml` na tag `v*`), takže rozbitý PR se
+poznal až na tagu. Nový `.github/workflows/ci.yml` pouští na každý PR do `main` totéž, co job
+`overit` ve vydání: `npm ci`, prohlížeče Chromium a WebKit, `make all` s `SMOKE_RESTART_MS=9000`.
+Jen bez kontroly verze a textu vydání — tag na PR ještě není.
+
+**Spouštěč je `pull_request`, ne `pull_request_target`.** Ten druhý běží v kontextu cílového
+repozitáře, s tokenem, který smí zapisovat, a se secrets. Jakmile si stáhne kód z PR, spouští ho
+z forku kdokoli, a tady by to znamenalo i postinstall skripty celého `npm ci`. Job má jen
+`contents: read` a checkout s `persist-credentials: false` (hlídá to stávající kontrola stavby
+jobu z šestého kola review PR #10 u §38). Nový push do téhož PR zruší rozběhnutý starší běh (`concurrency`).
+
+Strážce workflow ve `verify.ts` přečte i `on:` — všechny tři zápisy (řetězec, seznam, mapa) — a
+`pull_request_target` v žádném workflow nepustí. Aby nebyl strážcem, který tiše nic nehlídá,
+tvrdí zároveň, že aspoň jeden workflow na `pull_request` běží: kdyby parser přestal `on:` číst,
+spadne to tam.
+
+Negativní kontroly: `pull_request_target` místo `pull_request` v `ci.yml` shodí první tvrzení,
+`push` místo `pull_request` shodí druhé.
+
+Nasazení na web (`make deploy`, §7 bod 8) zůstává ruční; vydání tagem web nemění.

@@ -120,6 +120,10 @@ make preview
 make capture       # regenerate the README screenshot
 ```
 
+Every pull request into `main` runs `make all` in GitHub Actions
+([`ci.yml`](.github/workflows/ci.yml)); pushing a `v*` tag runs it again and
+publishes the GitHub release ([`release.yml`](.github/workflows/release.yml)).
+
 Any deal can be reproduced by adding a seed to the URL: `?seed=10` deals the
 same cards every time, and subsequent hands continue from that seed.
 
@@ -178,7 +182,8 @@ that at 1440x900.
 The site has its own bucket and distribution: `dist/` is synced to
 `s3://flek.saiko.cz/` and the distribution is invalidated. `make deploy-s3-dryrun`
 shows what would change. Credentials and bucket names live in `Makefile.local`,
-which is deliberately not in the repository.
+which is deliberately not in the repository. Deployment is a manual `make deploy`;
+tagging a release does not touch the site.
 
 ## License
 
@@ -210,6 +215,9 @@ make dev
 make all           # verify + build + smoke
 make capture       # znovu vytvoří snímek pro README
 ```
+
+Každý pull request do `main` spustí `make all` v GitHub Actions; na web se nasazuje
+ručně přes `make deploy`, tag vydání web nemění.
 
 Rozdání jde zopakovat seedem v URL: `?seed=10` rozdá pokaždé stejné karty.
 Živý návrhový dokument je [`docs/marias-design.md`](docs/marias-design.md),
