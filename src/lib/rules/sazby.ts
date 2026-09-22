@@ -11,11 +11,14 @@
  * (4 hráči, desetihaléřový, ČSM 2007), který nehrajeme. Naše dvě varianty —
  * dvacetihaléřový bodovaný volený (ČSM 2007) i soutěžní licitovaný (ČSM 2014,
  * betl 3,00 / durch 6,00 při základu 0,20) — mají shodně betl 15× a durch 30×.
- * Hospodská tradice sto zdvojnásobuje (kiloScaling 'double'). Preset FLEK!
- * (podle chování originálu) se doladí ve fázi 4.
+ * Hospodská tradice sto zdvojnásobuje (kiloScaling 'double').
+ *
+ * `SAZBY_FLEK` je oproti tomu sazebník ZMĚŘENÝ v originálu (viz níž) — a právě
+ * u betlu a durchu z něj vychází ty „křížové" poměry 10×/20×, i když originál
+ * křížový mariáš nehraje.
  */
 
-import type { RulesConfig, Sazby, Variant } from './types';
+import type { RulesConfig, Sazby, SazbyPreset, Variant } from './types';
 
 export const SAZBY_CSM: Sazby = {
   hra: 1,
@@ -40,11 +43,79 @@ export const SAZBY_CSM: Sazby = {
   limitRaised: 750, // zvýšený limit, když flekovali oba obránci
 };
 
-export function defaultConfig(variant: Variant): RulesConfig {
+/**
+ * Strop, který nikdy nesepne. Originál žádný limit neuplatňuje — jedno rozdání
+ * v RE! se vyrovnalo na 1638,40 Kč při základu 0,10 Kč, tedy **16384× základ**,
+ * zatímco ČSM stropuje na 500×. Skutečná mez (pokud vůbec existuje) změřená
+ * není, proto hodnota jen leží tak vysoko, že na ni nejde dosáhnout: nejdražší
+ * komponenta při `maxFlekLevel` 9 je dvě sedmy 30 × 2⁹ × 2 (červená) = 30 720.
+ *
+ * Záměrně NENÍ `Infinity`: `applyLimit()` by si s ním poradil, ale sav by ho
+ * uložil jako `null` (JSON `Infinity` neumí) a validace `isSazby()` by ho pak
+ * odmítla — hráči by se při načtení vynulovalo konto.
+ */
+const BEZ_LIMITU = 1_000_000;
+
+/**
+ * Sazebník ORIGINÁLU FLEK!/RE! — změřeno v DOSBoxu 2026-09-22 z vyúčtování,
+ * rozpis a kontrolní výpočty v `docs/original-notes.md`.
+ *
+ * Základ hry je v originálu 0,10 Kč a všechno ostatní je jeho násobek. Běžné
+ * závazky sedí s ČSM přesně; **liší se jen betl, durch a dvě sedmy**.
+ *
+ * Neměřené položky (`tichaSedma`, `ticheKilo`) zůstávají na poloviční sazbě
+ * podle ČSM — originál tichou variantu v žádném z pozorovaných rozdání
+ * nevypsal, takže tu není co převzít.
+ */
+export const SAZBY_FLEK: Sazby = {
+  hra: 1, // změřeno: „Hra 0.10 Kč" holé, bez násobků
+  sedma: 2, // změřeno: „Sedma 0.20 Kč"
+  tichaSedma: 1, // NEZMĚŘENO — ponechána poloviční sazba dle ČSM
+  kilo: 4, // změřeno: prohrané kilo 0,40 × 2^(schodek/10 + 1)
+  ticheKilo: 2, // NEZMĚŘENO — ponechána poloviční sazba dle ČSM
+  betl: 10, // změřeno: „Flekovaný betl 2.00" = 1,00 × 2
+  durch: 20, // změřeno: „Durch 2.00"
+  dveSedmy: 30, // změřeno: „6x flek na dvě sedmy 192.00" = 3,00 × 2⁶
+  kiloScaling: 'double', // změřeno: kilo se zdvojnásobuje, nepřičítá lineárně
+  cervenyMultiplier: 2, // změřeno: „Barva lásky je drahá" / „Červená je dražší"
+  /**
+   * Originálem prošlo devět fleků („Hra, 9x flek: 51.20" = 0,10 × 2⁹) a devítka
+   * NENÍ doložený strop — jen tam licitace skončila. Ponecháno na změřeném
+   * minimu; zvýšit až podle dalšího měření, ne odhadem.
+   */
+  maxFlekLevel: 9,
+  limit: BEZ_LIMITU,
+  limitRaised: BEZ_LIMITU,
+};
+
+const PRESETY: Record<SazbyPreset, Sazby> = { csm: SAZBY_CSM, flek: SAZBY_FLEK };
+
+/**
+ * `?sazby=flek` z URL přepne na sazebník originálu; cokoli jiného (i nesmysl)
+ * padne na ČSM, protože ten je výchozí a nikdy nemá smysl hru kvůli překlepu
+ * v adrese odmítnout.
+ *
+ * Zatím JEN parametr v URL, ne položka v nastavení: volba sazebníku mění
+ * konto uprostřed zápasu a chce vlastní rozhodnutí, jak se s tím naložit
+ * (a překlady do čtyř jazyků). Sem patří proto, aby šlo preset vyzkoušet
+ * v reálné hře, ne jen v testech — stejně jako `?seed=`.
+ */
+export function parseSazbyPreset(search: string): SazbyPreset {
+  return new URLSearchParams(search).get('sazby') === 'flek' ? 'flek' : 'csm';
+}
+
+export function defaultConfig(variant: Variant, preset: SazbyPreset = 'csm'): RulesConfig {
+  const sazby = PRESETY[preset];
   return {
     variant,
-    // licitovaný: poslední platný flek je čtvrtý — boty (licitovaný čl. IV)
-    sazby: variant === 'licitovany' ? { ...SAZBY_CSM, maxFlekLevel: 4 } : SAZBY_CSM,
+    /*
+     * Strop fleků má licitovaný jiný (čl. IV: poslední platný je čtvrtý — boty).
+     * To je ale ustanovení ČSM, takže se uplatní jen na jeho sazebník; originál
+     * si strop drží vlastní a devět fleků v něm projde v obou variantách.
+     */
+    sazby: preset === 'csm' && variant === 'licitovany'
+      ? { ...sazby, maxFlekLevel: 4 }
+      : sazby,
     talonForbidsTrump: false, // ČSM zakazuje jen esa/desítky (a hlášenou sedmu) — viz renonce
     talonOnTakeover: 'retake',
     enableDveSedmy: false, // v1 vypnuto i v licitovaném; typy a žebříček připraveny

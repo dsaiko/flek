@@ -2628,6 +2628,77 @@ const KULE = 2 as const;
     console.log('PASS regrese i7 — sazebník ČSM (betl 15×, durch 30×) v obou variantách');
   }
 
+  // ── sazebník originálu FLEK!/RE! (změřeno v DOSBoxu, docs/original-notes.md) ──
+  {
+    const { SAZBY_CSM, SAZBY_FLEK } = await import('../src/lib/rules/sazby');
+
+    // hodnoty odečtené z vyúčtování originálu; základ hry je tam 0,10 Kč
+    assert.equal(SAZBY_FLEK.hra, 1, '„Hra 0.10 Kč" holé');
+    assert.equal(SAZBY_FLEK.sedma, 2, '„Sedma 0.20 Kč"');
+    assert.equal(SAZBY_FLEK.kilo, 4, 'prohrané kilo 0,40 × 2^(schodek/10+1)');
+    assert.equal(SAZBY_FLEK.betl, 10, '„Flekovaný betl 2.00" = 1,00 × 2');
+    assert.equal(SAZBY_FLEK.durch, 20, '„Durch 2.00"');
+    assert.equal(SAZBY_FLEK.dveSedmy, 30, '„6x flek na dvě sedmy 192.00" = 3,00 × 2⁶');
+    assert.equal(SAZBY_FLEK.kiloScaling, 'double', 'kilo se v originálu zdvojnásobuje');
+
+    /*
+     * Jádro nálezu: běžné závazky sedí s ČSM přesně, rozcházejí se JEN betl,
+     * durch a dvě sedmy (plus škálování kila, strop fleků a limit). Kdyby se
+     * rozdíl rozlezl jinam, je to chyba v presetu, ne nový objev.
+     */
+    const rozdilne = (Object.keys(SAZBY_CSM) as (keyof typeof SAZBY_CSM)[])
+      .filter((k) => SAZBY_CSM[k] !== SAZBY_FLEK[k]).sort();
+    assert.deepEqual(rozdilne,
+      ['betl', 'durch', 'dveSedmy', 'kiloScaling', 'limit', 'limitRaised', 'maxFlekLevel'].sort(),
+      'preset FLEK! se od ČSM smí lišit jen v těchto položkách');
+
+    // strop fleků je ustanovení ČSM (čl. IV), na preset originálu se nevztahuje
+    assert.equal(defaultConfig('licitovany', 'flek').sazby.maxFlekLevel, 9,
+      'originálu se licitovaný strop 4 (boty) nevnucuje — devět fleků v něm prošlo');
+    assert.equal(defaultConfig('licitovany').sazby.maxFlekLevel, 4, 'výchozí preset zůstává ČSM');
+
+    // limit nesmí sepnout: nejdražší možná komponenta musí zůstat pod ním
+    const nejdrazsi = SAZBY_FLEK.dveSedmy * 2 ** SAZBY_FLEK.maxFlekLevel * SAZBY_FLEK.cervenyMultiplier;
+    assert.ok(nejdrazsi < SAZBY_FLEK.limit,
+      `limit originálu musí zůstat nedosažitelný (nejdražší komponenta ${nejdrazsi})`);
+
+    // sav: preset musí přežít kolotoč save→load…
+    const store = new Map<string, string>();
+    (globalThis as { localStorage?: unknown }).localStorage = {
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: (k: string, val: string) => void store.set(k, val),
+      removeItem: (k: string) => void store.delete(k),
+    };
+    const { saveMatch, loadMatch } = await import('../src/lib/match/persist');
+    const st: St9 = initialState(defaultConfig('voleny', 'flek'), 2);
+    saveMatch(st);
+    const nacteno = loadMatch();
+    assert.ok(nacteno, 'sav se sazebníkem originálu se musí načíst');
+    assert.equal(nacteno.config.sazby.betl, 10, 'a musí si sazebník pamatovat');
+
+    /*
+     * …a právě proto limit NENÍ `Infinity`: JSON ho uloží jako `null` a validace
+     * ho pak odmítne. Negativní kontrola — bez ní by se dalo `BEZ_LIMITU`
+     * kdykoli „zjednodušit" na Infinity a sav by se tiše přestal načítat.
+     */
+    const ulozene = JSON.parse(store.get('flek.match.v1') as string) as
+      { v: number; state: { config: { sazby: Record<string, unknown> } } };
+    assert.equal(JSON.parse(JSON.stringify({ x: Infinity })).x, null, 'JSON Infinity neumí');
+    ulozene.state.config.sazby.limit = null;
+    store.set('flek.match.v1', JSON.stringify(ulozene));
+    assert.equal(loadMatch(), null, 'sav s nekonečným limitem musí být odmítnut');
+
+    // ?sazby=flek — jediná cesta, jak preset zapnout ve hře; překlep nesmí hru shodit
+    const { parseSazbyPreset } = await import('../src/lib/rules/sazby');
+    assert.equal(parseSazbyPreset('?sazby=flek'), 'flek');
+    assert.equal(parseSazbyPreset('?seed=7&sazby=flek'), 'flek');
+    for (const bad of ['', '?', '?sazby=', '?sazby=FLEK', '?sazby=csm', '?sazby=flek2', '?sazba=flek']) {
+      assert.equal(parseSazbyPreset(bad), 'csm', `„${bad}" musí spadnout na ČSM`);
+    }
+
+    console.log('PASS sazebník FLEK! — změřené sazby, rozdíl jen betl/durch/dvě sedmy, sav, limit a ?sazby=');
+  }
+
   // ── i1/i2/i9: sav — licitace, číslo štychu, mód závazku ────────────────
   {
     const store = new Map<string, string>();

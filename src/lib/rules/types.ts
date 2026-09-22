@@ -10,6 +10,11 @@ import type { Card, Suit } from '../cards';
 export type Seat = 0 | 1 | 2;
 export type Variant = 'voleny' | 'licitovany';
 export type GameMode = 'hra' | 'betl' | 'durch';
+/**
+ * Který sazebník se použije: `csm` podle soutěžních pravidel, `flek` podle
+ * chování originálu FLEK!/RE! (změřeno v DOSBoxu, `docs/original-notes.md`).
+ */
+export type SazbyPreset = 'csm' | 'flek';
 
 /** Sedadlo po rozdávajícím — mluví a vynáší první. */
 export const forhont = (dealer: Seat): Seat => (((dealer + 1) % 3) as Seat);

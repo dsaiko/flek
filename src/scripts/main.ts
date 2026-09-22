@@ -8,7 +8,7 @@ import { clearMatch, loadMatch, saveMatch } from '../lib/match/persist';
 import { createSeedSequence, parseSeedParam } from '../lib/match/seedSequence';
 import { createWorkerDriver } from '../lib/match/workerDriver';
 import { initialState } from '../lib/rules/engine';
-import { defaultConfig } from '../lib/rules/sazby';
+import { defaultConfig, parseSazbyPreset } from '../lib/rules/sazby';
 import { nextSeat, type GameState, type Variant } from '../lib/rules/types';
 import type { Pattern } from '../lib/ui/cardAssets';
 import { createSounds } from '../lib/ui/sounds';
@@ -96,6 +96,8 @@ document.addEventListener('visibilitychange', () => {
 // ?seed=NNN → deterministická rozdání (testy, sdílení zajímavých rozdání);
 // další hry v zápase dostávají seed+1, seed+2, … (logika v seedSequence.ts)
 const seeds = createSeedSequence(parseSeedParam(location.search));
+// ?sazby=flek → sazebník originálu FLEK!/RE! místo ČSM (docs/original-notes.md)
+const sazbyPreset = parseSazbyPreset(location.search);
 const randomSeed = (): number => seeds.next();
 
 const BUDGETS: Record<Difficulty, number> = { easy: 300, normal: 1000, hard: 2200 };
@@ -104,7 +106,7 @@ let controller: MatchController;
 
 function makeController(resume?: GameState): MatchController {
   const mc = new MatchController(driver, {
-    config: defaultConfig(settings.variant),
+    config: defaultConfig(settings.variant, sazbyPreset),
     humanSeat: 0,
     difficulty: settings.difficulty,
     budgetMs: BUDGETS[settings.difficulty],
@@ -161,7 +163,7 @@ function newMatchIdle(keepBank = true): void {
           // rozdávající se posouvá jen po ODEHRANÉ hře; přepnutí varianty na
           // úvodní obrazovce (stav už je idle) ho posunout nesmí podruhé
           ...initialState(
-            defaultConfig(settings.variant),
+            defaultConfig(settings.variant, sazbyPreset),
             prev.phase.name === 'idle' ? prev.dealer : nextSeat(prev.dealer),
           ),
           ledger: prev.ledger,
