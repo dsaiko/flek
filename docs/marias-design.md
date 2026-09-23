@@ -2250,6 +2250,34 @@ na `\s`, kontrola `if:` vypnutá, `if:` z prvního kola zpátky v `ci.yml` — k
 **Poučení:** u workflow neověřuj jen to, co se stalo s během, ale co zůstalo viset na PR. „Nezrušilo
 se to" a „nic se nezměnilo" jsou dvě různé věci, a oprava prvního kola prošla jen tou první.
 
+## 42. Ruka se nepřeskládává skokem (2026-09-23)
+
+Uživatel hlásil z licitovaného: „objeví se mi deset karet a najednou tam skočí další dvě a celá
+ruka se posune". Stav byl správně, přechod ne. Po poslední nabídce se fáze přepne rovnou na odhoz,
+`renderHand` překreslil vějíř z 10 na 12 karet v jediném snímku — a protože se tlačítka
+recyklovala **podle pořadí**, dvě karty z talonu zařazené doprostřed znamenaly nový obrázek pro
+každé tlačítko za nimi. Talon přitom během licitace na stole neleží, takže karty přišly odnikud.
+
+**Co se změnilo:**
+- **Ruka je klíčovaná kartou** (`syncKeyed`): karta si drží svůj prvek, i když se vějíř přeskládá.
+  Ruby druhé pětice („z lidu") klíč nemají a recyklují se mezi sebou.
+- **Dosavadní karty dojedou** (FLIP, 240 ms): poloha se změří před změnou a po ní a rozdíl se
+  pustí k nule přes Web Animations. Polohu dělá flexbox a změnu layoutu CSS přechod sám nezanimuje.
+- **Nové karty se zjeví** stejným rytmem jako při rozdávání: dvě z talonu, odkrytá druhá pětice
+  i trumf, který se ze stolu vrací do ruky. Totéž u soupeře, když licitaci vyhraje on — dva ruby
+  navíc se zjeví, místo aby naskočily.
+- Platí to pro každou změnu ruky, takže i zahraná karta už vějíř nezavírá skokem. Rozdávání má
+  svou animaci dál a `prefers-reduced-motion` dojíždění vypíná.
+
+**Testy:** `verify` drží identitu prvků v `syncKeyed` (talon doprostřed, zahraná karta, přeřazení,
+ruby se nepřevléknou za kartu). Smoke vezme sav z licitovaného (seed 514), dá durch a po snímcích
+měří: v prvním snímku po změně nesmí žádná dosavadní karta skočit o víc než 3 px, obě karty
+z talonu musí být ještě průhledné, a na konci musí karty doopravdy dojet a být vidět.
+
+Negativní kontroly: `syncKeyed` bez klíčů (verify: „karta se převlékla"), dojíždění vypnuté (smoke:
+„10 karet skočilo o 75 px"), zjevení vypnuté (smoke: „karty z talonu jsou hned vidět"). Zjevení rubů
+u soupeře samostatný test nemá: potřeboval by vlastní sav, kde licitaci vyhraje AI.
+
 ## 43. „Nic za mnou" v betlu (2026-09-23)
 
 Betlový protějšek „vše za mnou" (§39), odložený tam kvůli vynucenému přebití. Uživatel se ptal,

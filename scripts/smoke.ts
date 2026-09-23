@@ -1090,6 +1090,72 @@ if (cspViolations.length > 0) {
 }
 
 /*
+ * Zvednutí talonu v licitovaném. Uživatel hlásil, že „najednou skočí další dvě
+ * karty a celá ruka se posune": vějíř se přeskládal v jediném snímku, protože
+ * tlačítka se recyklovala podle pořadí a obrázek dostala vždycky jiná karta.
+ * Teď si karta drží svůj prvek, dosavadní karty dojedou na nové místo a obě
+ * z talonu se zjeví. Měří se po snímcích (requestAnimationFrame), ne screenshotem.
+ */
+{
+  const pick = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+  pick.on('dialog', (d) => void d.accept());
+  await pick.goto(url);
+  await pick.evaluate(([match, settings]) => {
+    localStorage.setItem('flek.match.v1', match);
+    localStorage.setItem('flek.settings.v1', settings);
+  }, [auctionSave(), JSON.stringify({ variant: 'licitovany', sounds: false })]);
+  await pick.reload();
+  await pick.locator('.bid-chip').last().waitFor({ timeout: 15000 });
+  // vzorkovač jako řetězec: tsx by do pojmenované funkce vložil `__name`, který stránka nezná
+  await pick.evaluate(`(() => {
+    window.__frames = [];
+    const t0 = performance.now();
+    function tick() {
+      const btns = [...document.querySelectorAll('#hand .card-btn')];
+      window.__frames.push({
+        n: btns.length,
+        keys: btns.map((b) => b.dataset.card ?? ''),
+        xs: btns.map((b) => b.getBoundingClientRect().left),
+        op: btns.map((b) => Number(getComputedStyle(b).opacity)),
+      });
+      if (performance.now() - t0 < 15000 && window.__frames.filter((f) => f.n === 12).length < 90) requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+  })()`);
+  // durch je nejvyšší nabídka, nikdo ho nepřebije — talon zvedne člověk určitě
+  await pick.locator('.bid-chip').last().click();
+  for (let i = 0; i < 300 && (await pick.locator('#hand .card-btn').count()) !== 12; i += 1) await pick.waitForTimeout(50);
+  await pick.waitForTimeout(1500);
+  type Frame = { n: number; keys: string[]; xs: number[]; op: number[] };
+  const frames = (await pick.evaluate('window.__frames')) as Frame[];
+  await pick.close();
+  const at = frames.findIndex((f) => f.n === 12);
+  const fail = (msg: string): never => {
+    console.error(`CHYBA: zvednutí talonu — ${msg}`);
+    process.exit(1);
+  };
+  if (at < 1 || frames[at - 1].n !== 10) fail(`ruka nešla z 10 na 12 karet (snímků ${frames.length}, přechod na ${at})`);
+  const was = frames[at - 1];
+  const first = frames[at];
+  const last = frames[frames.length - 1];
+  const oldX = new Map(was.keys.map((k, i) => [k, was.xs[i]]));
+  // 1) žádný skok: v prvním snímku po změně stojí dosavadní karty tam, kde byly
+  const jumped = first.keys
+    .map((k, i) => ({ k, dx: oldX.has(k) ? Math.abs(first.xs[i] - (oldX.get(k) ?? 0)) : 0 }))
+    .filter((d) => d.dx > 3);
+  if (jumped.length > 0) fail(`${jumped.length} karet skočilo v jediném snímku (nejvíc o ${Math.max(...jumped.map((d) => d.dx)).toFixed(0)} px)`);
+  // 2) nové karty (ty z talonu) se zjevují, nejsou tam hned celé
+  const fresh = first.keys.map((k, i) => ({ k, op: first.op[i] })).filter((c) => !oldX.has(c.k));
+  if (fresh.length !== 2) fail(`čekal jsem dvě nové karty, přibylo ${fresh.length}`);
+  if (fresh.some((c) => c.op > 0.5)) fail(`karty z talonu jsou v prvním snímku hned vidět (průhlednost ${fresh.map((c) => c.op.toFixed(2)).join(', ')})`);
+  // 3) a nezamrzlo to: na konci karty opravdu dojely a všechny jsou vidět
+  const moved = last.keys.filter((k, i) => oldX.has(k) && Math.abs(last.xs[i] - (oldX.get(k) ?? 0)) > 20).length;
+  if (moved === 0) fail('dosavadní karty zůstaly na starých místech — vějíř se nepřeskládal');
+  if (last.op.some((o) => o < 0.99)) fail('na konci nejsou všechny karty plně vidět');
+  console.log(`Zvednutí talonu: 10 karet dojelo bez skoku (${moved} se posunulo), 2 z talonu se zjevily`);
+}
+
+/*
  * „Vše za mnou" (§39): tlačítko se v sehrávce ukáže, kliknutí dohraje zbytek
  * bez dalšího klikání a hra dojde k zúčtování. Na geometrii ani na pravidla
  * to není — ta drží verify; tohle je o tom, že je to napojené: `claimPlan`
