@@ -4,6 +4,24 @@ Poznámky k vydání. Sekci pro daný tag z tohohle souboru vytáhne CI a použi
 jako text releasu na GitHubu (`.github/workflows/release.yml`) — nadpis sekce se
 stane názvem vydání. Nová verze = **přidat sekci sem** a až pak tagovat.
 
+## v0.0.14 — mariáš do kapsy
+
+### Na telefonu
+
+Flek! se dá hrát na mobilu. Na telefonu stůl vyplní celou obrazovku a na výšku se přeskládá:
+soupeři nahoře vedle sebe, pod nimi co se děje, uprostřed štych, dole tvoje ruka. Všech dvanáct
+karet se vejde vedle sebe a s ubývající rukou karty rostou. Totéž na tabletu. Na šířku zůstává
+stůl, jak ho znáš z počítače, jen přes celou výšku displeje.
+
+Na dotykovém displeji karta po ťuknutí nezůstane viset zvednutá a rychlé ťuknutí nezoomuje.
+
+### Hlášení jako licitace
+
+Když hlásíš, co budeš hrát, nejsou už volby dlouhá tlačítka „Hra + Sedma + Kilo", ale stejné
+krátké dlaždice jako při licitaci: za každou barvu jedna skupina — barva, `7`, `100`, `100+7` —
+a vedle betl a durch. Červená skupina je červená, protože platí dvojnásob. Celé hlášení se tak
+vejde na jeden řádek, i když je z čeho vybírat.
+
 ## v0.0.13 — nic za mnou
 
 ### Nic za mnou
