@@ -2182,8 +2182,8 @@ Jen bez kontroly verze a textu vydání — tag na PR ještě není.
 **Spouštěč je `pull_request`, ne `pull_request_target`.** Ten druhý běží v kontextu cílového
 repozitáře, s tokenem, který smí zapisovat, a se secrets. Jakmile si stáhne kód z PR, spouští ho
 z forku kdokoli, a tady by to znamenalo i postinstall skripty celého `npm ci`. Job má jen
-`contents: read` a checkout s `persist-credentials: false` (hlídá to stávající kontrola stavby
-jobu z šestého kola review PR #10 u §38). Nový push do téhož PR zruší rozběhnutý starší běh (`concurrency`).
+`contents: read` a checkout s `persist-credentials: false` (hlídá to kontrola stavby jobu
+z šestého kola review PR #10 u §38, doplněná v kole níž o job bez `permissions:`). Nový push do téhož PR zruší rozběhnutý starší běh (`concurrency`).
 
 Strážce workflow ve `verify.ts` přečte i `on:` — všechny tři zápisy (řetězec, seznam, mapa) — a
 `pull_request_target` v žádném workflow nepustí. Aby nebyl strážcem, který tiše nic nehlídá,
@@ -2194,3 +2194,34 @@ Negativní kontroly: `pull_request_target` místo `pull_request` v `ci.yml` shod
 `push` místo `pull_request` shodí druhé.
 
 Nasazení na web (`make deploy`, §7 bod 8) zůstává ruční; vydání tagem web nemění.
+
+### Fixpoint review PR #14, první kolo (2026-09-23, po `73b3ede`)
+
+Tři otevřené nálezy, všechny sedí, všechny opravené. Dva z nich jsou přesně ta díra, kterou si
+tenhle dokument vyčítá: kontrola, kterou jsem shodil ručně na skutečném souboru, ale kterou žádný
+test neudrží.
+
+| Závažnost | Nález | Oprava |
+|---|---|---|
+| high | **Odmítnutí `pull_request_target` nemělo test.** Vzorky zkoušely jen `triggersOf`, samotné odmítnutí běželo až nad soubory v repozitáři — a ty žádný zakázaný spouštěč nemají. Smazaná nebo obrácená kontrola by prošla zeleně. Moje negativní kontrola (přepsat `ci.yml`) to dokázala jednou, ale nic to nedrží | Odmítnutí je funkce `triggerComplaints` a má vzorky: řetězec, seznam i mapa s `pull_request_target` musí stěžovat, `pull_request` vedle `push` ne. Přibyl i `workflow_run` (nález téhož kola, low): běží po jiném workflow s právy cílového repozitáře a typicky si stáhne artefakt z kódu PR |
+| medium | **Job bez `permissions:` strážce pustil.** `contentsOf` vracel `null` pro chybějící blok i pro `permissions: {}`, a `jobComplaints` vadil jen `write`. Smazat oba bloky v `ci.yml` nechalo `verify` zelené — a job by pak `npm ci` a `make all` pouštěl s výchozím tokenem repozitáře, který smí podle nastavení i zapisovat. §41 přitom tvrdil, že to hlídá | Chybějící blok (`null`) a prázdný blok (`none`) jsou teď dvě různé věci, jak je rozlišuje GitHub. Job, který spouští kód projektu (checkout nebo `npm`/`make`/`node`), musí mít právo napsané. Vzorky: bez bloku stížnost, jen `gh` bez stížnosti, `permissions: {}` nahoře i u jobu (i proti `write-all`) jako `none` |
+| medium | **PR přesměrovaný na `main` se netestoval.** Výchozí typy `pull_request` jsou jen `opened`/`synchronize`/`reopened`; PR založený proti jiné větvi a pak přesměrovaný pošle `edited`, a filtr `branches: [main]` ho předtím nepustil | `types` včetně `edited`, job má `if:` na změnu cílové větve. Běh `edited` bez změny větve (přepsaný název, popis) jde do **vlastní** skupiny `concurrency` — jinak by zrušil rozběhnutý test a sám nic nespustil. Testem to podchytit nejde (je to chování GitHubu, ne kód), ověřeno úpravou popisu PR během běhu |
+
+Zamítnuto soudcem panelu, a souhlasím:
+- **Šest hodin na runneru bez `timeout-minutes`** — spekulativní: fork od nového přispěvatele
+  potřebuje schválení správce, veřejné runnery nic nestojí a `overit` ve vydání timeout nemá taky.
+- **`true:` místo `on:` (YAML 1.1) obejde zákaz** — to není překlep, před kterým strážce chrání, ale
+  úmyslné obejití od někoho s právem pushnout do main; a jestli GitHub `true:` čte jako `on:`, nikdo
+  neověřil.
+- **`prWorkflows > 0` neověřuje, že testy existují** a **nehlídá `make all` ani `branches: [main]`** —
+  tvrzení je napsané jako pojistka, že parser čte `on:`, a to dělá. Obsah `ci.yml` hlídá review.
+- **Nic nedrží `ci.yml` v souladu s `overit` v `release.yml`** — zdvojení je záměrné a popsané
+  v hlavičce `ci.yml`; porovnávat těla jobů by stálo víc, než kolik ta dva soubory vedle sebe riskují.
+
+Negativní kontroly: odmítání spouštěčů vypnuté, kontrola chybějících práv vypnutá, `ci.yml` bez obou
+bloků `permissions:`, prázdný blok zase jako chybějící, `workflow_run` v `ci.yml` — každá shodí právě
+svůj test.
+
+**Poučení:** ruční negativní kontrola na skutečném souboru dokáže, že kontrola kousne DNES. Že bude
+kousat i zítra, drží jen vzorek v testu — u strážce, jehož soubory v repozitáři jsou čisté, dvojnásob:
+nad nimi projde i strážce, který nic nedělá.
