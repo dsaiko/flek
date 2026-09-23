@@ -514,6 +514,7 @@ export class TableUI {
       const backs = $(box, '.backs');
       const n = opponentBacks(v, seat, unseenCount);
       const animate = reveal && !this.reducedMotion();
+      const had = backs.children.length;
       const imgs = syncChildren(backs, n, () => {
         const img = document.createElement('img');
         img.className = 'back';
@@ -522,6 +523,8 @@ export class TableUI {
       });
       for (const img of imgs) setSrc(img, backSrc());
       setReveal(backs, imgs, animate);
+      // soupeř sebral talon: dva ruby navíc se zjeví, místo aby naskočily
+      if (!animate && !this.reducedMotion() && had > 0 && n > had) fadeIn(imgs.slice(had));
     }
     const me = this.opts.humanSeat;
     const myName = this.nameOf(me);
@@ -945,7 +948,16 @@ export class TableUI {
       });
     }
 
-    const buttons = syncChildren(handEl, n, () => {
+    /*
+     * Tlačítka jsou klíčovaná kartou: karta si drží svůj prvek, i když se
+     * vějíř přeskládá. Recyklace podle pořadí dávala při každé změně ruky
+     * nový obrázek JINÉ kartě, takže když přibyl talon, ruka „poskočila" celá.
+     * Rozdávání (`reveal`) si karty ukazuje samo, tam se nedojíždí.
+     */
+    const glide = !reveal && !this.reducedMotion();
+    const before = glide ? handPositions(handEl) : null;
+    const keys: (Card | null)[] = [...hand, ...Array<null>(myUnseen).fill(null)];
+    const buttons = syncKeyed(handEl, keys.map((c) => (c === null ? null : String(c))), () => {
       const btn = document.createElement('button');
       btn.className = 'card-btn';
       btn.appendChild(document.createElement('img'));
@@ -968,6 +980,7 @@ export class TableUI {
       img.alt = c === null ? '' : cardName(c);
     });
     setReveal(handEl, buttons, animate);
+    if (before !== null && before.size > 0) glideHand(buttons, before);
   }
 
   private onCardClick(c: Card, v: PlayerView): void {
@@ -1384,6 +1397,95 @@ export function syncChildren<T extends HTMLElement>(
   while (parent.children.length > n) parent.lastElementChild?.remove();
   while (parent.children.length < n) parent.appendChild(create());
   return Array.from(parent.children) as T[];
+}
+
+/**
+ * Sladí děti kontejneru s klíči — prvek s klíčem `k` zůstane tentýž prvek,
+ * jen se přesune na své nové místo. Prvky bez klíče (`null`, ruby „z lidu")
+ * se recyklují podle pořadí mezi sebou, klíčované se nikdy nepřevlékají za
+ * jinou kartu. Nové klíčované prvky dostanou `data-card` hned při vzniku.
+ * Exportováno kvůli testu.
+ */
+export function syncKeyed<T extends HTMLElement>(
+  parent: HTMLElement,
+  keys: readonly (string | null)[],
+  create: () => T,
+): T[] {
+  const byKey = new Map<string, T>();
+  const free: T[] = [];
+  for (const el of Array.from(parent.children) as T[]) {
+    const k = el.dataset.card;
+    if (k !== undefined && !byKey.has(k)) byKey.set(k, el);
+    else free.push(el);
+  }
+  const els = keys.map((k) => {
+    if (k === null) return free.shift() ?? create();
+    const el = byKey.get(k);
+    if (el !== undefined) {
+      byKey.delete(k);
+      return el;
+    }
+    const made = create();
+    made.dataset.card = k;
+    return made;
+  });
+  // co nezůstalo, pryč dřív, než se začne řadit — jinak by zabíralo pozice
+  for (const el of [...byKey.values(), ...free]) el.remove();
+  els.forEach((el, i) => {
+    const cur = parent.children[i];
+    if (cur !== el) parent.insertBefore(el, cur ?? null);
+  });
+  return els;
+}
+
+/** Jak dlouho karty v ruce dojíždějí na nové místo. */
+const GLIDE_MS = 240;
+
+/** Poloha karet v ruce před změnou: vodorovná pozice v layoutu a natočení vějíře. */
+function handPositions(handEl: HTMLElement): Map<string, { x: number; transform: string }> {
+  const out = new Map<string, { x: number; transform: string }>();
+  for (const btn of Array.from(handEl.children) as HTMLElement[]) {
+    const k = btn.dataset.card;
+    if (k !== undefined) out.set(k, { x: btn.offsetLeft, transform: btn.style.transform });
+  }
+  return out;
+}
+
+/**
+ * FLIP: karty, které v ruce už byly, dojedou ze staré polohy na novou; nové
+ * (talon, trumf zpět ze stolu, druhá pětice) se po nich postupně zjeví. Pozice
+ * dělá flexbox, a změnu layoutu CSS přechod sám nezanimuje — proto se staré
+ * místo přičte k transformaci a pustí se k nule.
+ */
+function glideHand(buttons: readonly HTMLElement[], before: Map<string, { x: number; transform: string }>): void {
+  if (buttons.length === 0 || typeof buttons[0].animate !== 'function') return;
+  const fresh: HTMLElement[] = [];
+  for (const btn of buttons) {
+    const k = btn.dataset.card;
+    const was = k === undefined ? undefined : before.get(k);
+    if (was === undefined) {
+      if (k !== undefined) fresh.push(btn);
+      continue;
+    }
+    const dx = was.x - btn.offsetLeft;
+    const to = btn.style.transform;
+    if (Math.abs(dx) < 0.5 && was.transform === to) continue;
+    btn.animate(
+      [{ transform: `translateX(${dx.toFixed(1)}px) ${was.transform}` }, { transform: to }],
+      { duration: GLIDE_MS, easing: 'ease-out' },
+    );
+  }
+  fadeIn(fresh, GLIDE_MS / 2);
+}
+
+/** Postupné zjevení prvků (stejný rytmus jako rozdávání), bez třídy `reveal`. */
+function fadeIn(els: readonly HTMLElement[], delay = 0): void {
+  els.forEach((el, i) => {
+    if (typeof el.animate !== 'function') return;
+    el.animate([{ opacity: 0 }, { opacity: 1 }], {
+      duration: 200, delay: delay + i * REVEAL_STEP_MS * 2, easing: 'ease-out', fill: 'backwards',
+    });
+  });
 }
 
 /**

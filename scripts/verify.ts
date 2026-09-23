@@ -3046,6 +3046,72 @@ const KULE = 2 as const;
   }
 
   /*
+   * Klíčovaná ruka: karta si drží SVŮJ prvek. Recyklace podle pořadí dávala
+   * při zvednutí talonu nový obrázek jiné kartě a celá ruka poskočila —
+   * uživatel to hlásil z licitovaného. Na identitě prvku stojí i dojíždění
+   * vějíře (FLIP měří starou polohu u téhož prvku).
+   */
+  {
+    const { syncKeyed } = await import('../src/lib/ui/table');
+    type Fake = { dataset: Record<string, string>; id: number; remove: () => void };
+    const kids: Fake[] = [];
+    const parent = {
+      children: kids,
+      insertBefore(el: Fake, ref: Fake | null) {
+        const at = kids.indexOf(el);
+        if (at !== -1) kids.splice(at, 1);
+        const to = ref === null ? -1 : kids.indexOf(ref);
+        if (to === -1) kids.push(el); else kids.splice(to, 0, el);
+        return el;
+      },
+    };
+    let made = 0;
+    const mk = (): Fake => {
+      const el: Fake = { dataset: {}, id: (made += 1), remove: () => { const i = kids.indexOf(el); if (i !== -1) kids.splice(i, 1); } };
+      return el;
+    };
+    const sync = (keys: (string | null)[]) =>
+      syncKeyed(parent as unknown as HTMLElement, keys, mk as unknown as () => HTMLElement) as unknown as Fake[];
+    const idsOf = (keys: string[]) => keys.map((k) => kids.find((e) => e.dataset.card === k)?.id);
+
+    const ten = ['1', '2', '5', '6', '7', '8', '9', '10', '11', '12'];
+    sync(ten);
+    const before = idsOf(ten);
+    // talon: dvě karty se zařadí doprostřed, ne na konec
+    const twelve = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12'];
+    const els = sync(twelve);
+    assert.deepEqual(kids.map((e) => e.dataset.card), twelve, 'pořadí dětí odpovídá klíčům');
+    assert.deepEqual(els, kids, 'vrací prvky v pořadí klíčů');
+    assert.deepEqual(idsOf(ten), before, 'karty, které v ruce byly, si nechaly svůj prvek — žádná se nepřevlékla');
+    assert.ok(idsOf(['3', '4']).every((id) => id !== undefined && !before.includes(id)), 'karty z talonu dostaly nové prvky');
+
+    // zahraná karta zmizí, ostatní zůstanou tytéž
+    const eleven = twelve.filter((k) => k !== '6');
+    sync(eleven);
+    assert.equal(kids.length, 11, 'zahraná karta je z ruky pryč');
+    assert.deepEqual(idsOf(ten.filter((k) => k !== '6')), before.filter((_, i) => ten[i] !== '6'), 'po odebrání se nikdo nepřevlékl');
+
+    // přeřazení (jiný režim hry): tytéž prvky, jiné pořadí
+    const idsBefore = idsOf(eleven);
+    sync([...eleven].reverse());
+    assert.deepEqual(kids.map((e) => e.dataset.card), [...eleven].reverse(), 'přeřazení změní pořadí');
+    assert.deepEqual(idsOf(eleven), idsBefore, 'a nechá každé kartě její prvek');
+
+    // ruby „z lidu" bez klíče: recyklují se mezi sebou a nikdy nepřevezmou kartu
+    kids.length = 0;
+    sync(['1', '2', '3', '4', '5', '6', '7', null, null, null, null, null]);
+    const backs = kids.slice(7).map((e) => e.id);
+    assert.ok(kids.slice(7).every((e) => e.dataset.card === undefined), 'ruby nemají klíč');
+    sync(['1', '2', '3', '4', '5', '6', '7', null, null]);
+    assert.deepEqual(kids.slice(7).map((e) => e.id), backs.slice(0, 2), 'ruby se recyklují podle pořadí');
+    const seven = idsOf(['1', '2', '3', '4', '5', '6', '7']);
+    sync(['1', '2', '3', '4', '5', '6', '7', '8', '9']);
+    assert.ok(kids.slice(7).every((e) => !backs.includes(e.id)), 'odkrytá karta nedostane prvek rubu');
+    assert.deepEqual(idsOf(['1', '2', '3', '4', '5', '6', '7']), seven, 'a první sedmička zůstala');
+    console.log('PASS ruka klíčovaná kartou — talon, zahraná karta, přeřazení i ruby drží prvek u své karty');
+  }
+
+  /*
    * Fronta bublin: „Momentíček…", které ČEKÁ, musí jít zrušit dřív, než ho
    * fronta vykreslí. Uživatel hlásil přesně tenhle případ — bublina naskočila
    * nad sedadlem, které už dávno táhlo, protože se hlídala jen ta VISÍCÍ.
