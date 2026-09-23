@@ -18,22 +18,24 @@ on:
     # Výchozí typy jsou jen opened/synchronize/reopened. PR, který vznikl proti
     # jiné větvi a teprve pak se přesměroval na main, pošle `edited` — bez něj by
     # se jeho commit do main dostal neotestovaný.
+    #
+    # `edited` přijde i za přepsaný název nebo popis, a i tehdy se testuje
+    # celé. Job NESMÍ mít `if:`, které by takový běh přeskočilo: přeskočený job
+    # GitHub hlásí jako Success, i u povinné kontroly, a na témže commitu by
+    # zelený `overit` překryl spadlý nebo ještě běžící test.
     types: [opened, synchronize, reopened, edited]
 
 # implicitně nic navíc: práva si job říká sám
 permissions: {}
 
-# Nový push do téhož PR zruší rozběhnutý starší běh. `edited` bez změny cílové
-# větve (přepsaný název nebo popis) jde do vlastní skupiny, jinak by zrušil
-# rozběhnutý test a sám pak nic nespustil.
+# nový běh téhož PR (push i úprava) zruší rozběhnutý starší — zrušený běh je
+# vidět jako Cancelled, ne jako úspěch, a nový doběhne skutečným testem
 concurrency:
-  group: ci-${{ github.event.pull_request.number }}-${{ github.event.action == 'edited' && !github.event.changes.base && github.run_id || 'test' }}
+  group: ci-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 jobs:
   overit:
-    # `edited` jen tehdy, když se měnila cílová větev
-    if: github.event.action != 'edited' || github.event.changes.base
     runs-on: ubuntu-latest
     permissions:
       contents: read

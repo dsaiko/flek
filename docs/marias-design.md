@@ -2225,3 +2225,26 @@ svůj test.
 **Poučení:** ruční negativní kontrola na skutečném souboru dokáže, že kontrola kousne DNES. Že bude
 kousat i zítra, drží jen vzorek v testu — u strážce, jehož soubory v repozitáři jsou čisté, dvojnásob:
 nad nimi projde i strážce, který nic nedělá.
+
+### Fixpoint review PR #14, druhé kolo (2026-09-23, po `84fac84`)
+
+Dva běhy panelu nad tímtéž commitem, shodně: tři otevřené nálezy (jeden z nich hlášený třikrát),
+všechny sedí, všechny opravené. Ten hlavní je **chyba mé opravy z prvního kola**.
+
+| Závažnost | Nález | Oprava |
+|---|---|---|
+| high ×3 | **Přeskočený job se hlásí jako úspěch.** Oprava přesměrování z prvního kola pouštěla na každé `edited`, ale `overit` přes `if:` přeskočila, když se neměnila cílová větev. GitHub přeskočený job hlásí jako **Success, i u povinné kontroly**, a to na témže commitu a pod stejným jménem. Push → spadlý test → přepsaný název PR = zelený `overit`. A přepsaný název během běhu udělal PR zelený dřív, než test doběhl. Moje „ověřeno úpravou popisu PR během běhu" dokázalo jen to, že se běžící test nezrušil — ne co ten přeskočený běh na PR vyvěsil | `if:` i zvláštní skupina `concurrency` jsou pryč. `edited` pouští plný test v běžné skupině, takže úprava názvu starší běh zruší (vidět jako Cancelled, ne úspěch) a doběhne nový. Stojí to jeden běh navíc za přepsaný popis — úpravy PR jsou tu vzácné. Regresní test je obecný: **ve workflow na `pull_request` nesmí mít žádný job `if:`** (`skippableJobs`, vzorky s `if:` i bez, a `if:` na `push` projde). Ověřeno naživo: úprava popisu PR spustila plný test |
+| high | **Jeden vzorek pro dvě detekce.** Kód projektu se pozná podle checkoutu, nebo podle `npm`/`make`/`node` v `run:`, a vzorek z prvního kola měl obojí — smazání kterékoli větve prošlo. Přesně ta chyba, kterou už jednou řešila tabulka u §38 | Vzorek na každou cestu zvlášť: jen checkout, jen `npm ci`, jen `node` nad staženým artefaktem |
+| low | Jednořádkové `run: make` regex nezachytil: chtěl za příkazem mezeru, a skalár v YAML nemá ani konec řádku | `(\s|$)` a vzorek `run: make`. Oprava platí i pro kontrolu zapisujících jobů, která regex sdílí |
+
+Zamítnuto soudcem, a souhlasím: `issue_comment` do zákazu (sám kód z PR nestáhne, a nic tu na něm
+neběží), kontrola jen `contents` a ne ostatních práv (návrh z §38, žádný job o jiná práva nežádá),
+detekce kódu projektu výčtem příkazů (každý výčet má tuhle mez), akce `uses:` třetích stran s výchozím
+tokenem (jiná otázka důvěry), akce připnuté na tag místo SHA, přesnější text stížnosti a znovu
+kontroly obsahu `ci.yml` (už zamítnuté v prvním kole).
+
+Negativní kontroly: checkout zase ne jako kód projektu, `run:` zase ne jako kód projektu, regex zpět
+na `\s`, kontrola `if:` vypnutá, `if:` z prvního kola zpátky v `ci.yml` — každá shodí právě svůj test.
+
+**Poučení:** u workflow neověřuj jen to, co se stalo s během, ale co zůstalo viset na PR. „Nezrušilo
+se to" a „nic se nezměnilo" jsou dvě různé věci, a oprava prvního kola prošla jen tou první.
