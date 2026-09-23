@@ -7,7 +7,8 @@
 ~~o Aplikaci ← musi obsahovat atribuci licence karet (zmizela s patickou)~~ ✅ tamtez:
 pocta Pivonkovi i otci, licence karetnich sad, verze a odkaz na repo (design doc §31)
 domena + nasazeni
-mince/bank, klavesy, mobil
+mince/bank, klavesy
+~~mobil~~ ✅ na telefonu i tabletu stůl přes celou výšku, rozložení na výšku (design doc §44)
 overeni FLEK! v DOSBoxu → preset SAZBY_FLEK
 
 Zvuky, hlasky, francouzstina a vzdani hry hotove. Tri kola fixpoint review-pr

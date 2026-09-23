@@ -934,6 +934,8 @@ export class TableUI {
       v.phase.name === 'choose-trump' && v.seat === forhont(v.dealer) ? unseenCount : 0;
     const n = hand.length + myUnseen;
     const animate = reveal && !this.reducedMotion();
+    // úzký displej na výšku odvozuje šířku karet z jejich počtu (index.astro, §44)
+    this.root.style.setProperty('--hand-n', String(Math.max(n, 1)));
 
     // klik je delegovaný na kontejner, aby šlo tlačítka recyklovat bez
     // odvěšování posluchačů (viz setSrc)
