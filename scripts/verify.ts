@@ -6184,7 +6184,8 @@ console.log('PASS sav — v2 mimo komentování se migruje, rozehrané fleky z v
        * `gh` z image runneru je v pořádku; `npm`, `make`, `node` a spol. znamenají
        * kód projektu a jeho závislostí, tedy přesně to, před čím token chráníme.
        */
-      if (typeof step.run === 'string' && /(^|[\s;&|(])(npm|npx|yarn|pnpm|make|node)\s/.test(step.run)) {
+      // `(\s|$)`: jednořádkové `run: make` nemá za příkazem nic, ani konec řádku
+      if (typeof step.run === 'string' && /(^|[\s;&|(])(npm|npx|yarn|pnpm|make|node)(\s|$)/.test(step.run)) {
         runsCode = true;
         if (writes) out.push(`${where} (${job.name}): \`contents: write\` a k tomu kód projektu — podstrčený \`gh\` by dostal token`);
       }
@@ -6316,6 +6317,21 @@ console.log('PASS sav — v2 mimo komentování se migruje, rozehrané fleky z v
     const undeclaredSays = jobComplaints(undeclared[0], 'x');
     assert.equal(undeclaredSays.length, 1, `job s kódem projektu a bez \`permissions:\` má vyvolat jednu stížnost, ne ${undeclaredSays.length}`);
     assert.match(undeclaredSays[0], /výchozí token/, 'a říct, že dostane výchozí token repozitáře');
+    /*
+     * Kód projektu se pozná dvěma cestami (checkout, nebo `npm`/`make`/`node` v `run:`)
+     * a každá musí stížnost vyvolat SAMA. Vzorek výš má obě, takže by prošel,
+     * i kdyby jedna z nich zmizela.
+     */
+    for (const [label, steps] of [
+      ['jen checkout', ['    steps:', '      - uses: actions/checkout@v4', '        with:', '          persist-credentials: false']],
+      ['jen `npm ci`', ['    steps:', '      - run: npm ci']],
+      ['jen `node` nad staženým artefaktem', ['    steps:', '      - uses: actions/download-artifact@v4', '      - run: node artifact.js']],
+      ['jednořádkové `run: make`', ['    steps:', '      - run: make']],
+    ] as const) {
+      const says = jobComplaints(parseJobs(wf('jobs:', '  a:', ...steps))[0], 'x');
+      assert.equal(says.length, 1, `${label} bez \`permissions:\` má vyvolat jednu stížnost, ne ${says.length}`);
+      assert.match(says[0], /výchozí token/, `${label}: stížnost má být o výchozím tokenu`);
+    }
     // tentýž job bez kódu projektu (jen `gh`) nevadí — výchozí token tu nemá kdo ukrást
     assert.deepEqual(
       jobComplaints(parseJobs(wf('jobs:', '  a:', '    steps:', '      - run: gh --version'))[0], 'x'), [],
@@ -6380,6 +6396,33 @@ console.log('PASS sav — v2 mimo komentování se migruje, rozehrané fleky z v
     '`pull_request` (i vedle `push`) projít musí',
   );
 
+  /*
+   * Job přeskočený přes `if:` GitHub hlásí jako Success — i u povinné kontroly.
+   * Ve workflow na `pull_request` by tak jiná událost na témže commitu (třeba
+   * přepsaný název PR) vyrobila zelenou kontrolu stejného jména přes spadlý
+   * nebo ještě běžící test. PR workflow proto žádné `if:` u jobu nemá: každá
+   * jeho kontrola je skutečný běh.
+   */
+  const skippableJobs = (yamlText: string, where: string): string[] => {
+    if (!triggersOf(yamlText).includes('pull_request')) return [];
+    const jobs = (parseYaml(yamlText) as { jobs?: Record<string, { if?: unknown } | null> } | null)?.jobs ?? {};
+    return Object.entries(jobs)
+      .filter(([, job]) => job !== null && typeof job === 'object' && job.if !== undefined)
+      .map(([name]) => `${where} (${name}): \`if:\` u jobu na pull_request — přeskočený job se hlásí jako Success a překryje skutečný test`);
+  };
+  {
+    const pr = 'on:\n  pull_request:\n    types: [opened, edited]\n';
+    const says = skippableJobs(`${pr}jobs:\n  overit:\n    if: github.event.action != 'edited'\n    runs-on: ubuntu-latest\n`, 'x');
+    assert.equal(says.length, 1, `job s \`if:\` na pull_request má vyvolat jednu stížnost, ne ${says.length}`);
+    assert.match(says[0], /Success/, 'a říct, proč vadí');
+    assert.deepEqual(skippableJobs(`${pr}jobs:\n  overit:\n    runs-on: ubuntu-latest\n`, 'x'), [], 'job bez `if:` projde');
+    // mimo pull_request (vydání na tag) `if:` nevadí — tam žádná kontrola PR nevzniká
+    assert.deepEqual(
+      skippableJobs("on:\n  push:\n    tags: ['v*']\njobs:\n  vydat:\n    if: github.ref_type == 'tag'\n", 'x'), [],
+      'na push `if:` smí být',
+    );
+  }
+
   const dir = join(ROOT, '.github/workflows');
   const files = readdirSync(dir).filter((f) => f.endsWith('.yml') || f.endsWith('.yaml'));
   let prWorkflows = 0;
@@ -6389,7 +6432,7 @@ console.log('PASS sav — v2 mimo komentování se migruje, rozehrané fleky z v
   for (const file of files) {
     const where = `.github/workflows/${file}`;
     const text = readFileSync(join(dir, file), 'utf8');
-    const found1 = triggerComplaints(text, where);
+    const found1 = [...triggerComplaints(text, where), ...skippableJobs(text, where)];
     assert.equal(found1.length, 0, found1[0]);
     if (triggersOf(text).includes('pull_request')) prWorkflows += 1;
     for (const script of runScripts(text)) {
@@ -6410,7 +6453,7 @@ console.log('PASS sav — v2 mimo komentování se migruje, rozehrané fleky z v
   assert.ok(prWorkflows > 0, 'žádný workflow neběží na `pull_request` — buď zmizely PR testy, nebo parser nečte `on:`');
   console.log(
     `PASS workflow — run: bez dosazovaných výrazů, spolknutých návratových kódů a npx (${scripts} skriptů), `
-    + `joby s kódem projektu s výslovnými právy, PR testy na pull_request (ne pull_request_target ani workflow_run)`,
+    + `joby s kódem projektu s výslovnými právy, PR testy na pull_request (ne pull_request_target ani workflow_run) a bez přeskočitelných jobů`,
   );
 }
 
