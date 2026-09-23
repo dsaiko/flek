@@ -12,6 +12,7 @@ import { join } from 'node:path';
 import { chromium, webkit } from 'playwright';
 import { apply, initialState } from '../src/lib/rules/engine';
 import { legalActions } from '../src/lib/rules/legal';
+import type { PlayerAction as PlayerActionS } from '../src/lib/rules/types';
 import { defaultConfig } from '../src/lib/rules/sazby';
 import { view } from '../src/lib/rules/view';
 import { claimPlan } from '../src/lib/rules/claim';
@@ -1136,6 +1137,47 @@ if (cspViolations.length > 0) {
   console.log(`Vše za mnou: tlačítko dohrálo ${handBefore} karet bez dalšího kliknutí`);
 }
 
+/*
+ * „Nic za mnou" v betlu (§43): tlačítko se ukáže UPROSTŘED štychu (aktér
+ * v betlu přiznává barvu), má jiný nápis a controller plán přepočítává na
+ * každém tahu. Na konci se ze savu ověří, že betl je opravdu vyhraný.
+ */
+{
+  const betl = await browser.newPage({ viewport: { width: 1400, height: 900 } });
+  betl.on('dialog', (d) => void d.accept());
+  await betl.goto(url);
+  await betl.evaluate(([match, settings]) => {
+    localStorage.setItem('flek.match.v1', match);
+    localStorage.setItem('flek.settings.v1', settings);
+  }, [betlClaimSave(), JSON.stringify({ variant: 'licitovany', difficulty: 'easy', sounds: false })]);
+  await betl.reload();
+  const fail = async (msg: string): Promise<never> => {
+    console.error(`CHYBA: „Nic za mnou" — ${msg}`);
+    await betl.screenshot({ path: join(outDir, 'smoke-betl-claim-fail.png') });
+    await browser.close();
+    process.exit(1);
+  };
+  const button = betl.locator('#actions .action-btn', { hasText: /Nic za mnou/i });
+  try {
+    await button.waitFor({ timeout: 15000 });
+  } catch {
+    await fail(`tlačítko se neukázalo (v liště je: „${(await betl.locator('#actions').innerText()).replace(/\s+/g, ' ').trim()}")`);
+  }
+  const handBefore = await betl.locator('#hand .card-btn').count();
+  await button.click();
+  try {
+    await betl.waitForSelector('#center-float .felt-panel:not(.warn)', { timeout: 20000 });
+  } catch {
+    await fail(`hru nedohrálo — v ruce zbývá ${await betl.locator('#hand .card-btn').count()} z ${handBefore} karet`);
+  }
+  const saved = await betl.evaluate(() => localStorage.getItem('flek.match.v1'));
+  const results = saved === null ? [] : (JSON.parse(saved) as { state: { handResults: { delta: number[] }[] } }).state.handResults;
+  const delta = results[results.length - 1]?.delta[0];
+  if (delta === undefined || delta <= 0) await fail(`betl po dohrání není vyhraný (delta aktéra ${String(delta)})`);
+  await betl.close();
+  console.log(`Nic za mnou: betl uprostřed štychu dohrán (${handBefore} karet), vyhraný`);
+}
+
 await browser.close();
 
 // vyčerpání smyčky NENÍ úspěch — jinak by test procházel, i když hra uvízne
@@ -1268,6 +1310,38 @@ function auctionSave(): string {
     throw new Error(`scénář pro nabídku licitace nedal devět možností (fáze ${st.phase.name}, ${offer.length})`);
   }
   return JSON.stringify({ v: SAVE_VERSION, state: st });
+}
+
+/**
+ * Sav s betlem, kde je člověk aktér a platí „Nic za mnou" (§43) — uprostřed
+ * štychu, pět karet v ruce. Licitovaný, seed 55: ostatní pasují, člověk
+ * odhodí dvě nejvyšší karty a ohlásí betl, pak hraje nejnižší legální kartu;
+ * soupeři hrají poslední legální. Nabídka přijde v pátém štychu.
+ */
+function betlClaimSave(): string {
+  const low = (a: PlayerActionS, b: PlayerActionS) =>
+    ((a as { card: number }).card % 8) - ((b as { card: number }).card % 8);
+  let st = apply(initialState(defaultConfig('licitovany'), 2), { type: 'deal', seed: 55 });
+  for (let guard = 0; guard < 120 && st.phase.name !== 'scored'; guard += 1) {
+    const actor = ([0, 1, 2] as const).find((s) => legalActions(view(st, s)).length > 0);
+    if (actor === undefined) break;
+    const acts = legalActions(view(st, actor));
+    if (st.phase.name === 'tricks') {
+      if (actor === 0 && claimPlan(view(st, 0)) !== null) return JSON.stringify({ v: SAVE_VERSION, state: st });
+      st = apply(st, actor === 0 ? [...acts].sort(low)[0] : acts[acts.length - 1]);
+      continue;
+    }
+    const pick = actor === 0
+      ? acts.find((a) => a.type === 'declare' && a.mode === 'betl')
+        ?? [...acts.filter((a) => a.type === 'discard')].sort((a, b) => {
+          const sum = (x: PlayerActionS) => (x as { cards: number[] }).cards.reduce((t, c) => t + (c % 8), 0);
+          return sum(b) - sum(a);
+        })[0]
+        ?? acts.find((a) => a.type === 'good') ?? acts[0]
+      : acts.find((a) => (a.type === 'bid' && a.bid === 'pass') || a.type === 'good') ?? acts[0];
+    st = apply(st, pick);
+  }
+  throw new Error(`scénář „nic za mnou" se nepotkal (fáze ${st.phase.name}) — úprava AI nebo pravidel ho posunula`);
 }
 
 /**

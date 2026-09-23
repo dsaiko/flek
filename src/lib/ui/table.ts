@@ -1168,8 +1168,10 @@ export class TableUI {
          * o cizích kartách — viz claim.ts.
          */
         if (this.cb.onClaim && claimPlan(v) !== null) {
-          const b = btn(t('claimRest'), () => this.cb.onClaim?.());
-          b.title = t('claimHint');
+          // v betlu se neslibuje „všechno", ale „nic" — aktér už žádný štych nevezme
+          const betl = v.contract?.mode === 'betl';
+          const b = btn(t(betl ? 'claimNothing' : 'claimRest'), () => this.cb.onClaim?.());
+          b.title = t(betl ? 'claimNothingHint' : 'claimHint');
         }
         break;
       }

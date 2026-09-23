@@ -5748,7 +5748,10 @@ console.log('PASS sav — v2 mimo komentování se migruje, rozehrané fleky z v
       let guard = 0;
       while (st.phase.name !== 'scored' && (guard += 1) < 200) {
         if (st.phase.name === 'tricks') {
-          const me = ([0, 1, 2] as SeatC[]).find((s2) => claimPlan(viewC(st, s2)) !== null);
+          // betl má plán jen na jeden tah (přiznává barvu) — ověřuje se zvlášť níž, (I)–(M)
+          const me = st.contract?.mode === 'betl'
+            ? undefined
+            : ([0, 1, 2] as SeatC[]).find((s2) => claimPlan(viewC(st, s2)) !== null);
           const plan = me === undefined ? null : claimPlan(viewC(st, me));
           // jen krátké ruce: permutací je faktoriál, delší by test protáhl bez užitku
           if (me !== undefined && plan !== null && plan.length >= 2 && plan.length <= 5) {
@@ -5937,15 +5940,16 @@ console.log('PASS sav — v2 mimo komentování se migruje, rozehrané fleky z v
     }
 
     /*
-     * (G) Betl: brát štychy je tam prohra, takže nabídka nesmí přijít NIKDY —
-     * a podmínka sama je na módu nezávislá, `beats()` odpoví „nikdo mě
-     * nepřebije" i betlovému aktérovi s nejvyššími kartami.
+     * (G) Betl s nejvyššími kartami: brát štychy je tam prohra. Podmínka „vše
+     * za mnou" by tu prošla (`beats()` odpoví „nikdo mě nepřebije" i betlovému
+     * aktérovi) — betl má ale vlastní „nic za mnou", a to tu platit nesmí:
+     * aktér vynáší a každá jeho karta štych vezme, soupeři žaludy nemají.
      */
     {
       // žaludy (3): soupeři drží zelené (8–15), takže se ruce nepřekryjí
       const top = [cardC(3, ESO_C), cardC(3, KRAL_C), cardC(3, SVRSEK_C)];
       const st = mkClaim(top, { mode: 'betl', trump: null });
-      assert.equal(claimPlan(viewC(st, 0)), null, 'v betlu se „vše za mnou" nenabízí');
+      assert.equal(claimPlan(viewC(st, 0)), null, 'v betlu s kartami, které štych vezmou, se nic nenabízí');
       assert.equal(shouldAnnounce(viewC(st, 0), top[1]), false, 'a v betlu se nehlásí ani hlášky');
     }
 
@@ -5965,6 +5969,238 @@ console.log('PASS sav — v2 mimo komentování se migruje, rozehrané fleky z v
         const got = playOut(st, 0, alt, true);
         if (got !== null) assert.ok(out.delta >= got.delta - 1e-9, 'plán v durchu musí být optimální');
       }
+    }
+
+    /*
+     * (I)–(M) „Nic za mnou" v betlu (§43). Plán je tu jen na jeden tah — aktér
+     * přiznává barvu —, takže se nedohrává pevné pořadí, ale na každém jeho
+     * tahu první karta z `claimPlan`. Slib je silný: ŽÁDNÝ tah obrany mu štych
+     * nedá. U krátké ruky se to ověřuje proti všem tahům obrany, u dlouhé
+     * proti náhodným.
+     */
+    {
+      type Trick = { seat: SeatC; card: number }[];
+      /** Betl v prvním štychu: sedadlo 0 je aktér a talon zná, protože ho sám odložil. */
+      const mkBetl = (
+        hands: [number[], number[], number[]], talon: number[],
+        opts: { talonOwner?: SeatC | null; trick?: Trick; toAct?: SeatC; leader?: SeatC } = {},
+      ): StC => {
+        const trick = opts.trick ?? [];
+        const all = [...hands[0], ...hands[1], ...hands[2], ...talon, ...trick.map((p) => p.card)];
+        assert.equal(new Set(all).size, 32, 'betlový stav musí rozdat celý balíček, každou kartu jednou');
+        // stav musí být možný: hraje se 0 → 1 → 2, a kdo už do štychu dal, drží o kartu míň
+        const leader = opts.leader ?? 0;
+        const toAct = opts.toAct ?? 0;
+        if (trick.length > 0) {
+          assert.equal(trick[0].seat, leader, 'štych začíná ten, kdo vynáší');
+          assert.equal(toAct, (trick[trick.length - 1].seat + 1) % 3, 'na tahu je sedadlo po posledním, kdo hrál');
+        }
+        for (const seat of [0, 1, 2] as SeatC[]) {
+          const inTrick = trick.some((p) => p.seat === seat) ? 1 : 0;
+          assert.equal(hands[seat].length, 10 - inTrick, `sedadlo ${seat} má držet ${10 - inTrick} karet`);
+        }
+        const owner = opts.talonOwner === undefined ? 0 : opts.talonOwner;
+        return {
+          config: cfgC('licitovany'), dealer: 2, seed: 1,
+          hands: hands.map((h) => h.slice()), unseen: [], talon: talon.slice(),
+          revealedTrump: null, talonOwner: owner, talonKnowledge: [owner === 0 ? talon.slice() : [], [], []],
+          history: [], handResults: [], ledger: [0, 0, 0], handNo: 0,
+          contract: { mode: 'betl', trump: null, declarer: 0, sedma: null, kilo: null, dveSedmy: false },
+          phase: {
+            name: 'tricks', trickNo: 0, leader, toAct,
+            trick, played: [], won: [[], [], []], marriages: [],
+          },
+        } as unknown as StC;
+      };
+      const actorOf = (st: StC) => ([0, 1, 2] as SeatC[]).find((x) => legalC(viewC(st, x)).length > 0);
+      /** Jeden tah aktéra podle nabídky — a nabídka musí platit na KAŽDÉM jeho tahu. */
+      const claimedMove = (st: StC) => {
+        const plan = claimPlan(viewC(st, 0));
+        assert.ok(plan !== null, 'jednou nabídnuté „nic za mnou" musí platit na každém dalším tahu');
+        const act = legalC(viewC(st, 0)).find((a) => a.type === 'play' && a.card === plan[0]);
+        assert.ok(act !== undefined, 'karta z plánu musí být v tu chvíli legální');
+        return act;
+      };
+      const betlKept = (st: StC) => {
+        if (st.phase.name === 'tricks') {
+          assert.equal(st.phase.won[0].length, 0, '„nic za mnou" slíbilo, že aktér nevezme štych — a vzal');
+        } else {
+          assert.equal(st.phase.name, 'scored', 'dohrávka musí dojít k zúčtování');
+          assert.ok(st.handResults[st.handResults.length - 1].delta[0] > 0, 'betl po „nic za mnou" musí být vyhraný');
+        }
+      };
+      /** Všechny tahy obrany (strom), aktér hraje podle nabídky. Vrací počet listů. */
+      const exhaust = (st: StC): number => {
+        betlKept(st);
+        if (st.phase.name !== 'tricks') return 1;
+        const actor = actorOf(st);
+        if (actor === undefined) return 0;
+        if (actor === 0) return exhaust(apC(st, claimedMove(st)));
+        let leaves = 0;
+        for (const a of legalC(viewC(st, actor))) leaves += exhaust(apC(st, a));
+        return leaves;
+      };
+      /** Náhodná obrana (deterministická), aktér podle nabídky. */
+      const rollout = (st: StC, seed: number): void => {
+        let s = st;
+        let r = seed;
+        for (let guard = 0; s.phase.name === 'tricks' && guard < 40; guard += 1) {
+          betlKept(s);
+          const actor = actorOf(s);
+          if (actor === undefined) break;
+          if (actor === 0) { s = apC(s, claimedMove(s)); continue; }
+          const acts = legalC(viewC(s, actor));
+          r = (r * 1103515245 + 12345) % 2147483648;
+          s = apC(s, acts[r % acts.length]);
+        }
+        betlKept(s);
+      };
+      const H = (r: number) => cardC(0, r as Parameters<typeof cardC>[1]); // červené
+      const Z = (r: number) => cardC(1, r as Parameters<typeof cardC>[1]); // zelené
+      const K = (r: number) => cardC(2, r as Parameters<typeof cardC>[1]); // kule
+      const L = (r: number) => cardC(3, r as Parameters<typeof cardC>[1]); // žaludy
+      const lowRanks = [0, 1, 2]; // 7, 8, 9
+      const rest = (taken: number[]) => DECK_C.filter((c) => !taken.includes(c));
+
+      // (I) jednoduše ložený betl: sedmy, osmy a devítky, nic nepřebije — nabídka hned na výnosu
+      {
+        const mine = [...lowRanks.map(H), ...lowRanks.map(Z), K(0), K(1), L(0), L(1)];
+        const talon = [H(7), Z(7)];
+        const others = rest([...mine, ...talon]);
+        const st = mkBetl([mine, others.slice(0, 10), others.slice(10, 20)], talon);
+        const plan = claimPlan(viewC(st, 0));
+        assert.ok(plan !== null, 'jednoduše ložený betl se známým talonem musí „nic za mnou" nabídnout už na výnosu');
+        assert.equal(plan.length, 10, 'plán je celá ruka');
+        for (let seed = 1; seed <= 60; seed += 1) rollout(st, seed);
+
+        // (L) tentýž stav, jen talon hráč NEZNÁ: na výnosu nelze říct, kterou barvu soupeři určitě mají
+        const blind = mkBetl([mine, others.slice(0, 10), others.slice(10, 20)], talon, { talonOwner: null });
+        assert.equal(claimPlan(viewC(blind, 0)), null, 'na výnosu s neznámým talonem se „nic za mnou" nabídnout nesmí');
+
+      }
+
+      /*
+       * (K) Obrana nic za sebou nemá — „nic za mnou" je aktérova věc. Obránce je
+       * tu na tahu a drží jen nejnižší karty pod vyneseným esem, takže by mu
+       * všechno ostatní nabídku dalo: zastavit ji smí jedině to, že není aktér.
+       */
+      {
+        const defender = [...lowRanks.map(H), ...lowRanks.map(Z), ...lowRanks.map(K), L(0)];
+        const ace = H(7);
+        const talon = [Z(7), K(7)];
+        const others = rest([...defender, ace, ...talon]);
+        const st = mkBetl([others.slice(0, 9), defender, others.slice(9, 19)], talon, {
+          trick: [{ seat: 0, card: ace }], leader: 0, toAct: 1,
+        });
+        assert.equal(claimPlan(viewC(st, 1)), null, 'obránci v betlu se „nic za mnou" nenabízí');
+      }
+
+      // (J) devítka proti vynesené sedmě: přebít MUSÍM — a třetí hráč nemusí mít čím
+      {
+        const mine = [H(2), ...lowRanks.map(Z), K(0), K(1), K(2), L(0), L(1), L(2)];
+        const talon = [H(1), Z(7)];             // osmička je v talonu (známém), takže pod devítkou u soupeřů nic
+        const trick: Trick = [{ seat: 2, card: H(0) }]; // po sedadle 2 hraje 0
+        const others = rest([...mine, ...talon, H(0)]);
+        const st = mkBetl([mine, others.slice(0, 10), others.slice(10, 19)], talon, { trick, leader: 2, toAct: 0 });
+        assert.equal(claimPlan(viewC(st, 0)), null, 'když v rozehraném štychu musím přebít, nic za mnou není');
+        // …a když vynesl výš než moje devítka, nabídka přijít musí (jinak by (J) procházelo i s funkcí, co vrací null)
+        // sedma i osma červená v (známém) talonu: pod mou devítkou u soupeřů nic není
+        const hi = H(6);
+        const talon2 = [H(0), H(1)];
+        const others2 = rest([...mine, ...talon2, hi]);
+        const st2 = mkBetl([mine, others2.slice(0, 10), others2.slice(10, 19)], talon2, { trick: [{ seat: 2, card: hi }], leader: 2, toAct: 0 });
+        const plan2 = claimPlan(viewC(st2, 0));
+        assert.ok(plan2 !== null, 'pod vynesenou vyšší kartou se „nic za mnou" nabídnout musí');
+        assert.equal(plan2[0], H(2), 'a přiznat se musí barva');
+        for (let seed = 1; seed <= 40; seed += 1) rollout(st2, seed);
+      }
+
+      // (M) neznámý talon s kartou POD mou: mohla by být u soupeře — nabídka nesmí přijít
+      {
+        const mine = [H(1), ...lowRanks.map(Z), K(0), K(1), K(2), L(0), L(1), L(2)]; // osma červená
+        const talon = [H(0), Z(7)];              // sedma červená v talonu
+        const hi = H(6);
+        const others = rest([...mine, ...talon, hi]);
+        const hands: [number[], number[], number[]] = [mine, others.slice(0, 10), others.slice(10, 19)];
+        const trick: Trick = [{ seat: 2, card: hi }];
+        const blind = mkBetl(hands, talon, { trick, leader: 2, toAct: 0, talonOwner: null });
+        assert.equal(claimPlan(viewC(blind, 0)), null, 'neznámá nižší karta v talonu se musí počítat jako soupeřova');
+        const known = mkBetl(hands, talon, { trick, leader: 2, toAct: 0 });
+        assert.ok(claimPlan(viewC(known, 0)) !== null, 'když talon znám, ta karta je mimo hru a nabídka platí');
+      }
+
+      /*
+       * Náhodná rozdání: aktér hraje nejnižší legální kartu, obrana náhodně, a
+       * jakmile se „nic za mnou" nabídne, musí vydržet do konce. Ruka aktéra je
+       * polovinou rozdání tažená z nízkých karet, jinak by se nabídka nepotkala.
+       */
+      let offered = 0;
+      let exhaustive = 0;
+      let leaves = 0;
+      for (let seed = 1; seed <= 600 && offered < 60; seed += 1) {
+        let r = seed * 7919;
+        const next = () => (r = (r * 1103515245 + 12345) % 2147483648);
+        const deck = [...DECK_C];
+        for (let i = deck.length - 1; i > 0; i -= 1) { const j = next() % (i + 1); [deck[i], deck[j]] = [deck[j], deck[i]]; }
+        const low = deck.filter((c) => (c & 7) <= 4);
+        const mine = seed % 2 === 0 ? low.slice(0, 10) : deck.slice(0, 10);
+        const pool = deck.filter((c) => !mine.includes(c));
+        let st = mkBetl([mine, pool.slice(0, 10), pool.slice(10, 20)], pool.slice(20, 22));
+        for (let guard = 0; st.phase.name === 'tricks' && guard < 40; guard += 1) {
+          const actor = actorOf(st);
+          if (actor === undefined) break;
+          if (actor === 0) {
+            if (claimPlan(viewC(st, 0)) !== null) {
+              offered += 1;
+              if (st.hands[0].length <= 4) { leaves += exhaust(st); exhaustive += 1; }
+              else for (let k = 1; k <= 15; k += 1) rollout(st, seed * 100 + k);
+              break;
+            }
+            const acts = legalC(viewC(st, 0));
+            acts.sort((a, b) => (a as { card: number }).card % 8 - (b as { card: number }).card % 8);
+            st = apC(st, acts[0]);
+          } else {
+            const acts = legalC(viewC(st, actor));
+            st = apC(st, acts[next() % acts.length]);
+          }
+        }
+      }
+      /*
+       * Controller: v betlu se nabídka přijme i UPROSTŘED štychu (aktér tam
+       * přiznává barvu, na výnos se už nedostane) a dohrávka dojde k vyhranému
+       * betlu. U „vše za mnou" se doprostřed štychu odmítá — tohle je jediná
+       * cesta, kde plán platí jen na jeden tah a controller ho musí přepočítávat.
+       */
+      {
+        const { MatchController: MCB } = await import('../src/lib/match/controller');
+        const driverB = {
+          think: async (req: Parameters<typeof thinkC>[0] & { requestId: number }) =>
+            thinkC({ view: req.view, difficulty: 'easy', seed: req.seed, budgetMs: 0 }),
+          cancel: () => {},
+        };
+        const mine = [H(2), ...lowRanks.map(Z), K(0), K(1), K(2), L(0), L(1), L(2)];
+        const talon = [H(0), H(1)];
+        const hi = H(6);
+        const others = rest([...mine, ...talon, hi]);
+        const st = mkBetl([mine, others.slice(0, 10), others.slice(10, 19)], talon, { trick: [{ seat: 2, card: hi }], leader: 2, toAct: 0 });
+        const c = new MCB(driverB, {
+          config: cfgC('licitovany'), humanSeat: 0, difficulty: 'easy', budgetMs: 0,
+          seedSource: () => 7, aiDelayMs: 0, claimDelayMs: 0,
+        }, st);
+        assert.equal(c.claimRest(), true, 'v betlu se „nic za mnou" přijme i uprostřed štychu');
+        for (let i = 0; i < 400 && c.state.phase.name !== 'scored'; i += 1) await new Promise((res) => setTimeout(res, 2));
+        betlKept(c.state);
+        assert.equal(c.state.phase.name, 'scored', 'dohrávka betlu musí dojít k zúčtování');
+        assert.equal(c.isClaiming, false, 'a příznak po zúčtování zhasne');
+        c.stop();
+      }
+
+      assert.ok(offered >= 30, `„nic za mnou" se v náhodných betlech potkalo jen ${offered}× — tak by se neověřilo`);
+      assert.ok(exhaustive >= 5, `úplné prohledání proběhlo jen ${exhaustive}× — krátké ruce se nepotkaly`);
+      console.log(
+        `PASS nic za mnou — betl: ${offered} nabídek v náhodných rozdáních, ${exhaustive}× proti všem tahům obrany `
+        + `(${leaves} konců), vždy vyhraný; a nenabízí se při nutném přebití, neznámém talonu ani obránci`,
+      );
     }
 
     // (D) tichá sedma — vynést ji první znamená přijít o ni

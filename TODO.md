@@ -30,8 +30,9 @@ nevezme (design doc §39). Podminka se pocita z POHLEDU hrace, ne ze stavu —
 jinak by prozrazovala cizi karty i tim, ze se tlacitko neukaze. Zbytek se
 doopravdy dohraje (obrana smi hlasit hlasky i pri odhozu, CSM cl. III/3),
 plan jen radi vlastni ruku: ticha sedma nakonec, hlasit co jde.
-Odlozeno: "nic za mnou" pro betl — aktér nevynasi, dukaz je tezsi; a nevime,
-jestli to original umel (patri k overeni v DOSBoxu).
+~~"nic za mnou" pro betl~~ ✅ tlacitko v betlu, kdyz uz aktér zadny stych vzit nemuze:
+v kazde barve ma karty pod vsemi, ktere souperi mohou mit, a v rozehranem stychu nic
+neprebije (design doc §43). Nabizi se i uprostred stychu. Jestli to umel original, porad nevime.
 
 ~~pri betlu/durchu - nemela by byt ruka desitka razena jinak?~~ ✅ vejir se ted
 radi podle rezimu hry: v betlu/durchu klesa desitka mezi spodka a devitku
