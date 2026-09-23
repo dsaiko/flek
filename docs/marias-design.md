@@ -2426,3 +2426,41 @@ hlášením se čtrnácti volbami (licitovaný seed 1).
 
 Negativní kontroly: `title` zpátky z `bidLabel` (verify: „Sto <svg …" — přesně ta původní chyba),
 prostá hra bez ikony (verify), stará dlouhá tlačítka hlášení (smoke: cs na dva řádky, en na tři).
+
+## 46. Celá obrazovka na telefonu (2026-09-24)
+
+Uživatel zkusil v0.0.14 na iPhonu na šířku: se záložkami a adresním řádkem Safari zbylo na hru
+kolem 200 px a tlačítko celé obrazovky nic neudělalo. **Safari na iPhonu Fullscreen API pro stránku
+nemá** — `document.fullscreenEnabled` je false, jde jen video — a CSS náhrada (`fs-fallback`) lišty
+prohlížeče neschová. Jediná cesta k celé obrazovce je **web spuštěný z plochy**.
+
+**Co se změnilo:**
+- `public/manifest.json` (`display: fullscreen`, `start_url: /`), ikony 192 a 512 (i maskovatelná)
+  a `apple-touch-icon` 180 — vyrábí je `scripts/assets.ts` z `favicon.svg`, podložené barvou rámu
+  (iOS i Android si ikonu zaoblí samy a průhledné rohy by zčernaly). V hlavičce `apple-mobile-web-app-*`
+  a `viewport-fit=cover`; stůl se od výřezu displeje a indikátoru domů drží přes
+  `env(safe-area-inset-*)`. Manifest je `.json`, ne `.webmanifest`: S3 by příponě nepřiřadil typ.
+- Tlačítko celé obrazovky na **dotykovém zařízení bez Fullscreen API** (iPhone) ukáže návod „Sdílet →
+  Přidat na plochu" ve čtyřech jazycích, místo aby zapnulo CSS náhradu. Android a desktop dál
+  používají Fullscreen API.
+- **Spuštěno z plochy** (`navigator.standalone` nebo `display-mode`) tlačítko zmizí — celá obrazovka
+  už je. Test tu našel skutečnou chybu: `.ctl-btn.icon { display: grid }` přebíjelo atribut
+  `hidden`, tlačítko by zůstalo. Přibylo `.ctl-btn[hidden] { display: none }`.
+- **Zúčtování na nízkém displeji** (uživatel hlásil): panel byl vyšší než stůl a k „Další hra" se
+  nedalo dostat. Panely zúčtování a nastavení mají `max-height: 100%` a vlastní scroll — scrolluje
+  panel, ne vrstva, protože vrstva `#center-float` má `pointer-events: none`.
+
+**Testy (smoke):** manifest je platný JSON s `display: fullscreen` a každá ikona je PNG přesně té
+velikosti, kterou slibuje; hlavička má manifest, `apple-touch-icon`, `apple-mobile-web-app-capable`
+a `viewport-fit=cover`. Simulovaný iPhone (dotyk, `fullscreenEnabled` false) po klepnutí ukáže
+návod a nezapne náhradu; se `navigator.standalone` je tlačítko skryté; na desktopu se návod
+neukáže. Zúčtování 812×220 (Safari na šířku s lištami) a 360×640: po doscrollování panelu je
+„Další hra" celá ve stole a bere klik (`elementFromPoint`); na 812×220 se navíc hlídá, že panel
+opravdu scrolluje — jinak by se scroll neověřil.
+
+Negativní kontroly: iPhone bez návodu, návod vždycky (shodí desktop), hlavička bez manifestu, panel
+bez scrollu („Další hra není ani po doscrollování vidět"). Skryté tlačítko shodilo test samo, dřív
+než bylo opravené.
+
+**Co zůstává:** v Safari (ne z plochy) na šířku je hra na ~200 px pořád těsná — to je výška, kterou
+Safari nechá, a obejít ji nejde. Web na plochu neověříme jinak než na skutečném telefonu.
