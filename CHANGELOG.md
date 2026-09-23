@@ -4,6 +4,23 @@ Poznámky k vydání. Sekci pro daný tag z tohohle souboru vytáhne CI a použi
 jako text releasu na GitHubu (`.github/workflows/release.yml`) — nadpis sekce se
 stane názvem vydání. Nová verze = **přidat sekci sem** a až pak tagovat.
 
+## v0.0.12 — hra je na webu
+
+**Flek! se dá hrát na [flek.saiko.cz](https://flek.saiko.cz).** Stačí prohlížeč, nic se
+neinstaluje a všechno běží u tebe — protihráči přemýšlejí přímo v prohlížeči a na žádný server
+se neposílá ani karta. Hra je i na rozcestníku [saiko.cz](https://www.saiko.cz), mezi ostatními
+ukázkami jako první.
+
+Samotná hra se proti minulému vydání nemění. V nápovědě přibyl do **Pocty** licenční řádek
+originálu: RE!, na kterém se ověřovalo, jak se originál chová, je kopie č. 40456 licencovaná
+na jméno **Josefa Saika** — tak, jak ji RE! vypíše při ukončení.
+
+### Pro vývoj
+
+Každý pull request teď v GitHub Actions projde celým `make all` — testy enginu, build a
+prohlížečové testy v Chromiu i WebKitu. Dřív se to spouštělo až při vydání. Na web se
+nasazuje ručně (`make deploy`), vydání samo web nemění.
+
 ## v0.0.11 — sazebník originálu
 
 Minulé vydání změřilo, kolik se v originálu za co platí. Teď se podle toho dá hrát.
