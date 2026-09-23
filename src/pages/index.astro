@@ -161,6 +161,10 @@ const version = pkg.version;
                 <h4>Pocta</h4>
                 <p><b>FLEK!</b> (1991–92) a <b>RE!</b> (1993) napsal v Turbo Pascalu <b>Ing. Jaroslav Pivoňka</b> (Pivoňka Software). Tahle hra je jejich poctou, ne portem — žádný původní kód ani binárka tu nejsou.</p>
                 <p>Věnováno mému otci, <b>Josefu Saikovi</b>, který miloval matematiku a nasměroval mě k programování.</p>
+                <p>Chování originálu jsem ověřoval v DOSBoxu na otcově kopii RE! — je licencovaná přímo na jeho jméno a při ukončení se hlásí:</p>
+                <pre class="help-dos">(c) 1991-1993 J.Pivoňka
+RE!    1.1        #40456
+Licence: Josef SAIKO</pre>
                 <h4>Karty</h4>
                 <p>Historická sada jsou skeny jednohlavých pražských karet (Ant. Kratochvíl, Praha, kolem 1860) — volné dílo, přes <a href="https://commons.wikimedia.org/wiki/Category:Jednohlave" target="_blank" rel="noopener">Wikimedia Commons</a> (skeny: Bibliothèque nationale de France, Gallica). Moderní sada je původní a je pod licencí MIT jako zbytek kódu.</p>
               </div>
@@ -189,6 +193,10 @@ const version = pkg.version;
                 <h4>Tribute</h4>
                 <p><b>FLEK!</b> (1991–92) and <b>RE!</b> (1993) were written in Turbo Pascal by <b>Ing. Jaroslav Pivoňka</b> (Pivoňka Software). This game is a tribute to them, not a port — it contains none of the original code or binaries.</p>
                 <p>Dedicated to my father, <b>Josef Saiko</b>, who loved mathematics and set me on the path to programming.</p>
+                <p>I checked how the original behaves in DOSBox, on my father’s copy of RE! — it is licensed in his own name and says so on exit:</p>
+                <pre class="help-dos">(c) 1991-1993 J.Pivoňka
+RE!    1.1        #40456
+Licence: Josef SAIKO</pre>
                 <h4>Cards</h4>
                 <p>The historical deck is scans of a single-headed Prague pattern (Ant. Kratochvíl, Prague, around 1860) — public domain, via <a href="https://commons.wikimedia.org/wiki/Category:Jednohlave" target="_blank" rel="noopener">Wikimedia Commons</a> (scans: Bibliothèque nationale de France, Gallica). The modern deck is original and MIT licensed, like the rest of the code.</p>
               </div>
@@ -217,6 +225,10 @@ const version = pkg.version;
                 <h4>Hommage</h4>
                 <p><b>FLEK!</b> (1991–92) und <b>RE!</b> (1993) schrieb <b>Ing. Jaroslav Pivoňka</b> (Pivoňka Software) in Turbo Pascal. Dieses Spiel ist eine Hommage, kein Port — es enthält weder Originalcode noch Originaldateien.</p>
                 <p>Gewidmet meinem Vater, <b>Josef Saiko</b>, der die Mathematik liebte und mich zum Programmieren gebracht hat.</p>
+                <p>Wie sich das Original verhält, habe ich in DOSBox an der RE!-Kopie meines Vaters geprüft — sie ist auf seinen Namen lizenziert und meldet das beim Beenden:</p>
+                <pre class="help-dos">(c) 1991-1993 J.Pivoňka
+RE!    1.1        #40456
+Licence: Josef SAIKO</pre>
                 <h4>Karten</h4>
                 <p>Das historische Blatt sind Scans eines einköpfigen Prager Bildes (Ant. Kratochvíl, Prag, um 1860) — gemeinfrei, über <a href="https://commons.wikimedia.org/wiki/Category:Jednohlave" target="_blank" rel="noopener">Wikimedia Commons</a> (Scans: Bibliothèque nationale de France, Gallica). Das moderne Blatt ist eigens gezeichnet und steht wie der übrige Code unter MIT-Lizenz.</p>
               </div>
@@ -245,6 +257,10 @@ const version = pkg.version;
                 <h4>Hommage</h4>
                 <p><b>FLEK!</b> (1991–92) et <b>RE!</b> (1993) ont été écrits en Turbo Pascal par <b>Ing. Jaroslav Pivoňka</b> (Pivoňka Software). Ce jeu leur rend hommage, ce n’est pas un portage — il ne contient ni code ni binaire d’origine.</p>
                 <p>Dédié à mon père, <b>Josef Saiko</b>, qui aimait les mathématiques et m’a mis sur la voie de la programmation.</p>
+                <p>J’ai vérifié le comportement de l’original dans DOSBox, sur l’exemplaire de RE! de mon père — la licence est à son nom, et il l’affiche en quittant :</p>
+                <pre class="help-dos">(c) 1991-1993 J.Pivoňka
+RE!    1.1        #40456
+Licence: Josef SAIKO</pre>
                 <h4>Cartes</h4>
                 <p>Le jeu historique provient de scans d’un modèle de Prague à figures simples (Ant. Kratochvíl, Prague, vers 1860) — domaine public, via <a href="https://commons.wikimedia.org/wiki/Category:Jednohlave" target="_blank" rel="noopener">Wikimedia Commons</a> (scans : Bibliothèque nationale de France, Gallica). Le jeu moderne est original et sous licence MIT, comme le reste du code.</p>
               </div>
@@ -605,6 +621,12 @@ const version = pkg.version;
   .help-body ul { margin: 0 0 7px; padding-left: 1.2em; }
   .help-body li { margin: 2px 0; }
   .help-body a { color: #fff; }
+  /* licenční řádek RE! tak, jak ho vypíše do konzole DOSu (adresa záměrně vynechaná) */
+  .help-body pre.help-dos {
+    margin: 0 0 7px; padding: 6px 10px; border-radius: 6px;
+    background: rgba(0,0,0,.28); color: #d8f5f0;
+    font: .92em/1.35 ui-monospace, "SF Mono", Menlo, Consolas, monospace; white-space: pre;
+  }
   .help-foot {
     display: flex; justify-content: space-between; gap: 12px;
     margin-top: 10px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,.2);
