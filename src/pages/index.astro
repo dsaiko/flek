@@ -871,6 +871,8 @@ Licence: Josef SAIKO</pre>
   }
   /* ikona nesmí roztahovat řádek tlačítka */
   .action-btn svg { flex: none; display: block; }
+  /* ťuknutí je klik, ne dvojklik na zoom — na každém dotykovém zařízení, i na tabletu na šířku */
+  .action-btn, .bid-chip, .ctl-btn { touch-action: manipulation; }
   .action-btn.primary { background: var(--gold); color: var(--frame); }
   #table.idle #actions .action-btn { padding-inline: clamp(26px, 6.2cqh, 78px); }
   .action-btn:disabled { opacity: .45; cursor: default; }
@@ -995,7 +997,7 @@ Licence: Josef SAIKO</pre>
   #center-float.open { display: flex; }
   #center-float .felt-panel, #center-float .replay { pointer-events: auto; }
   .felt-panel {
-    margin: auto; min-width: 340px; max-width: 560px;
+    margin: auto; min-width: min(340px, 100%); max-width: 560px;
     background: #0e7f8b; color: #eafcf6;
     border: 2px solid #0a5a63; border-radius: 12px;
     padding: 14px 22px 12px;
@@ -1114,7 +1116,17 @@ Licence: Josef SAIKO</pre>
     .ctl-btn { font-size: 15px; }
     .ctl-btn.primary { padding: 9px 14px; }
     .ctl-btn.icon { width: 40px; height: 40px; }
-    .action-btn { touch-action: manipulation; }
+  }
+  /*
+   * Nízká obrazovka (telefon na šířku): nad pruhem akcí jsou hned ruby soupeřů,
+   * takže se pruh zvednout nedá — a žebřík licitace je přes skoro celou šířku,
+   * až do rohu s blokem „Ty". Blok proto jde do levého dolního rohu vedle
+   * vějíře, kde je volno (ruka je uprostřed a úzká).
+   */
+  @media (max-height: 500px) and (orientation: landscape) {
+    .me-meta { bottom: 10px; }
+    /* štych výš: v nízkém sukně dosedal na horní okraj vějíře */
+    #trick .played { top: 38%; }
   }
   /*
    * Na výšku je stůl vysoký a úzký: rozhoduje ŠÍŘKA. Stav jde pod soupeře přes
@@ -1126,9 +1138,11 @@ Licence: Josef SAIKO</pre>
       --card-w: min(clamp(46px, 14.25cqh, 150px), 19cqw);
       /* 12 karet: 1 + 11 × (1 − 2 × 0,3) = 5,4 karty, plus natočení vějíře na krajích */
       /* šířka podle počtu karet (`--hand-n` nastavuje renderHand): n karet
-         = 1 + (n − 1) × 0,4 karty, plus rezerva na natočení vějíře na krajích */
+         = 1 + (n − 1) × 0,4 karty, plus 0,9 karty rezervy na natočení vějíře
+         na krajích — vyklonění roste s velikostí karty, takže na tabletu 0,6
+         nestačilo (krajní karty vyčnívaly o 7 px) */
       --hand-w: min(clamp(46px, 14.25cqh, 150px), 24cqw,
-        calc((100cqw - 8px) / (1.6 + .4 * (var(--hand-n, 12) - 1))));
+        calc((100cqw - 8px) / (1.9 + .4 * (var(--hand-n, 12) - 1))));
       --hand-overlap: -.3;
     }
     /*
@@ -1141,10 +1155,13 @@ Licence: Josef SAIKO</pre>
     .seatbox .pile { position: absolute; top: calc(100% + 4px); margin: 0; }
     #pile-left { left: 0; }
     #pile-right { right: 0; }
-    .seatbox .melds { position: absolute; z-index: 2; top: calc(100% - var(--card-w) * .7); margin: 0; min-height: 0; }
+    /* karta hlášky: šířka 0,52 × card-w, poměr 62/106 → výška 0,89 × card-w; končí u hrany boxu, ne na paklu */
+    .seatbox .melds { position: absolute; z-index: 2; top: calc(100% - var(--card-w) * .9); margin: 0; min-height: 0; }
     #melds-left { left: 6px; }
     #melds-right { right: 6px; justify-content: flex-end; }
-    .seatbox .bubble { top: 64px; margin-top: 0; }
+    /* ukotvená k rubům (box soupeře končí jejich spodkem, řádek rubů má 1,12 × card-w),
+       ne pevným číslem — to na některých velikostech sedlo na závazek nad nimi */
+    .seatbox .bubble { top: calc(100% - var(--card-w) * 1.12 + 8px); margin-top: 0; }
     .center-top { margin-top: calc(var(--card-w) * .55 + 12px); }
     .me-meta { bottom: calc(var(--hand-w) * 1.75 + 18px); }
     /* pruh akcí nad blokem „Ty" (jméno, konto a závazek pod sebou, ~64 px) — §37 */
