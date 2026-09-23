@@ -2326,3 +2326,32 @@ betl vždy `null`, a v UI starý nápis — každá shodí právě svůj test.
 **Co zůstává:** tlačítko stojí v liště akcí jako všechna ostatní, a protože se v betlu nabízí
 uprostřed štychu, lehce zakrývá spodní rohy vynesených karet. U „vše za mnou" se to nestane
 (nabízí se na prázdném stole). Jestli originál „nic za mnou" uměl, pořád nevíme.
+## 45. Hlášení závazku jako žebřík (2026-09-23)
+
+Uživatel chtěl volby při hlášení stejné jako licitační žebřík z §40. Hlášení (ve voleném po odhozu,
+v licitovaném u vydražitele) mělo pořád dlouhá tlačítka „Hra ♦ + Sedma + Kilo" — ve voleném čtyři,
+v licitovaném až čtrnáct (čtyři barvy a betl, durch), a ty se na stůl nevešly na jeden řádek.
+
+**Co se změnilo.** Každá trumfová barva je jedna skupina slepených dlaždic: **ikona barvy** (prostá
+hra) · `7` · `100` · `100+7` — tytéž glyfy a totéž pořadí jako v licitaci. Červená skupina se zbarví
+jako červené nabídky (platí dvojnásob), betl a durch jsou samostatné tmavé dlaždice na konci. Plný
+název je v `title`.
+
+**Proč prostá hra nemá slovo.** „Hra" by se v angličtině a němčině natáhlo na „Game"/„Spiel" a čtyři
+skupiny by se na stole 1400 px zalomily na dva řádky (ověřeno smoke). Glyfy žebříku mají být
+nezávislé na jazyce, a barva sama na dlaždici říká „hra v téhle barvě" — jako boxy „100 ♞" ve FLEK!.
+Když prostá hra v nabídce není (vysoutěžené sto), nese ikonu první dlaždice skupiny.
+
+**Kód.** Rozvržení je čistá funkce (`declareChips`, pro licitaci `bidChips`) a vykreslení obou
+žebříků sdílí `renderLadder` — licitace se tím jen přestěhovala, nezměnila.
+
+**Cestou opravené:** u červené nabídky v licitaci byl v `title` surový `<svg …>` (`bidLabel` vrací
+HTML s ikonou). `title` je teď čistý text („Sto (červené)").
+
+**Testy:** `verify` — pořadí a skupiny po barvách, ikona na prosté hře i na první dlaždici skupiny
+bez ní, červená skupina, betl a durch samostatně, `title` bez HTML v obou žebřících. Smoke kontrola
+„na jednom řádku ve všech čtyřech jazycích a mimo jmenovku a hromádku" z §40 běží teď i nad
+hlášením se čtrnácti volbami (licitovaný seed 1).
+
+Negativní kontroly: `title` zpátky z `bidLabel` (verify: „Sto <svg …" — přesně ta původní chyba),
+prostá hra bez ikony (verify), stará dlouhá tlačítka hlášení (smoke: cs na dva řádky, en na tři).

@@ -999,7 +999,16 @@ if (cspViolations.length > 0) {
  * v barvě), na kterou by se herní smyčka načekala.
  */
 {
-  const payload = auctionSave();
+  /*
+   * Dva žebříky, táž slibovaná vlastnost: licitace (§40) a hlášení závazku
+   * (§45, čtyři barvy po „Hra · 7 · 100 · 100+7" plus betl a durch — nejširší
+   * nabídka, jaká se u stolu objeví).
+   */
+  const ladders: [string, string, number, string][] = [
+    ['licitace', auctionSave(), 9, 'smoke-auction.png'],
+    ['hlášení', declareSave(), 14, 'smoke-declare.png'],
+  ];
+  for (const [ladderName, payload, need, shot] of ladders) {
   const worst: string[] = [];
   for (const lang of ['cs', 'en', 'de', 'fr']) {
     const bid = await browser.newPage({ viewport: { width: 1400, height: 900 } });
@@ -1021,12 +1030,12 @@ if (cspViolations.length > 0) {
       // `button`, ne `.action-btn`: žebřík licitace (§40) skládá nabídku
       // z dlaždic `.bid-chip`, jen „Dobrá (pas)" zůstala obyčejným tlačítkem
       await bid.waitForFunction(
-        () => document.querySelectorAll('#actions button').length >= 9,
-        undefined, { timeout: 15000 },
+        (min) => document.querySelectorAll('#actions button').length >= min,
+        need, { timeout: 15000 },
       );
     } catch {
       const n = await bid.locator('#actions button').count();
-      console.error(`CHYBA: licitovaný sav se neobnovil — nabídka má ${n} tlačítek místo devíti (${lang})`);
+      console.error(`CHYBA: licitovaný sav (${ladderName}) se neobnovil — nabídka má ${n} tlačítek místo ${need} (${lang})`);
       await bid.close();
       await browser.close();
       process.exit(1);
@@ -1077,16 +1086,17 @@ if (cspViolations.length > 0) {
       }
     }
     if (lang === 'cs') {
-      await bid.screenshot({ path: join(outDir, 'smoke-auction.png') });
+      await bid.screenshot({ path: join(outDir, shot) });
     }
     await bid.close();
   }
   if (worst.length > 0) {
-    console.error(`CHYBA: nabídka licitace překrývá hráčovy prvky:\n  ${worst.join('\n  ')}`);
+    console.error(`CHYBA: nabídka (${ladderName}) překrývá hráčovy prvky:\n  ${worst.join('\n  ')}`);
     await browser.close();
     process.exit(1);
   }
-  console.log('Nabídka licitace (9 tlačítek) je ve všech čtyřech jazycích na jednom řádku a vyhne se jmenovce i hromádce');
+  console.log(`Nabídka (${ladderName}, ${need} tlačítek) je ve všech čtyřech jazycích na jednom řádku a vyhne se jmenovce i hromádce`);
+  }
 }
 
 /*
@@ -1351,6 +1361,29 @@ function asideSave(): string {
     throw new Error('scénář pro odložený trumf neskončil barevnou hrou soupeře vlevo');
   }
   return JSON.stringify({ v: SAVE_VERSION, state: st });
+}
+
+/**
+ * Sav, kde člověk v licitovaném HLÁSÍ závazek a má všech čtrnáct voleb (§45):
+ * čtyři barvy, v každé „Hra" a co k ní jde, plus betl a durch. Seed 1: člověk
+ * vydraží sedmu, ostatní pasují, odhodí první legální dvojici.
+ */
+function declareSave(): string {
+  let st = apply(initialState(defaultConfig('licitovany'), 2), { type: 'deal', seed: 1 });
+  for (let guard = 0; guard < 80 && st.phase.name !== 'tricks'; guard += 1) {
+    const actor = ([0, 1, 2] as const).find((s) => legalActions(view(st, s)).length > 0);
+    if (actor === undefined) break;
+    const acts = legalActions(view(st, actor));
+    if (actor === 0 && st.phase.name === 'declare') {
+      if (acts.length !== 14) throw new Error(`scénář hlášení nedal 14 voleb, ale ${acts.length} — posunula ho úprava pravidel`);
+      return JSON.stringify({ v: SAVE_VERSION, state: st });
+    }
+    st = apply(st, acts.find((a) => a.type === 'good')
+      ?? acts.find((a) => a.type === 'bid' && a.bid === 'pass' && actor !== 0)
+      ?? acts.find((a) => a.type === 'bid' && a.bid !== 'pass' && a.bid.kind === 'sedma' && actor === 0)
+      ?? acts[0]);
+  }
+  throw new Error('scénář hlášení: člověk se k hlášení nedostal');
 }
 
 /**
