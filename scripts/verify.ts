@@ -6096,13 +6096,20 @@ console.log('PASS sav — v2 mimo komentování se migruje, rozehrané fleky z v
       permissions?: unknown;
       jobs?: Record<string, { permissions?: unknown; steps?: unknown }>;
     } | null;
-    /** Právo `contents` daného bloku `permissions:` — `write-all` počítáme taky. */
+    /**
+     * Právo `contents` daného bloku `permissions:` — `write-all` počítáme taky.
+     *
+     * `null` znamená „blok chybí", a to je jiná věc než prázdný blok: `permissions: {}`
+     * vypne všechno (`none`), kdežto žádný blok nechá výchozí práva repozitáře,
+     * a ta mohou být i zapisovací. Kdo si o práva neřekne, dostane výchozí.
+     */
     const contentsOf = (p: unknown): string | null => {
+      if (p === undefined || p === null) return null;
       if (p === 'write-all') return 'write';
       if (p === 'read-all') return 'read';
-      if (p !== null && typeof p === 'object') {
+      if (typeof p === 'object') {
         const c = (p as Record<string, unknown>).contents;
-        return typeof c === 'string' ? c : null;
+        return typeof c === 'string' ? c : 'none';
       }
       return null;
     };
@@ -6163,8 +6170,10 @@ console.log('PASS sav — v2 mimo komentování se migruje, rozehrané fleky z v
   const jobComplaints = (job: WfJob, where: string): string[] => {
     const out: string[] = [];
     const writes = job.contents === 'write';
+    let runsCode = false;
     for (const step of job.steps) {
       if (typeof step.uses === 'string' && step.uses.startsWith('actions/checkout')) {
+        runsCode = true;
         const w = (step.with !== null && typeof step.with === 'object' ? step.with : {}) as Record<string, unknown>;
         if (w['persist-credentials'] !== false) {
           out.push(`${where} (${job.name}): checkout bez \`persist-credentials: false\` — token zůstane v .git/config na celý job`);
@@ -6175,9 +6184,19 @@ console.log('PASS sav — v2 mimo komentování se migruje, rozehrané fleky z v
        * `gh` z image runneru je v pořádku; `npm`, `make`, `node` a spol. znamenají
        * kód projektu a jeho závislostí, tedy přesně to, před čím token chráníme.
        */
-      if (writes && typeof step.run === 'string' && /(^|[\s;&|(])(npm|npx|yarn|pnpm|make|node)\s/.test(step.run)) {
-        out.push(`${where} (${job.name}): \`contents: write\` a k tomu kód projektu — podstrčený \`gh\` by dostal token`);
+      if (typeof step.run === 'string' && /(^|[\s;&|(])(npm|npx|yarn|pnpm|make|node)\s/.test(step.run)) {
+        runsCode = true;
+        if (writes) out.push(`${where} (${job.name}): \`contents: write\` a k tomu kód projektu — podstrčený \`gh\` by dostal token`);
       }
+    }
+    /*
+     * Job, který si o práva vůbec neřekne (ani on, ani workflow), dostane VÝCHOZÍ
+     * token repozitáře — a ten smí podle nastavení repozitáře i zapisovat. Kontrola
+     * výš by takový job pustila, protože `write` v něm nikde nestojí. Kdo spouští
+     * kód projektu, musí proto svoje právo napsat výslovně.
+     */
+    if (runsCode && job.contents === null) {
+      out.push(`${where} (${job.name}): job spouští kód projektu a nemá \`permissions:\` — dostane výchozí token repozitáře, napiš \`contents: read\``);
     }
     return out;
   };
@@ -6285,14 +6304,39 @@ console.log('PASS sav — v2 mimo komentování se migruje, rozehrané fleky z v
       '      - run: gh release create "$GITHUB_REF_NAME" --notes-file release-notes.md',
     ));
     assert.deepEqual(jobComplaints(publish[0], 'x'), [], 'samotné `gh` z image runneru je v pořádku');
+
+    /*
+     * Chybějící `permissions:` není „bez práv", je to „výchozí práva repozitáře".
+     * `write` tu nikde nestojí, takže by to kontrola výš pustila — a job by dostal
+     * token, který smí podle nastavení repozitáře i zapisovat.
+     */
+    const cleanCheckout = ['    steps:', '      - uses: actions/checkout@v4', '        with:', '          persist-credentials: false', '      - run: npm ci'];
+    const undeclared = parseJobs(wf('jobs:', '  a:', ...cleanCheckout));
+    assert.equal(undeclared[0].contents, null, 'bez bloku `permissions:` nemá job žádné vlastní právo');
+    const undeclaredSays = jobComplaints(undeclared[0], 'x');
+    assert.equal(undeclaredSays.length, 1, `job s kódem projektu a bez \`permissions:\` má vyvolat jednu stížnost, ne ${undeclaredSays.length}`);
+    assert.match(undeclaredSays[0], /výchozí token/, 'a říct, že dostane výchozí token repozitáře');
+    // tentýž job bez kódu projektu (jen `gh`) nevadí — výchozí token tu nemá kdo ukrást
+    assert.deepEqual(
+      jobComplaints(parseJobs(wf('jobs:', '  a:', '    steps:', '      - run: gh --version'))[0], 'x'), [],
+      'job bez kódu projektu si práva psát nemusí',
+    );
+    // prázdný blok je naopak výslovné „nic": `permissions: {}` nahoře i u jobu
+    const none = parseJobs(wf('permissions: {}', 'jobs:', '  a:', ...cleanCheckout));
+    assert.equal(none[0].contents, 'none', '`permissions: {}` znamená žádná práva, ne chybějící blok');
+    assert.deepEqual(jobComplaints(none[0], 'x'), [], 'job zděděný z `permissions: {}` je v pořádku');
+    const jobNone = parseJobs(wf('permissions: write-all', 'jobs:', '  a:', '    permissions: {}', ...cleanCheckout));
+    assert.equal(jobNone[0].contents, 'none', 'prázdný blok u jobu přebíjí `write-all` workflow (GitHub bloky neslučuje)');
   }
 
   /*
    * Spouštěče. `pull_request_target` běží v kontextu CÍLOVÉHO repozitáře —
    * s tokenem, který smí zapisovat, a se secrets — a stačí mu stáhnout kód
    * z PR, aby ho z forku spustil kdokoli (tady navíc s postinstall skripty
-   * celého `npm ci`). PR testy proto jedou na `pull_request`, a ten druhý
-   * spouštěč nesmí do žádného workflow přibýt ani omylem.
+   * celého `npm ci`). `workflow_run` je jeho sourozenec: běží po jiném workflow,
+   * zase s právy cílového repozitáře, a typicky si stáhne artefakt, který
+   * vyrobil kód z PR. PR testy proto jedou na `pull_request`, a ty dva
+   * spouštěče nesmí do žádného workflow přibýt ani omylem.
    */
   const triggersOf = (yamlText: string): string[] => {
     const on = (parseYaml(yamlText) as { on?: unknown } | null)?.on;
@@ -6301,6 +6345,12 @@ console.log('PASS sav — v2 mimo komentování se migruje, rozehrané fleky z v
     if (on !== null && typeof on === 'object') return Object.keys(on);
     return [];
   };
+  const PRIVILEGED_TRIGGERS = ['pull_request_target', 'workflow_run'];
+  const triggerComplaints = (yamlText: string, where: string): string[] =>
+    triggersOf(yamlText)
+      .filter((t) => PRIVILEGED_TRIGGERS.includes(t))
+      .map((t) => `${where}: \`${t}\` pouští kód z PR s tokenem cílového repozitáře — použij \`pull_request\``);
+
   // všechny tři zápisy `on:`, a klíč `on` musí zůstat řetězcem (YAML 1.1 by z něj udělal `true`)
   assert.deepEqual(triggersOf('on: pull_request_target\njobs: {}'), ['pull_request_target']);
   assert.deepEqual(triggersOf('on: [push, pull_request_target]\njobs: {}'), ['push', 'pull_request_target']);
@@ -6309,6 +6359,26 @@ console.log('PASS sav — v2 mimo komentování se migruje, rozehrané fleky z v
     ['pull_request_target', 'push'],
   );
   assert.deepEqual(triggersOf('jobs: {}'), [], 'workflow bez `on:` nemá žádný spouštěč');
+
+  /*
+   * A samotné odmítnutí, na vzorcích — ne až na souborech v repozitáři. Ty žádný
+   * zakázaný spouštěč nemají, takže kontrola nad nimi by prošla, i kdyby odmítání
+   * vůbec nebylo.
+   */
+  for (const yamlText of [
+    'on: pull_request_target\njobs: {}',
+    'on: [push, pull_request_target]\njobs: {}',
+    'on:\n  pull_request_target:\n    types: [opened]\njobs: {}',
+    'on:\n  workflow_run:\n    workflows: [ci]\n    types: [completed]\njobs: {}',
+  ]) {
+    const says = triggerComplaints(yamlText, 'x');
+    assert.equal(says.length, 1, `zakázaný spouštěč má vyvolat jednu stížnost:\n${yamlText}`);
+    assert.match(says[0], /pull_request_target|workflow_run/, 'a jmenovat, který spouštěč to je');
+  }
+  assert.deepEqual(
+    triggerComplaints('on:\n  pull_request:\n    branches: [main]\n  push:\njobs: {}', 'x'), [],
+    '`pull_request` (i vedle `push`) projít musí',
+  );
 
   const dir = join(ROOT, '.github/workflows');
   const files = readdirSync(dir).filter((f) => f.endsWith('.yml') || f.endsWith('.yaml'));
@@ -6319,12 +6389,9 @@ console.log('PASS sav — v2 mimo komentování se migruje, rozehrané fleky z v
   for (const file of files) {
     const where = `.github/workflows/${file}`;
     const text = readFileSync(join(dir, file), 'utf8');
-    const triggers = triggersOf(text);
-    assert.ok(
-      !triggers.includes('pull_request_target'),
-      `${where}: \`pull_request_target\` pouští kód z PR s tokenem cílového repozitáře — použij \`pull_request\``,
-    );
-    if (triggers.includes('pull_request')) prWorkflows += 1;
+    const found1 = triggerComplaints(text, where);
+    assert.equal(found1.length, 0, found1[0]);
+    if (triggersOf(text).includes('pull_request')) prWorkflows += 1;
     for (const script of runScripts(text)) {
       scripts += 1;
       const found2 = complaints(script, where);
@@ -6339,11 +6406,11 @@ console.log('PASS sav — v2 mimo komentování se migruje, rozehrané fleky z v
   assert.ok(scripts > 0, 'v žádném workflow se nenašel `run:` — parser asi nedošel k `jobs`');
   // kdyby `uses:` přestalo docházet až ke krokům, kontrola stavby by tiše nic nedělala
   assert.ok(checkouts > 0, 'v žádném workflow se nenašel checkout — parser asi nedošel ke krokům `uses:`');
-  // kdyby parser spouštěčů přestal číst `on:`, kontrola `pull_request_target` by tiše nic nehlídala
+  // kdyby parser spouštěčů přestal číst `on:`, kontrola zakázaných spouštěčů by tiše nic nehlídala
   assert.ok(prWorkflows > 0, 'žádný workflow neběží na `pull_request` — buď zmizely PR testy, nebo parser nečte `on:`');
   console.log(
     `PASS workflow — run: bez dosazovaných výrazů, spolknutých návratových kódů a npx (${scripts} skriptů), `
-    + `PR testy na pull_request, ne pull_request_target`,
+    + `joby s kódem projektu s výslovnými právy, PR testy na pull_request (ne pull_request_target ani workflow_run)`,
   );
 }
 
