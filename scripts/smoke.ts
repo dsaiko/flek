@@ -1346,12 +1346,22 @@ if (!trumpBackInHand) {
     ['volba trumfu', mobileSave('voleny', 10, 'choose-trump'), 'voleny'],
     ['flekování', mobileSave('voleny', 10, 'fleks'), 'voleny'],
     ['licitace', auctionSave(), 'licitovany'],
+    // sehrávka: třetí štych a dál, dvě karty na stole — soupeř už má pakl, štych leží nad rukou
+    ['sehrávka', mobileSave('voleny', 10, 'tricks', (st) => st.phase.name === 'tricks'
+      && st.phase.trickNo >= 2 && st.phase.trick.length === 2
+      && st.phase.played.some((tr) => tr.winner !== 0)), 'voleny'],
+    // panel zúčtování: na 360 px ho dřív ořízl `min-width: 340px`
+    ['zúčtování', mobileSave('voleny', 10, 'scored'), 'voleny'],
   ];
   const overlap = (a: Box, b: Box) => a.l < b.r - 1 && b.l < a.r - 1 && a.t < b.b - 1 && b.t < a.b - 1;
   const runs: [string, typeof chromium, number, number][] = [
     ['Chromium 390×844', chromium, 390, 844],
     ['Chromium 360×640', chromium, 360, 640],
     ['WebKit 390×844', webkit, 390, 844],
+    // na šířku zůstává desktopová sazba z výšky sukna (§30), jen rám vyplní výšku okna
+    ['Chromium 844×390', chromium, 844, 390],
+    // tablet na výšku: rozložení na výšku bez horní meze šířky
+    ['Chromium 768×1024', chromium, 768, 1024],
   ];
   for (const [label, engine, w, h] of runs) {
     const mb = await engine.launch();
@@ -1365,7 +1375,7 @@ if (!trumpBackInHand) {
         localStorage.setItem('flek.settings.v1', settings);
       }, [save, JSON.stringify({ variant, sounds: false, difficulty: 'easy' })]);
       await pg.reload();
-      await pg.locator('#hand .card-btn').first().waitFor({ timeout: 15000 });
+      await pg.locator(phase === 'zúčtování' ? '#center-float .felt-panel' : '#hand .card-btn').first().waitFor({ timeout: 15000 });
       await pg.waitForTimeout(600);
       // řetězec, ne funkce: tsx by do ní vložil `__name`, který stránka nezná
       const m = (await pg.evaluate(`(() => {
@@ -1383,13 +1393,18 @@ if (!trumpBackInHand) {
             ...all('.opp-row .backs')],
           heads: [one('#seat-left .seat-head'), one('#seat-right .seat-head')],
           backs: all('.opp-row .backs'),
+          trick: all('#trick .played'),
+          panels: all('#center-float .felt-panel'),
+          piles: all('.opp-row .pile img'),
         };
-      })()`)) as { sw: number; vw: number; vh: number; table: Box; hand: Box[]; buttons: Box[]; meta: Box | null; center: Box[]; seats: Box[]; heads: (Box | null)[]; backs: Box[] };
+      })()`)) as { sw: number; vw: number; vh: number; table: Box; hand: Box[]; buttons: Box[]; meta: Box | null; center: Box[]; seats: Box[]; heads: (Box | null)[]; backs: Box[]; trick: Box[]; piles: Box[]; panels: Box[] };
       await ctx.close();
       const where = `${label}, ${phase}`;
       const problems: string[] = [];
       if (m.sw > m.vw + 1) problems.push(`stránka se posouvá do strany (${m.sw} px na ${m.vw} px)`);
-      if (m.table.b - m.table.t < m.vh * 0.85) problems.push(`stůl zabírá jen ${Math.round((100 * (m.table.b - m.table.t)) / m.vh)} % výšky okna`);
+      // na šířku ubírá lišta pod stolem z nízkého okna víc
+      const portrait = h > w;
+      if (m.table.b - m.table.t < m.vh * (portrait ? 0.85 : 0.75)) problems.push(`stůl zabírá jen ${Math.round((100 * (m.table.b - m.table.t)) / m.vh)} % výšky okna`);
       const outside = [...m.hand, ...m.buttons].filter((b) => b.l < m.table.l - 2 || b.r > m.table.r + 2);
       if (outside.length > 0) problems.push(`${outside.length} karet nebo tlačítek přečnívá přes okraj stolu`);
       if (m.meta !== null && m.buttons.some((b) => overlap(b, m.meta as Box))) problems.push('tlačítka akcí leží přes blok „Ty"');
@@ -1397,8 +1412,20 @@ if (!trumpBackInHand) {
       // soupeři v jedné řadě a stav až pod jejich ruby — mezi jmenovkami se nevejde (§44)
       const [hl, hr] = m.heads;
       if (hl === null || hr === null || Math.abs(hl.t - hr.t) > 2) problems.push('soupeři nestojí v jedné řadě');
+      // bez rubů by kontroly níž prošly naprázdno (Math.max prázdného pole je -Infinity)
+      if (m.backs.length !== 2) problems.push(`ruby soupeřů: čekal jsem dva řádky, našel ${m.backs.length}`);
       const backsBottom = Math.max(...m.backs.map((b) => b.b));
-      if (m.center.some((c) => c.t < backsBottom - 1)) problems.push('řádek se stavem není pod ruby soupeřů');
+      if (portrait && m.center.some((c) => c.t < backsBottom - 1)) problems.push('řádek se stavem není pod ruby soupeřů');
+      // štych leží nad rukou a mimo blok „Ty" a akce; pakl soupeře ve stole a mimo řádek se stavem
+      const mine = [...m.hand, ...m.buttons, ...(m.meta === null ? [] : [m.meta])];
+      if (m.trick.some((c) => mine.some((b) => overlap(c, b)))) problems.push('karta ve štychu leží přes ruku, akce nebo blok „Ty"');
+      if (m.piles.some((p) => p.l < m.table.l - 2 || p.r > m.table.r + 2 || p.t < m.table.t)) problems.push('pakl soupeře vyčnívá ze stolu');
+      if (m.piles.some((p) => m.center.some((c) => overlap(p, c)))) problems.push('pakl soupeře leží přes řádek se stavem');
+      if (m.panels.some((p) => p.l < m.table.l - 1 || p.r > m.table.r + 1)) problems.push('panel zúčtování vyčnívá ze stolu');
+      if (phase === 'zúčtování' && m.panels.length === 0) problems.push('panel zúčtování se neukázal');
+      if (phase === 'sehrávka' && (m.trick.length !== 2 || m.piles.length === 0)) {
+        problems.push(`sehrávka nemá, co měřit (štych ${m.trick.length} karet, pakl ${m.piles.length})`);
+      }
       if (problems.length > 0) {
         console.error(`CHYBA: mobil (${where}) — ${problems.join('; ')}`);
         await mb.close();
@@ -1470,16 +1497,21 @@ function declareSave(): string {
  * Všichni hrají první legální akci, jen trumf volí kartou (ne „z lidu") a
  * flekují, co jde — ať se flekování potká. Volený seed 10: člověk je forhont.
  */
-function mobileSave(variant: 'voleny' | 'licitovany', seed: number, phase: string): string {
+function mobileSave(
+  variant: 'voleny' | 'licitovany', seed: number, phase: string,
+  also: (st: ReturnType<typeof initialState>) => boolean = () => true,
+): string {
   let st = apply(initialState(defaultConfig(variant), 2), { type: 'deal', seed });
   for (let guard = 0; guard < 200 && st.phase.name !== 'scored'; guard += 1) {
     const actor = ([0, 1, 2] as const).find((s) => legalActions(view(st, s)).length > 0);
     if (actor === undefined) break;
-    if (actor === 0 && st.phase.name === phase) return JSON.stringify({ v: SAVE_VERSION, state: st });
+    if (actor === 0 && st.phase.name === phase && also(st)) return JSON.stringify({ v: SAVE_VERSION, state: st });
     const acts = legalActions(view(st, actor));
     st = apply(st, acts.find((a) => a.type === 'choose-trump' && a.card !== 'from-people')
       ?? acts.find((a) => a.type === 'flek') ?? acts[0]);
   }
+  // zúčtování: na tahu už nikdo není, stačí dojít na konec
+  if (phase === 'scored' && st.phase.name === 'scored') return JSON.stringify({ v: SAVE_VERSION, state: st });
   throw new Error(`mobilní scénář: člověk se na tah ve fázi ${phase} nedostal (${variant}, seed ${seed})`);
 }
 

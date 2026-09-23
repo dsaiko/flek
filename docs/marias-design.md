@@ -2373,6 +2373,30 @@ licitace se ukázalo zbytečné: přetečení drží už užší odsazení dlaž
 („Licitace") — místa je tam 566 px a žebřík má čtyři řádky. Stav je v tu chvíli jen popisek,
 nabídka sama je vidět celá.
 
+### Fixpoint review PR #17, první kolo (2026-09-23, po `5027089`)
+
+Verdikt APPROVE, sedm otevřených nálezů (3 medium, 4 low), všechny sedí, všechny opravené. Dva
+z nich — chybějící běhy na šířku a na tabletu — hned po přidání našly tři skutečné chyby.
+
+| Závažnost | Nález | Oprava |
+|---|---|---|
+| medium | `touch-action` měla jen `.action-btn` a jen v mobilním `@media` — dlaždice licitace a tablet na šířku ne | Pravidlo pro `.action-btn`, `.bid-chip` a `.ctl-btn` mimo `@media` |
+| medium | Sehrávka na výšku (štych, pakl, bubliny) neměla test — savy byly jen volba trumfu, fleky a licitace | Sav ze sehrávky (třetí štych a dál, dvě karty na stole, soupeř má pakl): štych nesmí ležet přes ruku, akce ani blok „Ty", pakl uvnitř stolu a mimo řádek se stavem |
+| medium | Telefon na šířku a tablet na výšku neměly test | Běhy 844×390 a 768×1024; kontroly jen pro výšku (stav pod ruby) se na šířce vynechají, výška stolu tam stačí 75 %. **Našly tři chyby:** na šířku žebřík licitace ležel přes blok „Ty" a štych dosedal na vějíř (blok jde do levého dolního rohu vedle vějíře, štych výš), na tabletu krajní karty ruky vyčnívaly o 7 px (rezerva na natočení vějíře 0,6 → 0,9 karty — vyklonění roste s kartou, okraj ne) |
+| low | Panel zúčtování měl `min-width: 340px` a na 360 px ho stůl ořízl | `min(340px, 100%)` jako u nastavení; sav se zúčtováním v mobilním smoke |
+| low | Bublina soupeře na pevném `top: 64px` sedala na jeho závazek | Ukotvená k rubům (`100% − 1,12 × card-w + 8px`) |
+| low | Hlášky počítaly s kartou vysokou 0,7 × card-w — skutečně 0,89 — a přečnívaly na pakl | Posun o 0,9 × card-w |
+| low | Kontrola „stav pod ruby" prošla naprázdno, když se ruby nenašly (`Math.max()` prázdného pole je −∞) | Vyžaduje dva řádky rubů |
+
+Zamítnuto soudcem, a souhlasím: svislý obrys ruky (ruka schválně sahá pod hranu sukna), test na
+hover (kosmetika, drahý postroj), „WebKit neemuluje iPhone" (šířka i `width=device-width` jsou tytéž),
+růst karet s ubývající rukou (bez `--hand-n` padá na 12 a všechno se vejde), a kontrola akcí proti
+řádku se stavem na 360×640 (to je přiznaný zbytek z „Co zůstává").
+
+Negativní kontroly: panel zpátky na `min-width: 340px` (smoke: „panel zúčtování vyčnívá"); tři chyby
+na šířku a na tabletu shodily nové běhy dřív, než byly opravené. Bez testu zůstávají hlášky a bubliny
+na výšku: hláška potřebuje vystavený pár a bublina je přechodná.
+
 ## 45. Hlášení závazku jako žebřík (2026-09-23)
 
 Uživatel chtěl volby při hlášení stejné jako licitační žebřík z §40. Hlášení (ve voleném po odhozu,
