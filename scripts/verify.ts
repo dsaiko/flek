@@ -2498,6 +2498,45 @@ const KULE = 2 as const;
     assert.notEqual(cs, en, 'EN popisek se musí lišit od CS');
     assert.notEqual(cs, de, 'DE popisek se musí lišit od CS');
 
+    /*
+     * Žebřík hlášení (§45) — stejný jako licitační (§40). Rozvržení je čistá
+     * funkce, takže se ověří bez DOM: pořadí, skupiny po barvách, kde je ikona
+     * a že `title` je čistý text (tooltip SVG nevykreslí — u červené nabídky
+     * v licitaci tam dřív viselo surové `<svg …>`).
+     */
+    {
+      const { declareChips, bidChips } = await import('../src/lib/ui/table');
+      setLang('cs');
+      type Decl = Parameters<typeof declareChips>[0][number];
+      const d = (x: Partial<Decl>): Decl => ({ type: 'declare', seat: 0, mode: 'hra', sedma: false, kilo: false, ...x } as Decl);
+      // volený: trumf stojí (zelené), akce přijdou v libovolném pořadí
+      const vol = declareChips([d({ sedma: true, kilo: true }), d({ kilo: true }), d({}), d({ sedma: true })], 1);
+      assert.deepEqual(vol.map((c) => c.glyph), ['', '7', '100', '100+7'], 've skupině jde prostá hra (jen ikona), 7, 100, 100+7');
+      assert.deepEqual(vol.map((c) => c.icon), [1, null, null, null], 'ikona barvy je na prosté hře');
+      assert.ok(vol.every((c) => c.family === 'hra-1' && !c.red), 'jedna skupina, zelené nejsou červené');
+      assert.equal(vol[3].title, 'Hra (zelené) + Sedma + Kilo', 'plný název zůstává v title');
+      // licitovaný: barva se volí při hlášení; červené jen se stem (vysoutěžené minimum), pak betl/durch
+      const lic = declareChips([
+        d({ mode: 'durch' }), d({ trump: 0, kilo: true } as Partial<Decl>), d({ mode: 'betl' }),
+        d({ trump: 2 } as Partial<Decl>), d({ trump: 2, sedma: true } as Partial<Decl>),
+      ]);
+      assert.deepEqual(lic.map((c) => c.glyph), ['100', '', '7', 'Betl', 'Durch'], 'skupiny v pořadí barev, betl a durch nakonec');
+      assert.deepEqual(lic.map((c) => c.family), ['hra-0', 'hra-2', 'hra-2', null, null], 'betl a durch stojí samostatně');
+      assert.equal(lic[0].icon, 0, 'skupina bez prosté hry nese ikonu na první dlaždici');
+      assert.equal(lic[0].red, true, 'červená skupina je červená — platí dvojnásob');
+      assert.equal(lic[2].red, false, 'kule červené nejsou');
+      // tooltip bez HTML — v hlášení i v licitaci (červená nabídka)
+      const bids = bidChips([
+        { type: 'bid', seat: 0, bid: { kind: 'sto', cervena: true } },
+        { type: 'bid', seat: 0, bid: { kind: 'sedma', cervena: false } },
+      ] as Parameters<typeof bidChips>[0]);
+      assert.deepEqual(bids.map((c) => c.glyph), ['7', '100'], 'licitace řadí podle bidRank');
+      for (const c of [...vol, ...lic, ...bids]) {
+        assert.equal(c.title.includes('<'), false, `title „${c.title}" nesmí obsahovat HTML`);
+      }
+      assert.equal(bids[1].title, 'Sto (červené)', 'červená nabídka má v title barvu slovem');
+    }
+
     // klíčové texty musí existovat ve všech jazycích
     for (const lang of ['cs', 'en', 'de', 'fr'] as const) {
       setLang(lang);

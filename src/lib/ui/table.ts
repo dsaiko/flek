@@ -1079,11 +1079,10 @@ export class TableUI {
         break;
 
       case 'declare': {
+        // stejný žebřík jako licitace (§40, §45): barva = skupina „Hra · 7 · 100 · 100+7"
         const standingTrump = v.phase.name === 'declare' ? v.phase.standing.trump : null;
-        for (const a of legal) {
-          if (a.type !== 'declare') continue;
-          btn(declareLabel(a, standingTrump), () => this.cb.onAction(a), { primary: a.mode === 'hra' && !a.sedma && !a.kilo });
-        }
+        const declares = legal.filter((a): a is Extract<PlayerAction, { type: 'declare' }> => a.type === 'declare');
+        this.renderLadder(bar, declareChips(declares, standingTrump));
         break;
       }
 
@@ -1099,41 +1098,8 @@ export class TableUI {
         const pass = legal.find((a) => a.type === 'bid' && a.bid === 'pass');
         if (pass) btn(t('pass'), () => this.cb.onAction(pass), { primary: true });
 
-        const bids = legal
-          .filter((a): a is Extract<PlayerAction, { type: 'bid' }> => a.type === 'bid' && a.bid !== 'pass')
-          .sort((x, y) => bidRank(x.bid as Exclude<typeof x.bid, 'pass'>) - bidRank(y.bid as Exclude<typeof y.bid, 'pass'>));
-        if (bids.length === 0) break;
-
-        const ladder = document.createElement('div');
-        ladder.className = 'bid-ladder';
-        bar.appendChild(ladder);
-
-        let group: HTMLElement | null = null;
-        let groupKey = '';
-        for (const a of bids) {
-          const bid = a.bid as Exclude<typeof a.bid, 'pass'>;
-          const family = BID_FAMILY[bid.kind];
-          const chip = document.createElement('button');
-          chip.type = 'button';
-          // bezbarvý závazek (betl/durch) vypadá jinak — hraje se o štychy, ne o body
-          chip.className = `bid-chip${family === undefined ? ' mode' : ''}${bid.cervena ? ' red' : ''}`;
-          const glyph = BID_GLYPH[bid.kind] ?? bidLabel({ kind: bid.kind, cervena: false });
-          chip.innerHTML = bid.cervena ? `${esc(glyph)} ${suitIcon(0)}` : esc(glyph);
-          chip.title = bidLabel(bid); // plný název zůstává dostupný
-          chip.addEventListener('click', () => this.cb.onAction(a));
-          if (family === undefined) {
-            ladder.appendChild(chip); // samostatná dlaždice
-            group = null; groupKey = '';
-          } else {
-            if (group === null || groupKey !== family) {
-              group = document.createElement('div');
-              group.className = 'bid-group';
-              ladder.appendChild(group);
-              groupKey = family;
-            }
-            group.appendChild(chip);
-          }
-        }
+        const bids = legal.filter((a): a is Extract<PlayerAction, { type: 'bid' }> => a.type === 'bid' && a.bid !== 'pass');
+        this.renderLadder(bar, bidChips(bids));
         break;
       }
 
@@ -1191,6 +1157,39 @@ export class TableUI {
 
       default:
         break;
+    }
+  }
+
+  /**
+   * Žebřík dlaždic (licitace §40, hlášení §45): sousední dlaždice téže rodiny
+   * se slepí do skupiny, samostatné (betl, durch) stojí zvlášť.
+   */
+  private renderLadder(bar: HTMLElement, chips: readonly LadderChip[]): void {
+    if (chips.length === 0) return;
+    const ladder = document.createElement('div');
+    ladder.className = 'bid-ladder';
+    bar.appendChild(ladder);
+    let group: HTMLElement | null = null;
+    let groupKey: string | null = null;
+    for (const c of chips) {
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = `bid-chip${c.family === null ? ' mode' : ''}${c.red ? ' red' : ''}`;
+      chip.innerHTML = c.icon === null ? esc(c.glyph) : c.glyph === '' ? suitIcon(c.icon) : `${esc(c.glyph)} ${suitIcon(c.icon)}`;
+      chip.title = c.title; // plný název zůstává dostupný
+      chip.addEventListener('click', () => this.cb.onAction(c.action));
+      if (c.family === null) {
+        ladder.appendChild(chip);
+        group = null; groupKey = null;
+        continue;
+      }
+      if (group === null || groupKey !== c.family) {
+        group = document.createElement('div');
+        group.className = 'bid-group';
+        ladder.appendChild(group);
+        groupKey = c.family;
+      }
+      group.appendChild(chip);
     }
   }
 
@@ -1589,6 +1588,96 @@ const BID_FAMILY: Record<string, string> = {
   sedma: 'sedma', sto: 'sto', 'sto-sedma': 'sto',
   'dve-sedmy': 'dve-sedmy', 'dve-sedmy-sto': 'dve-sedmy',
 };
+
+/** Jedna dlaždice žebříku — čistá data, ať se rozvržení dá testovat bez DOM. */
+export interface LadderChip {
+  action: PlayerAction;
+  /** Text na dlaždici (glyf nezávislý na jazyce, nebo krátké slovo). */
+  glyph: string;
+  /** Ikona barvy za glyfem, nebo null. */
+  icon: Suit | null;
+  /** Červená = dvojnásobná sazba; pozná se barvou dlaždice. */
+  red: boolean;
+  /** Skupina slepených dlaždic; null = samostatná (betl, durch). */
+  family: string | null;
+  /** Plný název do `title` — čistý text, ne HTML (tooltip SVG nevykreslí). */
+  title: string;
+}
+
+/** Licitační žebřík (§40): seřazený podle `bidRank`, rodiny slepené. */
+export function bidChips(bids: readonly Extract<PlayerAction, { type: 'bid' }>[]): LadderChip[] {
+  return bids
+    .filter((a) => a.bid !== 'pass')
+    .map((a) => ({ a, bid: a.bid as Exclude<typeof a.bid, 'pass'> }))
+    .sort((x, y) => bidRank(x.bid) - bidRank(y.bid))
+    .map(({ a, bid }) => {
+      const base = bidLabel({ kind: bid.kind, cervena: false });
+      return {
+        action: a,
+        glyph: BID_GLYPH[bid.kind] ?? base,
+        icon: bid.cervena ? (0 as Suit) : null,
+        red: bid.cervena,
+        family: BID_FAMILY[bid.kind] ?? null,
+        title: bid.cervena ? `${base} (${suitName(0 as Suit)})` : base,
+      };
+    });
+}
+
+/**
+ * Hlášení závazku (§45) jako žebřík — stejně jako licitace, ne čtyři dlouhá
+ * tlačítka „Hra ♦ + Sedma + Kilo" na barvu.
+ *
+ * Každá trumfová barva je jedna skupina: ikona barvy (prostá hra) · 7 · 100 ·
+ * 100+7, tedy tytéž glyfy jako v licitaci a ve stejném pořadí. Prostá hra nemá
+ * slovo, jen barvu — „Game"/„Spiel" by čtyři skupiny v angličtině a němčině
+ * zalomily na dva řádky, a glyfy mají být nezávislé na jazyce (plný název
+ * zůstává v `title`). Červená skupina se zbarví jako červené nabídky — platí
+ * dvojnásob. Betl a durch jsou samostatné tmavé dlaždice na konci.
+ */
+export function declareChips(
+  acts: readonly Extract<PlayerAction, { type: 'declare' }>[],
+  standingTrump: number | null = null,
+): LadderChip[] {
+  const rank = (a: Extract<PlayerAction, { type: 'declare' }>) =>
+    (a.dveSedmy ? 4 : a.sedma ? 1 : 0) + (a.kilo ? 2 : 0);
+  const suits: (number | null)[] = [];
+  for (const a of acts) {
+    if (a.mode !== 'hra') continue;
+    const tr = a.trump ?? standingTrump;
+    if (!suits.includes(tr)) suits.push(tr);
+  }
+  const out: LadderChip[] = [];
+  for (const tr of suits) {
+    const inSuit = acts
+      .filter((a) => a.mode === 'hra' && (a.trump ?? standingTrump) === tr)
+      .sort((x, y) => rank(x) - rank(y));
+    inSuit.forEach((a, i) => {
+      const plain = !a.dveSedmy && !a.sedma && !a.kilo;
+      const glyph = a.dveSedmy ? (a.kilo ? '100+7+7' : '7+7')
+        : a.sedma && a.kilo ? '100+7' : a.kilo ? '100' : a.sedma ? '7'
+        : tr === null ? t('hra') : ''; // prostá hra = jen ikona barvy
+      const parts = [t('hra')];
+      if (tr !== null) parts.push(`(${suitName(tr as Suit)})`);
+      if (a.sedma) parts.push(`+ ${t('sedma')}`);
+      if (a.kilo) parts.push(`+ ${t('kilo')}`);
+      out.push({
+        action: a,
+        glyph,
+        // ikona na prosté hře, a když ta chybí (vysoutěžené sto), na první dlaždici skupiny
+        icon: tr !== null && (plain || (i === 0 && !inSuit.some((x) => !x.dveSedmy && !x.sedma && !x.kilo))) ? (tr as Suit) : null,
+        red: tr === 0,
+        family: `hra-${String(tr)}`,
+        title: parts.join(' '),
+      });
+    });
+  }
+  for (const mode of ['betl', 'durch'] as const) {
+    for (const a of acts) {
+      if (a.mode === mode) out.push({ action: a, glyph: t(mode), icon: null, red: false, family: null, title: t(mode) });
+    }
+  }
+  return out;
+}
 
 const BID_LABEL_FR: Record<string, string> = {
   sedma: 'Sept', sto: 'Cent', 'sto-sedma': 'Cent et sept',
