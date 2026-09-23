@@ -131,6 +131,22 @@ const version = pkg.version;
           jsou čtyři bloky vedle sebe — přepínač jazyka je schová pravidlem
           `.lang-xx .yy { display: none }` jako všude jinde na stránce.
         -->
+        <!-- celá obrazovka na iPhonu: Safari ji stránce nedá, jen webu spuštěnému z plochy (§46) -->
+        <div id="fs-hint-float" hidden>
+          <div class="felt-panel fs-hint">
+            <h3><span class="cs">Celá obrazovka</span><span class="en">Full screen</span><span class="de">Vollbild</span><span class="fr">Plein écran</span></h3>
+            <p>
+              <span class="cs">Na iPhonu to Safari u stránek neumí — jen u videa. Přidej si ale Flek! na plochu: klepni na <b>Sdílet</b> a pak na <b>Přidat na plochu</b>. Spuštěný odtamtud poběží přes celou obrazovku, bez lišt prohlížeče, i na šířku.</span>
+              <span class="en">On iPhone, Safari can’t do this for web pages, only for video. Add Flek! to your home screen instead: tap <b>Share</b>, then <b>Add to Home Screen</b>. Launched from there, it runs full screen without the browser bars, in landscape too.</span>
+              <span class="de">Auf dem iPhone kann Safari das für Webseiten nicht, nur für Videos. Leg Flek! stattdessen auf den Home-Bildschirm: <b>Teilen</b> antippen, dann <b>Zum Home-Bildschirm</b>. Von dort gestartet läuft es im Vollbild ohne Browserleisten, auch quer.</span>
+              <span class="fr">Sur iPhone, Safari ne le permet pas pour les pages web, seulement pour les vidéos. Ajoute plutôt Flek! à l’écran d’accueil : touche <b>Partager</b>, puis <b>Sur l’écran d’accueil</b>. Lancé de là, il s’affiche en plein écran sans les barres du navigateur, même à l’horizontale.</span>
+            </p>
+            <div class="felt-actions">
+              <button id="fs-hint-close" class="action-btn primary"><span class="cs">Rozumím</span><span class="en">Got it</span><span class="de">Verstanden</span><span class="fr">Compris</span></button>
+            </div>
+          </div>
+        </div>
+
         <div id="help-float" hidden>
           <div class="felt-panel help-panel">
             <button id="help-close-x" class="help-x" type="button" aria-label="Zavřít / Close">×</button>
@@ -602,6 +618,16 @@ Licence: Josef SAIKO</pre>
     background: rgba(12,16,22,.55); border-radius: 16px; padding: clamp(8px, 2cqh, 22px);
   }
   #help-float[hidden] { display: none; }
+  /* návod k celé obrazovce na iPhonu — stejná vrstva jako nápověda */
+  #fs-hint-float {
+    position: absolute; inset: 0; z-index: 24;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(12,16,22,.55); border-radius: 16px; padding: clamp(8px, 2cqh, 22px);
+  }
+  #fs-hint-float[hidden] { display: none; }
+  .fs-hint { max-width: min(460px, 100%); max-height: 100%; overflow-y: auto; text-align: left; }
+  .fs-hint h3 { text-align: center; }
+  .fs-hint p { margin: 0; line-height: 1.5; }
   .help-panel {
     position: relative; text-align: left;
     width: min(760px, 100%); max-width: 100%; max-height: 100%;
@@ -996,6 +1022,14 @@ Licence: Josef SAIKO</pre>
   }
   #center-float.open { display: flex; }
   #center-float .felt-panel, #center-float .replay { pointer-events: auto; }
+  /*
+   * Panel vyšší než stůl (zúčtování na telefonu na šířku, kde Safari nechá
+   * na hru ~200 px) se musí dát doscrollovat k „Další hra". Scrolluje PANEL,
+   * ne vrstva: vrstva má `pointer-events: none`, aby kliky propadaly na stůl.
+   */
+  #center-float .felt-panel, #settings-float .felt-panel {
+    max-height: 100%; overflow-y: auto; overscroll-behavior: contain; box-sizing: border-box;
+  }
   .felt-panel {
     margin: auto; min-width: min(340px, 100%); max-width: 560px;
     background: #0e7f8b; color: #eafcf6;
@@ -1087,6 +1121,8 @@ Licence: Josef SAIKO</pre>
   }
   .ctl-btn.primary:hover { background: rgba(225,182,0,.12); }
   .ctl-btn.icon { display: grid; place-items: center; width: 44px; height: 44px; padding: 0; }
+  /* `display: grid` výš by jinak přebilo atribut hidden (web spuštěný z plochy skrývá fullscreen) */
+  .ctl-btn[hidden] { display: none; }
 
   footer { text-align: center; color: var(--muted); font-size: 13px; margin-top: 26px; }
   footer a { color: inherit; }
@@ -1104,7 +1140,11 @@ Licence: Josef SAIKO</pre>
     main { padding: 0; max-width: none; }
     .game-section {
       width: 100%; height: 100vh; height: 100dvh; left: auto; transform: none;
-      display: flex; flex-direction: column; padding: 6px;
+      display: flex; flex-direction: column;
+      /* výřez displeje a indikátor domů (viewport-fit=cover): na šířku je výřez
+         po straně, na výšku nahoře; mimo iPhone jsou `env()` nulové */
+      padding: max(6px, env(safe-area-inset-top)) max(6px, env(safe-area-inset-right))
+        max(6px, env(safe-area-inset-bottom)) max(6px, env(safe-area-inset-left));
       box-sizing: border-box;
     }
     .table-frame { flex: 1; aspect-ratio: auto; min-height: 0; padding: 8px; border-radius: 18px; }

@@ -10,6 +10,7 @@
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { chromium, webkit } from 'playwright';
+import sharp from 'sharp';
 import { apply, initialState } from '../src/lib/rules/engine';
 import { legalActions } from '../src/lib/rules/legal';
 import type { PlayerAction as PlayerActionS } from '../src/lib/rules/types';
@@ -1333,6 +1334,91 @@ if (!trumpBackInHand) {
 }
 
 /*
+ * Celá obrazovka na telefonu (§46). Na iPhonu Safari Fullscreen API pro stránku
+ * nemá, takže jediná cesta je web spuštěný z plochy — ten potřebuje manifest,
+ * ikony a meta značky. Tlačítko na iPhonu místo fullscreenu ukáže návod a
+ * v režimu z plochy (už je přes celou obrazovku) zmizí.
+ */
+{
+  const origin = new URL(url).origin;
+  // vlastní prohlížeč: sdílený je v tomhle místě smoke už zavřený (stejně jako u bloku Mobil)
+  const fb = await chromium.launch();
+  const fail = (msg: string): never => {
+    console.error(`CHYBA: web na plochu — ${msg}`);
+    process.exit(1);
+  };
+  const res = await fetch(`${origin}/manifest.json`);
+  if (!res.ok) fail(`manifest.json vrátil ${res.status}`);
+  const manifest = (await res.json()) as { display?: string; start_url?: string; icons?: { src: string; sizes: string }[] };
+  if (manifest.display !== 'fullscreen' || manifest.start_url !== '/') fail(`manifest: display ${manifest.display}, start_url ${manifest.start_url}`);
+  const icons = [...(manifest.icons ?? []).map((i) => ({ src: i.src, size: Number(i.sizes.split('x')[0]) })), { src: '/icons/apple-touch-icon.png', size: 180 }];
+  if (!icons.some((i) => i.size >= 512)) fail('manifest nemá ikonu 512 px');
+  for (const icon of icons) {
+    const r = await fetch(`${origin}${icon.src}`);
+    if (!r.ok) fail(`${icon.src} vrátil ${r.status}`);
+    const meta = await sharp(Buffer.from(await r.arrayBuffer())).metadata();
+    if (meta.format !== 'png' || meta.width !== icon.size || meta.height !== icon.size) {
+      fail(`${icon.src} je ${meta.format} ${meta.width}×${meta.height}, čekal jsem PNG ${icon.size}×${icon.size}`);
+    }
+  }
+
+  const pageWith = async (init: string) => {
+    const ctx = await fb.newContext({ viewport: { width: 812, height: 375 }, isMobile: true, hasTouch: true });
+    await ctx.addInitScript(init);
+    const pg = await ctx.newPage();
+    await pg.goto(url);
+    await pg.waitForSelector('#btn-fullscreen', { state: 'attached' });
+    return { ctx, pg };
+  };
+  const head = await (async () => {
+    const { ctx, pg } = await pageWith('');
+    const h = await pg.evaluate(`({
+      manifest: !!document.querySelector('link[rel="manifest"][href="/manifest.json"]'),
+      touch: !!document.querySelector('link[rel="apple-touch-icon"]'),
+      capable: document.querySelector('meta[name="apple-mobile-web-app-capable"]')?.content,
+      viewport: document.querySelector('meta[name="viewport"]')?.content,
+    })`) as { manifest: boolean; touch: boolean; capable?: string; viewport?: string };
+    await ctx.close();
+    return h;
+  })();
+  if (!head.manifest || !head.touch || head.capable !== 'yes' || !(head.viewport ?? '').includes('viewport-fit=cover')) {
+    fail(`hlavička: ${JSON.stringify(head)}`);
+  }
+
+  // iPhone v Safari: dotyk a žádné Fullscreen API → tlačítko ukáže návod
+  {
+    const { ctx, pg } = await pageWith(`Object.defineProperty(Document.prototype, 'fullscreenEnabled', { get: () => false });`);
+    await pg.click('#btn-fullscreen');
+    const shown = await pg.locator('#fs-hint-float').isVisible();
+    const fallback = await pg.evaluate(`document.querySelector('#game-section').classList.contains('fs-fallback')`);
+    await pg.screenshot({ path: join(outDir, 'smoke-fs-hint.png') });
+    await ctx.close();
+    if (!shown) fail('na iPhonu tlačítko celé obrazovky neukázalo návod');
+    if (fallback) fail('na iPhonu se místo návodu zapnula CSS náhrada, která lišty Safari neschová');
+  }
+  // spuštěno z plochy: celá obrazovka už je, tlačítko pryč
+  {
+    const { ctx, pg } = await pageWith(`Object.defineProperty(Navigator.prototype, 'standalone', { get: () => true });`);
+    const hidden = await pg.locator('#btn-fullscreen').isHidden();
+    await ctx.close();
+    if (!hidden) fail('ve webu spuštěném z plochy tlačítko celé obrazovky zůstalo');
+  }
+  // …a mimo iPhone (desktop s Fullscreen API) se návod neukazuje — jinak by kontrola výš prošla i s tlačítkem, které návod ukáže vždycky
+  {
+    const ctx = await fb.newContext({ viewport: { width: 1400, height: 900 } });
+    const pg = await ctx.newPage();
+    await pg.goto(url);
+    await pg.click('#btn-fullscreen');
+    await pg.waitForTimeout(300);
+    const shown = await pg.locator('#fs-hint-float').isVisible();
+    await ctx.close();
+    if (shown) fail('návod k iPhonu se ukázal i na desktopu');
+  }
+  await fb.close();
+  console.log('Web na plochu: manifest, ikony a hlavička v pořádku; na iPhonu návod, z plochy bez tlačítka');
+}
+
+/*
  * Mobil (§44). Na telefonu stůl vyplní výšku okna, ruka se vejde do šířky
  * a nic se nesráží: dřív zabíral 40 % displeje, dvanáct karet přetékalo
  * a řádek se stavem se lámal mezi jmenovkami soupeřů.
@@ -1436,6 +1522,51 @@ if (!trumpBackInHand) {
     await mb.close();
   }
   console.log(`Mobil: stůl přes celou výšku, ruka i nabídka v šířce, nic se nesráží (${runs.map((r) => r[0]).join(', ')})`);
+}
+
+/*
+ * Zúčtování na nízkém displeji: v Safari na šířku (s lištami) zbude na hru
+ * ~200 px a panel je vyšší. Uživatel hlásil, že se k „Další hra" nedá dostat —
+ * panel se musí dát doscrollovat a tlačítko pak musí být celé vidět a brát klik.
+ */
+{
+  const lb = await chromium.launch();
+  const save = mobileSave('voleny', 10, 'scored');
+  for (const [w, h] of [[812, 220], [360, 640]] as const) {
+    const ctx = await lb.newContext({ viewport: { width: w, height: h }, isMobile: true, hasTouch: true });
+    const pg = await ctx.newPage();
+    pg.on('dialog', (d) => void d.accept());
+    await pg.goto(url);
+    await pg.evaluate(([match, settings]) => {
+      localStorage.setItem('flek.match.v1', match);
+      localStorage.setItem('flek.settings.v1', settings);
+    }, [save, JSON.stringify({ variant: 'voleny', sounds: false })]);
+    await pg.reload();
+    await pg.locator('#center-float .felt-panel').first().waitFor({ timeout: 15000 });
+    await pg.waitForTimeout(300);
+    const r = (await pg.evaluate(`(() => {
+      const panel = document.querySelector('#center-float .felt-panel');
+      panel.scrollTop = panel.scrollHeight;
+      const btn = [...panel.querySelectorAll('.felt-actions button')].pop();
+      const b = btn.getBoundingClientRect(), t = document.querySelector('#table').getBoundingClientRect();
+      const hit = document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2);
+      return { inside: b.top >= t.top - 1 && b.bottom <= t.bottom + 1, hit: hit === btn || btn.contains(hit),
+        label: btn.textContent.trim(), scrolls: panel.scrollHeight > panel.clientHeight };
+    })()`)) as { inside: boolean; hit: boolean; label: string; scrolls: boolean };
+    await ctx.close();
+    if (!r.inside || !r.hit) {
+      console.error(`CHYBA: zúčtování ${w}×${h} — „${r.label}" ${r.inside ? 'nebere klik' : 'není ani po doscrollování vidět'}`);
+      await lb.close();
+      process.exit(1);
+    }
+    if (w === 812 && !r.scrolls) {
+      console.error('CHYBA: zúčtování 812×220 — panel se vešel celý, takže scroll se neověřil (scénář potřebuje nižší okno)');
+      await lb.close();
+      process.exit(1);
+    }
+  }
+  await lb.close();
+  console.log('Zúčtování na nízkém displeji: panel se dá doscrollovat a „Další hra" je vidět a bere klik (812×220, 360×640)');
 }
 
 /**

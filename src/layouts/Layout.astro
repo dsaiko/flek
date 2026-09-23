@@ -32,7 +32,18 @@ const GOATCOUNTER = 'https://flek.goatcounter.com/count';
     http-equiv="Content-Security-Policy"
     content="default-src 'self'; script-src 'self' 'unsafe-inline' https://gc.zgo.at; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://flek.goatcounter.com; connect-src 'self' https://flek.goatcounter.com; worker-src 'self'; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'"
   />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <!-- viewport-fit=cover: stůl se sám drží mimo výřez displeje (env(safe-area-inset-*) v index.astro) -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <!--
+    Web na plochu (Sdílet → Přidat na plochu). Na iPhonu je to JEDINÁ cesta
+    k celé obrazovce: Safari tam Fullscreen API pro stránku nepodporuje, jen pro video.
+  -->
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Flek!" />
   <meta name="description" content={descriptionCs} />
   <meta name="theme-color" content="#1e5c38" />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />

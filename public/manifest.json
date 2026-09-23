@@ -1,0 +1,18 @@
+{
+  "name": "Flek! · Mariáš",
+  "short_name": "Flek!",
+  "description": "Flek! — online mariáš. Pocta hrám FLEK! a RE! od Pivoňka Software (MS-DOS, 1991–93).",
+  "lang": "cs",
+  "start_url": "/",
+  "scope": "/",
+  "display": "fullscreen",
+  "display_override": ["fullscreen", "standalone"],
+  "orientation": "any",
+  "background_color": "#10131a",
+  "theme_color": "#1c2127",
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

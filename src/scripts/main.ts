@@ -396,9 +396,31 @@ document.addEventListener('keydown', (ev) => {
 });
 syncLangFlag();
 
-$('btn-fullscreen').addEventListener('click', async () => {
+/*
+ * Celá obrazovka (§46).
+ *
+ * Spuštěno z plochy (manifest, `display: fullscreen`): hra už celou obrazovku
+ * má, tlačítko by nic neudělalo — pryč s ním.
+ *
+ * iPhone v Safari: Fullscreen API pro stránku tam není (`fullscreenEnabled`
+ * je false, jde jen video) a CSS náhrada lišty prohlížeče neschová. Jediná
+ * cesta je web na plochu, tak tlačítko ukáže, jak na to.
+ */
+const fsButton = $('btn-fullscreen');
+const standalone = (navigator as Navigator & { standalone?: boolean }).standalone === true
+  || matchMedia('(display-mode: fullscreen), (display-mode: standalone)').matches;
+if (standalone) fsButton.hidden = true;
+const fsHint = $<HTMLElement>('fs-hint-float');
+const openFsHint = (open: boolean): void => { fsHint.hidden = !open; };
+$('fs-hint-close').addEventListener('click', () => openFsHint(false));
+fsHint.addEventListener('click', (ev) => { if (ev.target === fsHint) openFsHint(false); });
+document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape' && !fsHint.hidden) openFsHint(false); });
+
+fsButton.addEventListener('click', async () => {
   if (document.fullscreenElement) {
     await document.exitFullscreen();
+  } else if (!document.fullscreenEnabled && matchMedia('(pointer: coarse)').matches) {
+    openFsHint(true); // dotykový displej bez Fullscreen API = iPhone
   } else if (gameSection.requestFullscreen) {
     try { await gameSection.requestFullscreen(); } catch { gameSection.classList.toggle('fs-fallback'); }
   } else {
