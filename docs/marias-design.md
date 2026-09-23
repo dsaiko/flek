@@ -2098,7 +2098,8 @@ Negativní kontroly: sedma na začátku plánu, vypnuté hlášení, podmínka i
   v betlu aktér nevynáší, takže důkaz musí řešit i vynucené přebití, a je to podstatně těžší než
   „vynáším a nikdo mě nepřebije". Že to originál uměl, navíc nevíme — `docs/original-notes.md`
   o tom mlčí a stojí jen na videu. Patří to k ověření v DOSBoxu (§7 bod 4), kde stojí za to
-  zapsat i to, jestli originál nechává tichou sedmu na poslední štych.
+  zapsat i to, jestli originál nechává tichou sedmu na poslední štych. *(Doplněno v §43 —
+  na přání uživatele, i bez ověření originálu.)*
 - **Kontrola proti všem možným rozložením cizích karet.** Zkoušel jsem nabídku ověřovat i proti
   determinizacím (rozdat neviděné karty jinak a ověřit, že štychy pořád sedí). Je to silnější
   tvrzení než „platí na tomhle rozdání", jenže se mi ji nepodařilo přimět kousnout — každá chyba,
@@ -2248,3 +2249,52 @@ na `\s`, kontrola `if:` vypnutá, `if:` z prvního kola zpátky v `ci.yml` — k
 
 **Poučení:** u workflow neověřuj jen to, co se stalo s během, ale co zůstalo viset na PR. „Nezrušilo
 se to" a „nic se nezměnilo" jsou dvě různé věci, a oprava prvního kola prošla jen tou první.
+
+## 43. „Nic za mnou" v betlu (2026-09-23)
+
+Betlový protějšek „vše za mnou" (§39), odložený tam kvůli vynucenému přebití. Uživatel se ptal,
+jestli se jednoduše ložený betl nemůže dohrát sám, když aktér drží karty, které nic nepřebijou.
+
+### Podmínka
+
+V betlu (bez trumfů) vezme štych jen nejvyšší karta vynesené barvy. Aktér ho proto nevezme, když:
+
+1. **V každé barvě jsou všechny jeho karty nižší než všechny, které soupeři mohou mít.** Vynese-li
+   soupeř, leží na stole vyšší karta, než aktér má, a přiznat může jen nižší; barvu nemá-li,
+   odhodí cokoli. Obě množiny jen ubývají, takže to platí do konce hry. Neznámý talon se počítá
+   jako karty soupeřů — podmínka je tím přísnější, nikdy slabší (stejné pravidlo jako v §39).
+2. **V rozehraném štychu už leží karta, kterou nepřebije** — nebo barvu výnosu nemá. Bez toho
+   by devítka proti vynesené sedmě musela přebít (povinnost přebíjet platí i v betlu) a třetí
+   hráč nemusí mít čím.
+3. **Na výnosu** (jen v prvním štychu — kdo vynáší později, předchozí štych vzal) vynese barvu,
+   kterou soupeři **určitě** mají: kdo ji má, musí přiznat a přebít. „Určitě" jde říct jen se
+   známým talonem, jinak by ta karta mohla ležet v něm. Neznámý talon na výnosu nabídku vylučuje.
+
+Nabízí se jen aktérovi, počítá se z `PlayerView` a hlášky ani tichá sedma v betlu nejsou, takže
+na pořadí zbytku nezáleží — aktér shazuje od nejvyšší.
+
+### Plán na jeden tah
+
+Na rozdíl od „vše za mnou" aktér nevynáší, ale přiznává barvu, a kterou kartu dá, záleží na
+výnosu soupeře. `claimPlan` proto v betlu vrací kartu pro **tenhle** tah (a za ní zbytek ruky)
+a controller ho přepočítává na každém tahu — to dělal už pro §39, takže se na něm nic neměnilo.
+Nabídka se přijme i uprostřed štychu. Tlačítko má v betlu nápis „Nic za mnou".
+
+### Testy
+
+- `verify`: jednoduše ložený betl nabídku dostane už na výnosu (I); devítka proti vynesené sedmě
+  ne, pod vyneseným králem ano (J); obránce ani na tahu a s nejnižšími kartami ne (K); na výnosu
+  s neznámým talonem ne, se známým ano (L); neznámá nižší karta v talonu ji vylučuje (M).
+  Náhodná rozdání: jakmile se nabídka objeví, **musí vydržet a betl musí být vyhraný** — u krátkých
+  rukou proti všem tahům obrany (49 případů, 281 konců hry), u dlouhých proti náhodným. Controller
+  přijme nabídku uprostřed štychu a dohraje ji k vyhranému betlu. Pomocník `mkBetl` hlídá, že je
+  stavěný stav možný (kdo je na tahu, kolik kdo drží) — jeden z mých prvních scénářů možný nebyl.
+- `smoke`: licitovaný seed 55 — tlačítko „Nic za mnou" uprostřed pátého štychu, dohrávka bez
+  kliknutí k zúčtování a ze savu betl vyhraný.
+
+Negativní kontroly: bez podmínky (1), bez (2), bez kontroly talonu na výnosu, bez kontroly aktéra,
+betl vždy `null`, a v UI starý nápis — každá shodí právě svůj test.
+
+**Co zůstává:** tlačítko stojí v liště akcí jako všechna ostatní, a protože se v betlu nabízí
+uprostřed štychu, lehce zakrývá spodní rohy vynesených karet. U „vše za mnou" se to nestane
+(nabízí se na prázdném stole). Jestli originál „nic za mnou" uměl, pořád nevíme.

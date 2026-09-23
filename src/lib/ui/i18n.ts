@@ -68,6 +68,14 @@ const STRINGS = {
     de: 'Keiner nimmt dir noch einen Stich — der Rest spielt sich von selbst.',
     fr: 'Personne ne peut plus te prendre un pli — le reste se joue tout seul.',
   },
+  /* „Nic za mnou" (§43) — v betlu už aktér žádný štych vzít nemůže. */
+  claimNothing: { cs: 'Nic za mnou', en: 'No trick for me', de: 'Kein Stich für mich', fr: 'Aucun pli pour moi' },
+  claimNothingHint: {
+    cs: 'Žádný štych už vzít nemůžeš, ať soupeři hrají jakkoli — dohraje se to za tebe.',
+    en: 'You cannot take a trick any more, whatever they play — the rest plays itself.',
+    de: 'Du kannst keinen Stich mehr bekommen, egal was sie spielen — der Rest spielt sich von selbst.',
+    fr: 'Tu ne peux plus faire de pli, quoi qu’ils jouent — le reste se joue tout seul.',
+  },
   trump: { cs: 'Trumfy', en: 'Trumps', de: 'Trumpf', fr: 'Atout' },
   talon: { cs: 'Talon', en: 'Talon', de: 'Talon', fr: 'Talon' },
   result: { cs: 'Zúčtování', en: 'Settlement', de: 'Abrechnung', fr: 'Décompte' },

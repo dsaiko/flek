@@ -1,9 +1,11 @@
 /**
- * claim.ts — „Vše za mnou" (docs/marias-design.md §39)
+ * claim.ts — „Vše za mnou" (docs/marias-design.md §39) a v betlu „Nic za mnou" (§43)
  *
  * Když hráč vynáší a žádná karta, kterou může kdokoli z protihráčů držet, už
  * nepřebije žádnou z jeho, jsou všechny zbylé štychy jeho. Ve FLEK!/RE! se
  * taková hra nedohrávala — tady se nabídne tlačítkem a zbytek odehraje UI.
+ * V betlu je to obráceně: aktér nesmí vzít žádný štych, a když už žádný vzít
+ * NEMŮŽE, nabídne se totéž tlačítko a zbytek se dohraje za něj.
  *
  * DVĚ VĚCI, KTERÉ JE POTŘEBA VĚDĚT, NEŽ SE TOHO NĚKDO DOTKNE:
  *
@@ -23,7 +25,7 @@
 
 import { type Card, DECK, R7, card, rankOf, strength, suitOf, KRAL, SVRSEK } from '../cards';
 import type { PlayerView } from './types';
-import { beats, orderMode } from './tricks';
+import { beats, legalPlays, orderMode, winningPlay } from './tricks';
 
 /**
  * Karty, které MŮŽE držet někdo jiný.
@@ -55,13 +57,15 @@ function possibleOpponentCards(v: PlayerView): Card[] {
  * Pořadí, ve kterém hráč zbytek odehraje — nebo `null`, když si štychy jisté
  * není.
  *
- * Betl se nepodporuje (§39): tam aktér nevynáší a důkaz „žádný štych neuhraju"
- * musí řešit i vynucené přebití. Durch ano — je to táž úloha bez trumfů.
+ * V betlu vrací plán jen pro TENHLE tah (viz `betlPlan`): aktér tam nevynáší,
+ * přiznává barvu, a kterou kartu dá, záleží na tom, co soupeř vynesl. Controller
+ * plán přepočítává při každém tahu, takže mu stačí první karta. Durch je táž
+ * úloha jako hra, jen bez trumfů.
  */
 export function claimPlan(v: PlayerView): Card[] | null {
   if (v.phase.name !== 'tricks' || v.contract === null) return null;
   const { mode, trump } = v.contract;
-  if (mode === 'betl') return null;
+  if (mode === 'betl') return betlPlan(v);
   // jen z výnosu: doprostřed rozehraného štychu se nic tvrdit nedá
   if (v.phase.toAct !== v.seat || v.phase.trick.length > 0) return null;
   if (v.hand.length === 0) return null;
@@ -99,6 +103,64 @@ export function claimPlan(v: PlayerView): Card[] | null {
    */
   rest.sort((a, b) => strength(b, om) - strength(a, om));
   return holdsSeven ? [...rest, seven] : rest;
+}
+
+/**
+ * „Nic za mnou" v betlu: aktér už žádný štych vzít nemůže, ať soupeři hrají
+ * jakkoli. Vrací kartu na tenhle tah (první) a za ní zbytek ruky, nebo `null`.
+ *
+ * Štych vezme jen nejvyšší karta vynesené barvy (betl je bez trumfů). Aktér
+ * ho proto nevezme, když platí obojí:
+ *
+ * 1. V KAŽDÉ barvě jsou všechny jeho karty nižší než všechny, které soupeři
+ *    mohou mít. Když pak soupeř vynese, leží na stole vyšší karta, než aktér
+ *    má, a přiznat může jen nižší; když barvu nemá, odhodí cokoli. Platí to
+ *    i dál, protože obě množiny jen ubývají. Neznámý talon se počítá jako
+ *    karty soupeřů (`possibleOpponentCards`): podmínka je pak přísnější, nikdy
+ *    ne slabší.
+ * 2. V rozehraném štychu už leží karta, kterou aktér nepřebije — nebo barvu
+ *    výnosu nemá.
+ *
+ * A když aktér VYNÁŠÍ (to se stane jen v prvním štychu — kdo vynáší později,
+ * ten předchozí štych vzal a betl už prohrál): vynese barvu, kterou soupeři
+ * určitě mají. Kdo z nich ji má, ten ji musí přiznat a přebít, protože všechny
+ * jejich karty v ní jsou vyšší (povinnost přebíjet platí i v betlu, `legalPlays`).
+ * „Určitě mají" ale jde říct jen tehdy, když aktér zná talon — jinak by ta karta
+ * mohla ležet v něm. Neznámý talon na výnosu nabídku vylučuje.
+ *
+ * Hlášky se v betlu nehlásí a tichá sedma neexistuje, takže na pořadí zbytku
+ * nezáleží. Odhazuje se od nejvyšší, ať to na stole vypadá jako shazování.
+ */
+function betlPlan(v: PlayerView): Card[] | null {
+  if (v.phase.name !== 'tricks' || v.contract === null) return null;
+  if (v.contract.declarer !== v.seat) return null; // „nic za mnou" je aktérova věc
+  if (v.phase.toAct !== v.seat || v.hand.length === 0) return null;
+  const om = orderMode('betl');
+  const possible = possibleOpponentCards(v);
+
+  // (1) v každé barvě jsou moje karty pod všemi, které soupeři mohou mít
+  for (const mine of v.hand) {
+    for (const theirs of possible) {
+      if (suitOf(theirs) === suitOf(mine) && !beats(theirs, mine, null, 'betl')) return null;
+    }
+  }
+
+  const byHeight = (cards: readonly Card[]) => [...cards].sort((a, b) => strength(b, om) - strength(a, om));
+  const trick = v.phase.trick;
+  let now: Card | undefined;
+  if (trick.length > 0) {
+    // (2) v rozehraném štychu už leží karta, kterou nepřebiju
+    const winning = winningPlay(trick, null, 'betl').card;
+    if (v.hand.some((c) => beats(c, winning, null, 'betl'))) return null;
+    now = byHeight(legalPlays(v.hand, trick, null, 'betl'))[0];
+  } else {
+    // vynáším: jen barvu, kterou soupeři určitě mají — a to ví jen ten, kdo zná talon
+    if (v.talon === null) return null;
+    const theirSuits = new Set(possible.map(suitOf));
+    now = byHeight(v.hand.filter((c) => theirSuits.has(suitOf(c))))[0];
+  }
+  if (now === undefined) return null;
+  return [now, ...byHeight(v.hand.filter((c) => c !== now))];
 }
 
 /**
