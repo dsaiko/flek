@@ -4,6 +4,23 @@ Poznámky k vydání. Sekci pro daný tag z tohohle souboru vytáhne CI a použi
 jako text releasu na GitHubu (`.github/workflows/release.yml`) — nadpis sekce se
 stane názvem vydání. Nová verze = **přidat sekci sem** a až pak tagovat.
 
+## v0.0.15 — přes celou obrazovku
+
+### Flek! na ploše telefonu
+
+Na iPhonu Safari neumí u webových stránek zapnout celou obrazovku — jen u videa. Proto teď jde
+Flek! přidat na plochu: v Safari klepni na **Sdílet** a pak na **Přidat na plochu**. Spuštěný
+z plochy běží přes celou obrazovku, bez lišt prohlížeče, na výšku i na šířku, a drží se mimo
+výřez displeje. Na Androidu to jde taky (v Chromu **Přidat na plochu** nebo **Instalovat**).
+
+Tlačítko celé obrazovky na iPhonu teď místo ničeho ukáže, jak na to. Ve hře spuštěné z plochy
+zmizí — celá obrazovka už je.
+
+### Zúčtování se dá doscrollovat
+
+Na nízkém displeji (telefon na šířku) byl panel se zúčtováním vyšší než stůl a k tlačítku
+„Další hra" se nedalo dostat. Panel teď scrolluje.
+
 ## v0.0.14 — mariáš do kapsy
 
 ### Na telefonu
