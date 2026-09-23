@@ -4,6 +4,26 @@ Poznámky k vydání. Sekci pro daný tag z tohohle souboru vytáhne CI a použi
 jako text releasu na GitHubu (`.github/workflows/release.yml`) — nadpis sekce se
 stane názvem vydání. Nová verze = **přidat sekci sem** a až pak tagovat.
 
+## v0.0.13 — nic za mnou
+
+### Nic za mnou
+
+V betlu se teď objeví tlačítko **„Nic za mnou"**, jakmile už žádný štych vzít nemůžeš, ať
+soupeři hrají jakkoli: v každé barvě máš jen karty pod všemi, které ještě mohou mít, a to, co
+leží na stole, nepřebiješ. Klikneš a zbytek se dohraje sám. Je to betlový protějšek tlačítka
+„Vše za mnou" a na rozdíl od něj se může ukázat i uprostřed štychu — v betlu totiž nevynášíš,
+jen přiznáváš barvu.
+
+Tlačítko nikdy nic neslíbí naslepo. Počítá jen s tím, co vidíš ty, a talon, který neznáš,
+bere, jako by ho držel soupeř. Když by ti nějaká karta štych dát mohla, tlačítko se neukáže.
+
+### Ruka už neposkakuje
+
+Když v licitovaném vydražíš hru a bereš talon, přibyly v ruce dvě karty najednou a celý vějíř
+se v jediném okamžiku přeskládal. Teď karty, které už v ruce máš, plynule dojedou na nové
+místo a obě z talonu se postupně objeví. Stejně plynule se ruka zavírá po každé zahrané kartě
+a zjeví se i dva ruby navíc, když talon bere soupeř.
+
 ## v0.0.12 — hra je na webu
 
 **Flek! se dá hrát na [flek.saiko.cz](https://flek.saiko.cz).** Stačí prohlížeč, nic se
