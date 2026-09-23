@@ -435,6 +435,9 @@ Licence: Josef SAIKO</pre>
      */
     container-type: size;
     --card-w: clamp(46px, 14.25cqh, 150px);
+    /* karta v RUCE — zvlášť, aby ji úzký displej na výšku mohl zúžit podle šířky,
+       zatímco štych a ruby soupeřů zůstanou odvozené z výšky (viz @media níž) */
+    --hand-w: var(--card-w);
     border-radius: 16px;
     background: radial-gradient(ellipse at 50% 40%, #2c6a9e 0%, var(--table) 55%, var(--table-dark) 100%);
     box-shadow: inset 0 0 0 2px var(--gold-dim), inset 0 0 80px rgba(0,0,0,.35);
@@ -571,8 +574,11 @@ Licence: Josef SAIKO</pre>
        proto se pozice skládá v `left`/`top`, kde jsou procenta ze stolu. */
     position: absolute;
     left: calc(50% + var(--x)); top: calc(50% + var(--y));
-    width: clamp(70px, 24.9cqh, 300px);
-    margin: clamp(-222px, -18.5cqh, -52px) 0 0 clamp(-150px, -12.45cqh, -35px);
+    /* šířka v jedné proměnné: odsazení na střed karty (půl šířky, 0,743 šířky
+       na výšku) se z ní počítá, takže úzký displej může kartu zmenšit (§44) */
+    --deco-w: clamp(70px, 24.9cqh, 300px);
+    width: var(--deco-w);
+    margin: calc(var(--deco-w) * -.743) 0 0 calc(var(--deco-w) * -.5);
     border-radius: 9px;
     transform: rotate(var(--rot));
     box-shadow: 0 12px 32px rgba(0,0,0,.4);
@@ -825,7 +831,7 @@ Licence: Josef SAIKO</pre>
   /* konto a pakl do rohů sukna, ať nezabírají výšku nad rukou */
   /* blok „Ty" nad vějířem — v mockupu je ruka užší a nezasahuje do rohu */
   .me-meta {
-    position: absolute; left: 12px; bottom: calc(var(--card-w) * 1.75); z-index: 3;
+    position: absolute; left: 12px; bottom: calc(var(--hand-w) * 1.75); z-index: 3;
     display: flex; align-items: center; gap: 10px; text-align: left;
   }
   #pile-me { position: absolute; right: 14px; bottom: 10px; margin: 0; z-index: 3; }
@@ -906,17 +912,21 @@ Licence: Josef SAIKO</pre>
 
   /* pevná výška ruky — stůl se nesmí zmenšovat s ubývajícími kartami */
   #hand { display: flex; justify-content: center; align-items: flex-end; padding: 10px 0 6px; overflow: visible;
-    min-height: calc(var(--card-w) * 1.85); }
+    min-height: calc(var(--hand-w) * 1.85); }
   .card-btn {
     background: none; border: 0; padding: 0; cursor: pointer;
-    margin: 0 calc(var(--card-w) * -.17);
+    margin: 0 calc(var(--hand-w) * var(--hand-overlap, -.17));
+    touch-action: manipulation; /* ťuknutí je klik, ne dvojklik na zoom */
     transform-origin: 50% 120%;
     filter: drop-shadow(0 3px 8px rgba(0,0,0,.35));
   }
-  .card-btn img { width: var(--card-w); border-radius: 6px; display: block; transition: transform .13s; }
+  .card-btn img { width: var(--hand-w); border-radius: 6px; display: block; transition: transform .13s; }
   .card-btn:disabled { cursor: default; filter: drop-shadow(0 2px 5px rgba(0,0,0,.3)) grayscale(.35) brightness(.82); }
-  .card-btn:not(:disabled):hover { z-index: 3; position: relative; }
-  .card-btn:not(:disabled):hover img { transform: translateY(-14px); }
+  /* zvednutí jen tam, kde je opravdu hover — na dotykovém displeji by po ťuknutí zůstalo viset */
+  @media (hover: hover) {
+    .card-btn:not(:disabled):hover { z-index: 3; position: relative; }
+    .card-btn:not(:disabled):hover img { transform: translateY(-14px); }
+  }
   /* historické skeny: celkově světlejší; nehratelné rozliší jen odbarvení */
   #table.pattern-history .card-btn:disabled { filter: drop-shadow(0 2px 5px rgba(0,0,0,.3)) grayscale(.35); }
   #table.pattern-history .card-btn:disabled img { filter: brightness(1.06); }
@@ -1083,10 +1093,79 @@ Licence: Josef SAIKO</pre>
   @media (prefers-reduced-motion: reduce) {
     .card-btn, .bubble, .action-btn { transition: none; }
   }
-  @media (max-width: 640px) {
-    main { padding-top: 64px; }
-    .hero h1 { font-size: 32px; }
-    .seatbox { min-width: 90px; }
-    .table-frame { aspect-ratio: 4 / 5; padding: 10px; border-radius: 20px; }
+  /*
+   * Malá obrazovka (telefon na výšku i na šířku): stůl vyplní celou výšku okna
+   * jako ve fullscreenu. Pevný poměr 1400/900 by z něj na telefonu nechal
+   * pruh přes necelou polovinu displeje (§44).
+   */
+  @media (max-width: 640px), (max-height: 500px), (orientation: portrait) {
+    main { padding: 0; max-width: none; }
+    .game-section {
+      width: 100%; height: 100vh; height: 100dvh; left: auto; transform: none;
+      display: flex; flex-direction: column; padding: 6px;
+      box-sizing: border-box;
+    }
+    .table-frame { flex: 1; aspect-ratio: auto; min-height: 0; padding: 8px; border-radius: 18px; }
+    #table { padding: 10px 8px 8px; }
+    .seatbox { min-width: 0; }
+    /* lišta na jeden řádek: nápověda vlevo, zbytek vpravo */
+    .game-controls { min-height: 0; flex-wrap: nowrap; gap: 6px; padding: 6px 4px 0; }
+    .ctl-right { gap: 4px; }
+    .ctl-btn { font-size: 15px; }
+    .ctl-btn.primary { padding: 9px 14px; }
+    .ctl-btn.icon { width: 40px; height: 40px; }
+    .action-btn { touch-action: manipulation; }
+  }
+  /*
+   * Na výšku je stůl vysoký a úzký: rozhoduje ŠÍŘKA. Stav jde pod soupeře přes
+   * celou šířku (mezi jmenovkami se nevešel), karty na stole i ruby se odvozují
+   * i od šířky a ruka se víc překrývá, aby se dvanáct karet vešlo vedle sebe.
+   */
+  @media (orientation: portrait) {
+    #table {
+      --card-w: min(clamp(46px, 14.25cqh, 150px), 19cqw);
+      /* 12 karet: 1 + 11 × (1 − 2 × 0,3) = 5,4 karty, plus natočení vějíře na krajích */
+      /* šířka podle počtu karet (`--hand-n` nastavuje renderHand): n karet
+         = 1 + (n − 1) × 0,4 karty, plus rezerva na natočení vějíře na krajích */
+      --hand-w: min(clamp(46px, 14.25cqh, 150px), 24cqw,
+        calc((100cqw - 8px) / (1.6 + .4 * (var(--hand-n, 12) - 1))));
+      --hand-overlap: -.3;
+    }
+    /*
+     * Pod ruby soupeře drží desktop pevné místo pro pakl a vystavené hlášky —
+     * na výšku je to 70 px, o které přichází prostředek stolu. Tady nic
+     * nerezervují, a přesto se nic neposune, až pakl nebo hláška přibude:
+     * pakl leží v mezeře pod ruby (absolutně), hlášky (karty lícem) se
+     * položí přes spodek rubů a bubliny soupeřů vyskočí přes jejich ruby.
+     */
+    .seatbox .pile { position: absolute; top: calc(100% + 4px); margin: 0; }
+    #pile-left { left: 0; }
+    #pile-right { right: 0; }
+    .seatbox .melds { position: absolute; z-index: 2; top: calc(100% - var(--card-w) * .7); margin: 0; min-height: 0; }
+    #melds-left { left: 6px; }
+    #melds-right { right: 6px; justify-content: flex-end; }
+    .seatbox .bubble { top: 64px; margin-top: 0; }
+    .center-top { margin-top: calc(var(--card-w) * .55 + 12px); }
+    .me-meta { bottom: calc(var(--hand-w) * 1.75 + 18px); }
+    /* pruh akcí nad blokem „Ty" (jméno, konto a závazek pod sebou, ~64 px) — §37 */
+    #actions { margin-bottom: 88px; }
+    #contract-center { max-width: 88cqw; }
+    #contract-center .cc-what { font-size: clamp(17px, 6.4cqw, 38px); }
+    #intro img { --deco-w: min(clamp(70px, 24.9cqh, 300px), 25cqw); }
+    /* písmo herních tlačítek podle výšky by na vysokém úzkém stole přerostlo šířku —
+       čtyři dlaždice rodiny „sto" se pak nevešly vedle sebe */
+    .action-btn, .bid-chip { font-size: clamp(14px, min(2.3cqh, 4.3cqw), 28px); }
+    .action-btn { padding-inline: clamp(14px, min(4.5cqh, 5cqw), 56px); }
+    .bid-chip { padding-inline: clamp(9px, min(3cqh, 3.2cqw), 34px); }
+    .bid-chip.mode { font-size: clamp(12px, min(2cqh, 3.8cqw), 24px); }
+    /* štych ukotvený výš: ruka a pruh akcí zabírají na výšku větší díl stolu,
+       takže střed boxu #trick (sahá až pod ruku) leží moc nízko */
+    #trick .played { top: 40%; }
+    .set-pair { display: flex; gap: 6px; min-width: 0; }
+    .set-pair input { min-width: 0; width: 100%; }
+    .opp-row { flex-wrap: wrap; row-gap: 6px; }
+    .center-top { order: 3; flex-basis: 100%; }
+    .backs .back { width: calc(var(--card-w) * .5); margin-right: calc(var(--card-w) * -.34); }
+    #seat-right .backs .back { margin-left: calc(var(--card-w) * -.34); }
   }
 </style>

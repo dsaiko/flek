@@ -1332,6 +1332,85 @@ if (!trumpBackInHand) {
   await wk.close();
 }
 
+/*
+ * Mobil (§44). Na telefonu stůl vyplní výšku okna, ruka se vejde do šířky
+ * a nic se nesráží: dřív zabíral 40 % displeje, dvanáct karet přetékalo
+ * a řádek se stavem se lámal mezi jmenovkami soupeřů.
+ *
+ * Tři savy (volba trumfu s dvanácti kartami, flekování, licitace), dvě
+ * velikosti telefonu v Chromiu a jedna ve WebKitu — na iPhonu je to Safari.
+ */
+{
+  type Box = { l: number; r: number; t: number; b: number };
+  const saves: [string, string, string][] = [
+    ['volba trumfu', mobileSave('voleny', 10, 'choose-trump'), 'voleny'],
+    ['flekování', mobileSave('voleny', 10, 'fleks'), 'voleny'],
+    ['licitace', auctionSave(), 'licitovany'],
+  ];
+  const overlap = (a: Box, b: Box) => a.l < b.r - 1 && b.l < a.r - 1 && a.t < b.b - 1 && b.t < a.b - 1;
+  const runs: [string, typeof chromium, number, number][] = [
+    ['Chromium 390×844', chromium, 390, 844],
+    ['Chromium 360×640', chromium, 360, 640],
+    ['WebKit 390×844', webkit, 390, 844],
+  ];
+  for (const [label, engine, w, h] of runs) {
+    const mb = await engine.launch();
+    for (const [phase, save, variant] of saves) {
+      const ctx = await mb.newContext({ viewport: { width: w, height: h }, isMobile: engine === chromium, hasTouch: true });
+      const pg = await ctx.newPage();
+      pg.on('dialog', (d) => void d.accept());
+      await pg.goto(url);
+      await pg.evaluate(([match, settings]) => {
+        localStorage.setItem('flek.match.v1', match);
+        localStorage.setItem('flek.settings.v1', settings);
+      }, [save, JSON.stringify({ variant, sounds: false, difficulty: 'easy' })]);
+      await pg.reload();
+      await pg.locator('#hand .card-btn').first().waitFor({ timeout: 15000 });
+      await pg.waitForTimeout(600);
+      // řetězec, ne funkce: tsx by do ní vložil `__name`, který stránka nezná
+      const m = (await pg.evaluate(`(() => {
+        const box = (e) => { const b = e.getBoundingClientRect(); return { l: b.left, r: b.right, t: b.top, b: b.bottom }; };
+        const all = (s) => [...document.querySelectorAll(s)].filter((e) => e.offsetParent !== null).map(box);
+        const one = (s) => { const e = document.querySelector(s); return e && e.offsetParent !== null ? box(e) : null; };
+        return {
+          sw: document.documentElement.scrollWidth, vw: innerWidth, vh: innerHeight,
+          table: one('#table'), hand: all('#hand .card-btn'), buttons: all('#actions button'),
+          meta: one('.me-meta'),
+          // TEXT, ne box: původní chyba byl nápis přetékající z úzkého boxu mezi jmenovkami
+          center: ['#status-eyebrow', '#status'].map((s) => document.querySelector(s))
+            .filter((e) => e && e.textContent.trim() !== '').map((e) => { const r = document.createRange(); r.selectNodeContents(e); return box(r); }),
+          seats: [...['#seat-left .seat-id', '#seat-right .seat-id'].map((s) => { const r = document.createRange(); r.selectNodeContents(document.querySelector(s)); return box(r); }),
+            ...all('.opp-row .backs')],
+          heads: [one('#seat-left .seat-head'), one('#seat-right .seat-head')],
+          backs: all('.opp-row .backs'),
+        };
+      })()`)) as { sw: number; vw: number; vh: number; table: Box; hand: Box[]; buttons: Box[]; meta: Box | null; center: Box[]; seats: Box[]; heads: (Box | null)[]; backs: Box[] };
+      await ctx.close();
+      const where = `${label}, ${phase}`;
+      const problems: string[] = [];
+      if (m.sw > m.vw + 1) problems.push(`stránka se posouvá do strany (${m.sw} px na ${m.vw} px)`);
+      if (m.table.b - m.table.t < m.vh * 0.85) problems.push(`stůl zabírá jen ${Math.round((100 * (m.table.b - m.table.t)) / m.vh)} % výšky okna`);
+      const outside = [...m.hand, ...m.buttons].filter((b) => b.l < m.table.l - 2 || b.r > m.table.r + 2);
+      if (outside.length > 0) problems.push(`${outside.length} karet nebo tlačítek přečnívá přes okraj stolu`);
+      if (m.meta !== null && m.buttons.some((b) => overlap(b, m.meta as Box))) problems.push('tlačítka akcí leží přes blok „Ty"');
+      if (m.center.some((c) => m.seats.some((b) => overlap(b, c)))) problems.push('řádek se stavem leží přes jmenovku nebo ruby soupeře');
+      // soupeři v jedné řadě a stav až pod jejich ruby — mezi jmenovkami se nevejde (§44)
+      const [hl, hr] = m.heads;
+      if (hl === null || hr === null || Math.abs(hl.t - hr.t) > 2) problems.push('soupeři nestojí v jedné řadě');
+      const backsBottom = Math.max(...m.backs.map((b) => b.b));
+      if (m.center.some((c) => c.t < backsBottom - 1)) problems.push('řádek se stavem není pod ruby soupeřů');
+      if (problems.length > 0) {
+        console.error(`CHYBA: mobil (${where}) — ${problems.join('; ')}`);
+        await mb.close();
+        await browser.close();
+        process.exit(1);
+      }
+    }
+    await mb.close();
+  }
+  console.log(`Mobil: stůl přes celou výšku, ruka i nabídka v šířce, nic se nesráží (${runs.map((r) => r[0]).join(', ')})`);
+}
+
 /**
  * Sav s rozehranou hrou, kde trumf volil SOUPEŘ (forhont = sedadlo 1, tedy
  * vlevo od člověka) a odložená karta tak leží v jeho ruce. Staví se enginem,
@@ -1384,6 +1463,24 @@ function declareSave(): string {
       ?? acts[0]);
   }
   throw new Error('scénář hlášení: člověk se k hlášení nedostal');
+}
+
+/**
+ * Sav pro mobilní kontrolu: první stav, kde je člověk na tahu v dané fázi.
+ * Všichni hrají první legální akci, jen trumf volí kartou (ne „z lidu") a
+ * flekují, co jde — ať se flekování potká. Volený seed 10: člověk je forhont.
+ */
+function mobileSave(variant: 'voleny' | 'licitovany', seed: number, phase: string): string {
+  let st = apply(initialState(defaultConfig(variant), 2), { type: 'deal', seed });
+  for (let guard = 0; guard < 200 && st.phase.name !== 'scored'; guard += 1) {
+    const actor = ([0, 1, 2] as const).find((s) => legalActions(view(st, s)).length > 0);
+    if (actor === undefined) break;
+    if (actor === 0 && st.phase.name === phase) return JSON.stringify({ v: SAVE_VERSION, state: st });
+    const acts = legalActions(view(st, actor));
+    st = apply(st, acts.find((a) => a.type === 'choose-trump' && a.card !== 'from-people')
+      ?? acts.find((a) => a.type === 'flek') ?? acts[0]);
+  }
+  throw new Error(`mobilní scénář: člověk se na tah ve fázi ${phase} nedostal (${variant}, seed ${seed})`);
 }
 
 /**

@@ -2326,6 +2326,53 @@ betl vždy `null`, a v UI starý nápis — každá shodí právě svůj test.
 **Co zůstává:** tlačítko stojí v liště akcí jako všechna ostatní, a protože se v betlu nabízí
 uprostřed štychu, lehce zakrývá spodní rohy vynesených karet. U „vše za mnou" se to nestane
 (nabízí se na prázdném stole). Jestli originál „nic za mnou" uměl, pořád nevíme.
+## 44. Mobil (2026-09-23)
+
+Na telefonu (390×844) byl stůl pruh přes 40 % displeje: rám držel poměr 1400/900 i na výšku, karta
+spadla na spodní mez 46 px, a přesto dvanáct karet přeteklo přes kraje. Řádek se stavem se mezi
+jmenovkami soupeřů lámal do kulaté bubliny a „VOLENÝ (FLEK!)" vlezl do „rozdává" u Lojzy.
+
+**Stůl přes celou výšku.** Na malé obrazovce (do 640 px šířky nebo do 500 px výšky) a v každé
+orientaci na výšku (i tablet, i úzké okno na desktopu) se rám chová jako ve fullscreenu: vyplní
+výšku okna a poměr stran se zruší. Lišta pod stolem je na jeden řádek. Na šířku to víc nepotřebuje
+— desktopová sazba z výšky sukna (§30) tam funguje.
+
+**Na výšku rozhoduje šířka:**
+- Řádek se stavem jde pod soupeře přes celou šířku (`order`, `flex-basis: 100%`).
+- `--card-w` (štych, ruby) se odvozuje i od šířky a ruka má vlastní `--hand-w`: šířka podle
+  **počtu karet** (`--hand-n`, nastavuje `renderHand`), karty se překrývají víc (`--hand-overlap`).
+  Dvanáct karet se vejde, s ubývající rukou karty rostou až po strop.
+- Desktop pod ruby soupeře drží pevné místo pro pakl a vystavené hlášky — na výšku 70 px, které
+  chyběly prostředku. Tady nic nerezervují, a přesto se nic neposune, až přibudou: pakl leží
+  v mezeře pod ruby, hlášky (karty lícem) přes spodek rubů, bubliny soupeřů přes jejich ruby.
+- Pruh akcí se zvedá nad blok „Ty" se závazkem (§37 platí i tady, jen s jinou výškou) a štych je
+  ukotvený výš, protože ruka zabírá větší díl stolu.
+- Písmo a odsazení herních tlačítek i dlaždic licitace se řídí i šířkou — podle výšky by rodina
+  „sto" přerostla stůl. Dvojice polí „Protihráči" v nastavení se smí zúžit.
+- Dekorační karty na úvodu mají šířku v jedné proměnné (`--deco-w`), odsazení na střed se z ní
+  počítá, takže se na výšku dají zmenšit.
+
+**Dotyk:** zvednutí karty je jen pod `@media (hover: hover)` — na dotykovém displeji by po ťuknutí
+zůstalo viset. Tlačítka mají `touch-action: manipulation` (ťuknutí není dvojklik na zoom).
+
+**Testy:** smoke „Mobil" — Chromium 390×844 a 360×640 a WebKit 390×844 (na iPhonu je to Safari),
+tři savy: volba trumfu s dvanácti kartami, flekování, licitace. Stránka se neposouvá do strany,
+stůl zabírá aspoň 85 % výšky, karty ruky i tlačítka leží uvnitř stolu, akce nejsou přes blok
+„Ty", soupeři stojí v jedné řadě a řádek se stavem je až pod jejich ruby a jeho TEXT (`Range`,
+ne box) nezasahuje do jmenovek.
+
+Negativní kontroly: rám zpátky s poměrem („stůl zabírá jen 21 % výšky"), ruka bez `--hand-w`
+(„6 karet přečnívá"), pruh akcí bez zvednutí („tlačítka leží přes blok Ty"), stav zpátky mezi
+jmenovkami („soupeři nestojí v jedné řadě; stav není pod ruby"), dlaždice licitace bez úpravy
+písma i odsazení („2 tlačítka přečnívají"). Dvě z nich napoprvé nekously: kontrola boxů neviděla
+text přetékající z úzkého boxu a zalomení Lojzy na druhý řádek nic nepřekrylo — rozbité to bylo,
+jen ne tak, jak se kontrola ptala. Teď se ptá na to, co rozložení slibuje. A samotné zmenšení písma
+licitace se ukázalo zbytečné: přetečení drží už užší odsazení dlaždic.
+
+**Co zůstává:** na malém telefonu (360×640) při licitaci žebřík překryje řádek se stavem
+(„Licitace") — místa je tam 566 px a žebřík má čtyři řádky. Stav je v tu chvíli jen popisek,
+nabídka sama je vidět celá.
+
 ## 45. Hlášení závazku jako žebřík (2026-09-23)
 
 Uživatel chtěl volby při hlášení stejné jako licitační žebřík z §40. Hlášení (ve voleném po odhozu,
