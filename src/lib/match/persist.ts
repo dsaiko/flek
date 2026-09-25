@@ -6,6 +6,8 @@
  */
 
 import { assertValid } from '../rules/engine';
+import { legalActions } from '../rules/legal';
+import { view } from '../rules/view';
 import type { BidLevel, GameState } from '../rules/types';
 import { bidRank } from '../rules/types';
 
@@ -79,7 +81,8 @@ function isSazby(x: unknown): boolean {
   const z = x as Record<string, unknown>;
   const numbers = ['hra', 'sedma', 'tichaSedma', 'kilo', 'ticheKilo', 'betl', 'durch', 'dveSedmy',
     'cervenyMultiplier', 'maxFlekLevel', 'limit', 'limitRaised'];
-  return numbers.every((k) => isNum(z[k])) && (z.kiloScaling === 'double' || z.kiloScaling === 'linear');
+  return numbers.every((k) => isNum(z[k])) && (z.kiloScaling === 'double' || z.kiloScaling === 'linear') &&
+    (z.originalKilo === undefined || typeof z.originalKilo === 'boolean');
 }
 
 /** Pozor: `typeof null === 'object'` — mapy fleků se z nich indexují. */
@@ -332,6 +335,24 @@ function looksLikeGameState(x: unknown): x is GameState {
   );
 }
 
+/**
+ * Dá se ze stavu hrát dál? Tvar i karty můžou sedět, a přesto stůl zamrzne:
+ * podvržený sav s prázdnou rukou toho, kdo je na tahu, nebo s kartou
+ * přesunutou do cizí ruky (review 2026-09-25, fuzz nad savem). Mimo úvodní
+ * obrazovku a zúčtování tedy musí mít někdo legální tah, a v sehrávce musí
+ * ruce odpovídat číslu štychu — jinak AI nenajde rozdání, které by sedělo.
+ */
+function playable(st: GameState): boolean {
+  const p = st.phase;
+  if (p.name === 'idle' || p.name === 'scored') return true;
+  if (!([0, 1, 2] as const).some((seat) => legalActions(view(st, seat)).length > 0)) return false;
+  if (p.name === 'tricks') {
+    return ([0, 1, 2] as const).every((seat) =>
+      st.hands[seat].length === 10 - p.trickNo - (p.trick.some((x) => x.seat === seat) ? 1 : 0));
+  }
+  return true;
+}
+
 export function loadMatch(): GameState | null {
   try {
     const raw = localStorage.getItem(KEY);
@@ -341,6 +362,7 @@ export function loadMatch(): GameState | null {
     if (!looksLikeGameState(parsed.state)) return null;
     if (!loadable(parsed.v, parsed.state.phase.name)) return null;
     assertValid(parsed.state); // semantická kontrola (karty, konto, talon)
+    if (!playable(parsed.state)) return null;
     /*
      * Přepsat na aktuální verzi, ať se migrace neopakuje při každém načtení —
      * ale jen když od načtení nikdo jiný nezapsal.

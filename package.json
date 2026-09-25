@@ -20,7 +20,7 @@
   "author": "Dusan Saiko",
   "license": "MIT",
   "type": "module",
-  "private": "true",
+  "private": true,
   "devDependencies": {
     "@astrojs/check": "^0.9.10",
     "@types/node": "^26.2.0",

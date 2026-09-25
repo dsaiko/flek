@@ -63,7 +63,7 @@ export function withScriptHashes(html: string): string {
   // generátor zapsat i jako &#39;
   return html.replace(
     /content=("|')([\s\S]*?)\1/g,
-    (whole, quote: string, raw: string) => {
+    (whole, _quote: string, raw: string) => {
       // odescapuj → oprav → zapiš s obyčejnými apostrofy (v atributu v "" jsou platné)
       const policy = decodeQuotes(raw);
       if (!policy.includes('script-src')) return whole;
@@ -79,7 +79,9 @@ export function withScriptHashes(html: string): string {
           return ` ${[...sources, ...hashes].join(' ')}`;
         })
         .join(';');
-      return `content=${quote}${patched}${quote}`;
+      // vždy do dvojitých uvozovek: politika sama obsahuje apostrofy ('self',
+      // hashe), takže původní jednoduché by atribut rozbily
+      return `content="${patched.replace(/"/g, '&quot;')}"`;
     },
   );
 }

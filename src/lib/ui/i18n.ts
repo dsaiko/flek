@@ -1,6 +1,6 @@
 /**
- * i18n.ts — texty herního UI (CZ / EN / DE). Jazyk stránky řídí lang-pill
- * v Layoutu (třída lang-cs/lang-en/lang-de na <html>); hra si ho čte odtud.
+ * i18n.ts — texty herního UI (CZ / EN / DE / FR). Jazyk stránky řídí lang-pill
+ * v Layoutu (třída lang-cs/lang-en/lang-de/lang-fr na <html>); hra si ho čte odtud.
  *
  * Německá terminologie vychází z německých karetních her (mariáš pochází
  * z německého prostředí): Bettel, Durchmarsch, Kontra/Re/Supra/Resupra,
@@ -22,7 +22,6 @@ export function currentLang(): Lang {
 const STRINGS = {
   deal: { cs: 'Rozdat', en: 'Deal', de: 'Geben', fr: 'Donner' },
   nextHand: { cs: 'Další hra', en: 'Next hand', de: 'Nächstes Spiel', fr: 'Partie suivante' },
-  newMatch: { cs: 'Nový zápas', en: 'New match', de: 'Neue Partie', fr: 'Nouvelle partie' },
   resume: { cs: 'Pokračovat v rozehrané hře?', en: 'Resume the unfinished game?', de: 'Angefangenes Spiel fortsetzen?', fr: 'Reprendre la partie en cours ?' },
   chooseTrump: { cs: 'Vyber trumfovou kartu (z prvních sedmi)', en: 'Pick the trump card (from your first seven)', de: 'Wähle die Trumpfkarte (aus den ersten sieben)', fr: 'Choisis l’atout (parmi les sept premières)' },
   fromPeople: { cs: 'Z lidu', en: 'From the deck', de: 'Blind', fr: 'À l’aveugle' },
@@ -92,14 +91,17 @@ const STRINGS = {
   variant: { cs: 'Varianta', en: 'Variant', de: 'Variante', fr: 'Variante' },
   voleny: { cs: 'Volený (FLEK!)', en: 'Chosen (FLEK!)', de: 'Gewählt (FLEK!)', fr: 'Choisi (FLEK!)' },
   licitovany: { cs: 'Licitovaný (RE!)', en: 'Auction (RE!)', de: 'Lizitiert (RE!)', fr: 'Enchères (RE!)' },
-  difficulty: { cs: 'Obtížnost (IQ)', en: 'Difficulty (IQ)', de: 'Schwierigkeit (IQ)', fr: 'Difficulté (QI)' },
   easy: { cs: 'Nízké', en: 'Low', de: 'Niedrig', fr: 'Faible' },
   normal: { cs: 'Střední', en: 'Medium', de: 'Mittel', fr: 'Moyen' },
   hard: { cs: 'Vysoké', en: 'High', de: 'Hoch', fr: 'Élevé' },
-  pattern: { cs: 'Vzor karet', en: 'Card pattern', de: 'Kartenbild', fr: 'Dos de cartes' },
   modern: { cs: 'Moderní', en: 'Modern', de: 'Modern', fr: 'Moderne' },
   history: { cs: '1860 (historické)', en: '1860 (historical)', de: '1860 (historisch)', fr: '1860 (historiques)' },
   fullscreen: { cs: 'Celá obrazovka', en: 'Fullscreen', de: 'Vollbild', fr: 'Plein écran' },
+  help: { cs: 'Nápověda', en: 'Help', de: 'Hilfe', fr: 'Aide' },
+  close: { cs: 'Zavřít', en: 'Close', de: 'Schließen', fr: 'Fermer' },
+  language: { cs: 'Jazyk', en: 'Language', de: 'Sprache', fr: 'Langue' },
+  opponent: { cs: 'Protihráč', en: 'Opponent', de: 'Gegner', fr: 'Adversaire' },
+  sounds: { cs: 'Zvuky', en: 'Sound', de: 'Ton', fr: 'Son' },
   marriage: { cs: 'Hláška!', en: 'Marriage!', de: 'Meldung!', fr: 'Mariage !' },
   flekNames: {
     cs: ['Flek!', 'Re!', 'Tutti!', 'Boty!', 'Kalhoty!', 'Kajzr!'],
@@ -108,7 +110,6 @@ const STRINGS = {
     fr: ['Contre !', 'Re !', 'Tutti !', 'Boty !', 'Kalhoty !', 'Kajzr !'],
   },
   na: { cs: 'na', en: 'on', de: 'auf', fr: 'sur' },
-  units: { cs: 'bodů', en: 'pts', de: 'Punkte', fr: 'points' },
   vyuctovani: { cs: 'Vyúčtování', en: 'Settlement', de: 'Abrechnung', fr: 'Décompte' },
   youLost: { cs: 'Přišel jsi o', en: 'You lost', de: 'Du hast verloren', fr: 'Tu as perdu' },
   youWon: { cs: 'Vyhrál jsi', en: 'You won', de: 'Du hast gewonnen', fr: 'Tu as gagné' },
@@ -142,14 +143,11 @@ const STRINGS = {
   talkPub: { cs: 'hospodské', en: 'pub', de: 'Kneipe', fr: 'bistrot' },
   talkVulgar: { cs: 'vulgární', en: 'vulgar', de: 'derb', fr: 'vulgaire' },
   talkOff: { cs: 'vypnuto', en: 'off', de: 'aus', fr: 'coupé' },
-  soundOn: { cs: 'zapnuto', en: 'on', de: 'an', fr: 'activé' },
-  soundOff: { cs: 'vypnuto', en: 'off', de: 'aus', fr: 'coupé' },
   /**
    * Jméno hry. Mariáš patří do rodiny „marriage group" a jeho jméno je fonetický
    * přepis francouzského *mariage* (svatba = hláška král + svršek), takže v cizích
    * jazycích se používá právě tenhle kořen (§5.6, historie mariáše).
    */
-  gameName: { cs: 'Mariáš', en: 'Marriage', de: 'Mariage', fr: 'Mariage' },
   newGame: { cs: 'Nová hra', en: 'New game', de: 'Neues Spiel', fr: 'Nouvelle partie' },
   endGame: { cs: 'Ukončit hru', en: 'Concede', de: 'Aufgeben', fr: 'Abandonner' },
   endGameWarn: {

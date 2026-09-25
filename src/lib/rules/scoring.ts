@@ -224,9 +224,13 @@ export function settle(input: SettleInput): HandResult {
       const holder = contract.kilo === contract.declarer ? ('declarer' as const) : ('defenders' as const);
       const k = assessKilo(holder, 'best');
       const wonBy = k.fulfilled ? holder : holder === 'declarer' ? 'defenders' : 'declarer';
+      // originál: prohra ×2^(schodek/10 + 1) jen z vlastních bodů (viz Sazby.originalKilo)
+      const multiplier = s.originalKilo === true && !k.fulfilled
+        ? 2 ** ((100 - k.measured) / 10 + 1)
+        : stepsToMultiplier(k.steps, s.kiloScaling);
       push(
         'kilo', wonBy, s.kilo, flek('kilo'),
-        cerveny * stepsToMultiplier(k.steps, s.kiloScaling), false,
+        cerveny * multiplier, false,
         k.fulfilled ? `kilo ${k.measured}` : `kilo nedohráno (${k.measured})`,
       );
     } else if (silentKilo !== null && silentKilo.k.steps > 1) {

@@ -19,8 +19,7 @@ import type { GameMode, Seat, TrickPlay } from './types';
 export const orderMode = (mode: GameMode): OrderMode => (mode === 'hra' ? 'trump' : 'natural');
 
 /**
- * Přebije kandidát aktuálně vítěznou kartu? (ledSuit = barva výnosu)
- * Vyšší v téže barvě vyhrává; trumf přebíjí netrumfovou; barva mimo výnos
+ * Přebije kandidát aktuálně vítěznou kartu? Vyšší v téže barvě vyhrává; trumf přebíjí netrumfovou; barva mimo výnos
  * i mimo trumf nevyhrává nikdy.
  */
 export function beats(candidate: Card, winning: Card, trump: Suit | null, mode: GameMode): boolean {

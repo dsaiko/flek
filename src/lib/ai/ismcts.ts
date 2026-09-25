@@ -76,9 +76,21 @@ function actorOf(state: GameState): Seat {
   return state.phase.toAct;
 }
 
-/** Aplikuj akci bez validace nákladné cesty — engine apply validuje vždy (jistota > rychlost v1). */
+/** Krok simulace — plné `apply` včetně validace (jistota > rychlost). */
 function step(state: GameState, action: PlayerAction): GameState {
   return apply(state, action);
+}
+
+/**
+ * Tatáž karta bez hlášky, když ji jde zahrát s hláškou, je vždycky horší tah:
+ * hláška přidá body jen vlastní straně a nic jiného nemění. Ve stromu by se ale
+ * dvojčata dělila o návštěvy a remízu vyhrávala tichá varianta (je v
+ * `legalActions` první) — AI pak občas zahrála krále bez dvacítky.
+ */
+export function withoutSilentMarriages(legal: PlayerAction[]): PlayerAction[] {
+  const loud = new Set(legal.flatMap((a) => (a.type === 'play' && a.announceMarriage ? [a.card] : [])));
+  if (loud.size === 0) return legal;
+  return legal.filter((a) => !(a.type === 'play' && !a.announceMarriage && loud.has(a.card)));
 }
 
 /** Dohraj stav heuristickou politikou a vrať delty. */
@@ -103,7 +115,7 @@ export function ismctsMove(v: PlayerView, opts: IsmctsOptions): { action: Player
   const budgetMs = opts.budgetMs ?? 1500;
   const maxIters = opts.iterations ?? Number.MAX_SAFE_INTEGER;
 
-  const rootLegal = legalActions(v);
+  const rootLegal = withoutSilentMarriages(legalActions(v));
   if (rootLegal.length === 1) {
     return {
       action: rootLegal[0],
@@ -127,7 +139,7 @@ export function ismctsMove(v: PlayerView, opts: IsmctsOptions): { action: Player
     let expanded = false;
     while (!expanded && state.phase.name !== 'scored') {
       const actor = actorOf(state);
-      const legal = legalActions(view(state, actor));
+      const legal = withoutSilentMarriages(legalActions(view(state, actor)));
       let bestChild: Node | null = null;
       let bestAction: PlayerAction | null = null;
       let bestScore = -Infinity;

@@ -6,13 +6,18 @@
 ~~pravidla mariase (vlastnimi slovy, 4 jazyky)~~ ✅ v napovede pod otaznikem vlevo dole
 ~~o Aplikaci ← musi obsahovat atribuci licence karet (zmizela s patickou)~~ ✅ tamtez:
 pocta Pivonkovi i otci, licence karetnich sad, verze a odkaz na repo (design doc §31)
-domena + nasazeni
-mince/bank, klavesy
+~~domena + nasazeni~~ ✅ flek.saiko.cz od v0.0.12, `make deploy`
+~~bank~~ ✅ konto se prenasi mezi hrami a prezije reload
+klavesy (hra bez mysi: sipky, Enter, cisla v licitaci)
+mince (konto v Kc podle sazby)
 ~~mobil~~ ✅ na telefonu i tabletu stůl přes celou výšku, rozložení na výšku (design doc §44)
-overeni FLEK! v DOSBoxu → preset SAZBY_FLEK
+~~overeni FLEK! v DOSBoxu → preset SAZBY_FLEK~~ ✅ preset `?sazby=flek` (v0.0.10); original uz neresime
 
-Zvuky, hlasky, francouzstina a vzdani hry hotove. Tri kola fixpoint review-pr
-uzavrena (docs/marias-design.md §21–§23).
+Zvuky, hlasky, francouzstina a vzdani hry hotove. Review kola viz
+docs/marias-design.md (§12–§23, §34–§39, posledni celkove §47).
+
+Otevrene z pravidel (odlozeno, §34): vynosova karta betlu/durchu licem dolu
+pred ohlasenim (IV/6–7), „sto proti" proti hlasenemu stu.
 
 ~~vybrany trumf stranou~~ ✅ lezi vpravo na stole do zacatku sehravky, pak zpet
 do ruky; soupercova karta rubem (CSM Cl. VII/1). Do talonu nesmi (B/7). Jine
@@ -33,7 +38,7 @@ doopravdy dohraje (obrana smi hlasit hlasky i pri odhozu, CSM cl. III/3),
 plan jen radi vlastni ruku: ticha sedma nakonec, hlasit co jde.
 ~~"nic za mnou" pro betl~~ ✅ tlacitko v betlu, kdyz uz aktér zadny stych vzit nemuze:
 v kazde barve ma karty pod vsemi, ktere souperi mohou mit, a v rozehranem stychu nic
-neprebije (design doc §43). Nabizi se i uprostred stychu. Jestli to umel original, porad nevime.
+neprebije (design doc §43). Nabizi se i uprostred stychu.
 
 ~~pri betlu/durchu - nemela by byt ruka desitka razena jinak?~~ ✅ vejir se ted
 radi podle rezimu hry: v betlu/durchu klesa desitka mezi spodka a devitku

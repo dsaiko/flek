@@ -134,7 +134,6 @@ const table = new TableUI($('table'), {
     try { controller.dispatch(action); } catch (e) { console.error(e); }
   },
   onDeal: () => controller.dealNext(),
-  onNewMatch: () => newMatch(),
   onClaim: () => void controller.claimRest(),
   onVariant: (variant) => {
     if (settings.variant === variant) return;
@@ -171,18 +170,12 @@ function newMatchIdle(keepBank = true): void {
           handNo: prev.handNo,
         }
       : undefined;
+  // nový zápas začíná handNo 0 → s `?seed=N` znovu od N (reload pak sedí)
+  if (carry === undefined) seeds.resumeAfter(0);
   controller = makeController(carry);
   table.render(controller.state);
   // banku je potřeba udržet i přes reload, jinak ji sebere refresh na úvodní obrazovce
   if (carry) saveMatch(controller.state);
-}
-
-function newMatch(): void {
-  controller?.stop();
-  clearMatch();
-  table.reset(); // opuštěné animace starého zápasu nesmí blokovat nový
-  controller = makeController();
-  controller.dealNext();
 }
 
 // resume rozehraného zápasu
@@ -284,7 +277,7 @@ $('settings-reset').addEventListener('click', () => {
     updateNewButton();
     return;
   }
-  table.confirm(t('resetMoneyWarn'), t('resetMoney'), () => {
+  table.confirm(() => t('resetMoneyWarn'), () => t('resetMoney'), () => {
     newMatchIdle(false); // jediné místo, kde se konto opravdu nuluje
     updateNewButton();
   }, true);
@@ -349,7 +342,7 @@ newBtn.addEventListener('click', () => {
     return;
   }
   // sticky: dotaz není o stavu hry, takže ho tah AI nesmí sundat pod rukama
-  table.confirm(t('endGameWarn'), t('endGame'), () => {
+  table.confirm(() => t('endGameWarn'), () => t('endGame'), () => {
     // hra mohla mezitím sama doběhnout — pak není co vzdávat, ale popup už
     // smazal obsah středu, takže se musí vrátit vyúčtování
     if (!inPlay()) {
@@ -365,7 +358,6 @@ newBtn.addEventListener('click', () => {
   }, true);
 });
 
-// fullscreen (iOS Safari neumí requestFullscreen na divu → CSS fallback)
 const gameSection = $('game-section');
 /*
  * Jazyk jako rozbalovací nabídka: sbalená ukazuje jen aktuální vlajku.
@@ -441,7 +433,22 @@ function updateControlLabels(): void {
   syncLangFlag();
   set(talkSel, { slusna: t('talkPolite'), hospodska: t('talkPub'), vulgarni: t('talkVulgar'), off: t('talkOff') });
   nameInput.placeholder = t('you');
-  void currentLang();
+  // ikonová tlačítka a pole bez vlastního <label>: jméno pro čtečky i tooltip
+  // ve stejném jazyce jako zbytek stolu
+  const name = (id: string, label: string, withTitle = true): void => {
+    const el = $(id);
+    el.setAttribute('aria-label', label);
+    if (withTitle) el.title = label;
+  };
+  name('btn-help', t('help'));
+  name('btn-settings', t('settings'));
+  name('btn-fullscreen', t('fullscreen'));
+  name('btn-lang', t('language'));
+  name('lang-list', t('language'), false);
+  name('help-close-x', t('close'), false);
+  name('set-opp1', `${t('opponent')} 1`, false);
+  name('set-opp2', `${t('opponent')} 2`, false);
+  name('set-sounds', t('sounds'), false);
 }
 updateControlLabels();
 updateNewButton();

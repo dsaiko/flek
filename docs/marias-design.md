@@ -428,14 +428,14 @@ type ToWorker =
   | { type: 'cancel'; requestId: number };
 
 type FromWorker =
-  | { type: 'progress'; requestId: number; stats: ThinkStats }
   | { type: 'move'; requestId: number; action: PlayerAction; stats: ThinkStats }
   | { type: 'error'; requestId: number; message: string };
 ```
 
 Worker je **skutečně bezstavový** — každý `think` nese vše (view, budget, obtížnost i seed),
 mezi requesty se nic nedrží → triviálně korektní, restartovatelný, reprodukovatelný (seed
-per tah je odvozený od seedu rozdání + čísla tahu), identický s budoucím server-side AI
+hledání se losuje NEZÁVISLE na seedu rozdání — odvozený by k rozdání vedl zpátky, §25 #1),
+identický s budoucím server-side AI
 procesem. Jeden worker pro obě AI (myslí sekvenčně).
 
 **Odolnost proti selhání workeru** (match controller, §4):
@@ -1335,8 +1335,8 @@ ruky (deset karet musí mít každý). Odhodit si do talonu *jiné* trumfy legá
 „ukázaná karta je veřejná". Není: leží lícem dolů. Obránecká AI tak znala forhontovu přesnou
 kartu a `determinize.ts` z ní stavěla omezení — přesně to „koukání do karet", které je
 v README slíbené, že se nedělá. Nově pohled kartu dá jen tomu, kdo volil; omezení
-v determinizaci zmizelo (bez znalosti nemá co omezovat). Barva trumfů veřejná zůstává, nese ji
-`phase.standing` / `contract`.
+v determinizaci zmizelo (bez znalosti nemá co omezovat). ~~Barva trumfů veřejná zůstává, nese ji
+`phase.standing` / `contract`.~~ **Neplatí** — ani barvu obrana do ohlášení závazku nezná (§47).
 
 **2. Zvolená karta do talonu.** `legalActions` nabízel odhoz i té karty, co leží stranou
 (B/7). Nově se dvojice s ní nenabídne a `apply` ji odmítne i ručně poslanou.
@@ -2464,3 +2464,46 @@ než bylo opravené.
 
 **Co zůstává:** v Safari (ne z plochy) na šířku je hra na ~200 px pořád těsná — to je výška, kterou
 Safari nechá, a obejít ji nejde. Web na plochu neověříme jinak než na skutečném telefonu.
+
+## 47. Celkové review kódu (2026-09-25)
+
+Na vyžádání uživatele čtyři nezávislá review najednou: pravidla proti ČSM (texty PDF
+z `docs/pravidla/`), AI a persistence, UI, nástroje a testy. Každý nález byl před opravou
+ověřen spuštěním (sondy mimo repo) a každá oprava má test, který s vrácenou chybou padá.
+
+### Opravené nálezy
+
+| oblast | nález | oprava |
+|---|---|---|
+| pravidla | **Obránce ve voleném viděl barvu trumfu před ohlášením.** `view()` posílal `phase.standing.trump` všem; Obecná pravidla čl. VII/1: aktér „nahlásí závazek" (tedy i barvu, čl. IV/2) až po schválení obranou. §24 barvu mylně bral za veřejnou. | `phaseFor()` ve `view.ts` barvu obráncům ve fázích `discard-talon`, `takeover` a `declare` smaže. `trumplessChoicePending` se proto rozhoduje podle aktéra (ne forhont = sebral talon), ne podle `trump === null` — jinak by se obránci vějíř přerovnal jako do betlu. `trumpAsideOf` kreslí rub i bez barvy. |
+| UI | **Dvojklik na „Odhodit" zmáčkl i tlačítko, které vyrostlo pod kurzorem** (po odhozu se nic neanimuje) — ve voleném to hlásilo převzetí betlem, v licitovaném hru a sedmu. | Kliknutí s `detail > 1` na `.action-btn`, `.bid-chip`, `.card-btn` se v capture fázi zahodí. |
+| UI | **Varování u odhozu potvrdilo jiný pár, než je zvednutý** — popup si pamatoval karty z doby otevření, ruka pod ním dál reagovala. | Ruka pod otevřeným (ne-sticky) dotazem nereaguje. |
+| i18n | Dotazy na stole po přepnutí jazyka zůstaly v původním jazyce (překreslovaly se s hotovým textem). | Texty dotazů se předávají jako funkce a překládají se při každém vykreslení. |
+| UI | Dlaždice licitace a hlášení (`.bid-chip`) nebraly zámek během animace. | Doplněny do `#table.animating … { pointer-events: none }`. |
+| AI | ISMCTS občas zahrál krále/svrška **bez hlášky**, kterou držel (2,6 % pozic): tichá a hlášená varianta téže karty se dělily o návštěvy a remízu vyhrávala tichá (je v `legalActions` první). | `withoutSilentMarriages()` — hlášená varianta tichou vždycky dominuje, tichá se ve stromu nezvažuje. Sonda: 4/151 → 0/150. |
+| persistence | S `?seed=N` se po vynulování konta a reloadu vrátilo už odehrané rozdání (posloupnost neodpovídala `N + handNo`). Za 2³²−1 posloupnost vyjela z 32 bitů. | Nový zápas volá `seeds.resumeAfter(0)`; `next()` přetéká přes `>>> 0`. |
+| persistence | Podvržený sav se správným tvarem i kartami, ale nehratelný (prázdná ruka hráče na tahu, karta v cizí ruce), zamrazil stůl. | `playable()` v `loadMatch`: mimo idle/zúčtování musí mít někdo legální tah a v sehrávce musí ruce sedět k číslu štychu. |
+| sazby | **`?sazby=flek`: prohrané kilo neodpovídalo změřeným vyúčtováním** (č. 3: 25,50 místo 6,40 Kč; č. 5: 6553,80 místo 1638,40). Kód počítal ČSM (schodek + hlášky obrany, 2^(n−1)), komentář tvrdil vzorec originálu. | `Sazby.originalKilo`: prohra ×2^(schodek/10 + 1) jen z vlastních bodů. Test jde přes `settle()` na obou vyúčtováních. `BEZ_LIMITU` zvednut na 2⁴⁰ — s tímhle kilem se na milion dosáhnout dalo (komentář tvrdil opak). |
+| deploy | `sync --delete` mazal staré `/_astro/*.js` dřív, než byl nový `index.html` živý — otevřená stránka nebo edge se starým indexem by dostaly 404. | Upload bez mazání → `index.html` → invalidace → **čekání na její dokončení** → `deploy-prune` (`sync --delete`). |
+| Makefile | Astro 7 se mimo terminál samo odpojí do pozadí, `kill $!` ho nezabil a preview visel na 8083; další `make smoke` pak tiše testoval cizí server. | Obsazený port = chyba; start `astro preview --background`, úklid `astro preview stop`. `node_modules` se po `npm install` dotkne (jinak se instaloval při každém cíli). |
+| build | `prep-history-cards.ts` přeskočil práci, kdykoli WebP existovaly — změna výšky, kvality nebo skenu se do buildu nedostala. | Otisk skriptu a zdrojů v `node_modules/.cache` (mimo `public/`, jinak by se nasadil). |
+| CSP | `withScriptHashes` zapisoval politiku zpátky do původních uvozovek — z `content='…'` s hashi `'sha256-…'` byl rozbitý atribut. Test na jednoduché uvozovky prošel i bez zpracování. | Zápis vždycky do `"…"`; test ověřuje tvar výstupu a že vstup byl opravdu bezzubý. |
+| testy | Kontrola „SRI tag není zakomentovaný" nemohla spadnout (regex začínal `<script`). Měření „restart uprostřed rozdávání" zahrnovalo reload, kontroly konta a 2× 250 ms čekání — a reload opuštěný řetěz zahodil, takže zadrhnutí vidět nemohl. Francouzské hlášky ve smoke kontrolách chyběly. | Tag se hledá v layoutu bez komentářů; reload se dělá ve druhé záložce téhož kontextu a kontroly se z měření odečtou; `TALK_LANGS` se všemi čtyřmi jazyky. |
+| a11y | Pole „Protihráči", přepínač zvuků a ikonová tlačítka měla jména napevno česky/anglicky nebo žádná. | `aria-label`/`title` z `t()` při každé změně jazyka. |
+| drobnosti | nepoužitý `state` v `advanceFleks`, mrtvý export `nextSeat`, dvojí doc komentáře, `speakingOrder` ≡ `defendersOf`, mrtvé `newMatch`/`onNewMatch`, 7 nepoužitých klíčů i18n, mrtvé CSS (`.hero`, `.game-controls label/select`, `footer`), zdvojené deklarace, `Contre  na…` s dvojitou mezerou, „2× flek" ve francouzském zúčtování, zastaralé komentáře (worker, determinizace, §5.4 o seedu hledání). | uklizeno |
+
+### Vědomě neopravené
+
+- **Originál u hlášeného kila nevypisuje řádek „Hra"** (vyúčtování č. 3 i 5). Preset FLEK! hru
+  dál platí: bez ní by flek na hru v kilové hře nic neznamenal a jak ho originál nabízí, změřené
+  není. Originál už neřešíme (rozhodnutí 2026-09-23).
+- **Vidět jsou všechny odehrané štychy**, ČSM čl. II/6 dovoluje nahlédnout jen do posledního.
+  Vědomá odchylka pro hru u počítače; `publicHistory` je stejně nese.
+- Determinizace nevyužívá, že forhont ve voleném drží trumf, dokud žádný nezahrál (6 z 2200
+  vzorků ho neměly). AI je tím jen slabší, nic neprozrazuje.
+- `Random(0)` ≡ `Random(0x6d2b79f5)`; akce v CI připnuté tagem, ne SHA; `script-src` povoluje
+  celý `gc.zgo.at` (SRI váže jen náš tag); klávesnice zámek animace obchází; `theme-color`
+  v hlavičce (zelená sukna) ≠ manifest (barva rámu); `make deploy` nespouští testy (v README).
+- Watchdog testy ve `verify.ts` spí ~15 s reálného času a pomocník „akce hráče na tahu" je
+  v souboru desetkrát; úklid testů je samostatná práce.
+

@@ -387,14 +387,6 @@ Licence: Josef SAIKO</pre>
   /* horní mezera držela místo pro odkaz na projekty; ten je pryč, stůl smí výš */
   main { max-width: 1060px; margin: 0 auto; padding: 24px 16px 40px; }
 
-  .hero { text-align: center; margin-bottom: 18px; }
-  .kicker {
-    font: 600 13px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
-    letter-spacing: 3px; color: var(--muted); margin: 0 0 10px;
-  }
-  .hero h1 { font-size: 44px; margin: 0 0 8px; letter-spacing: -1px; }
-  .lead { color: var(--muted); max-width: 620px; margin: 0 auto; font-size: 15px; }
-
   /* ── stůl ── */
   /* stůl je hlavní obsah stránky — nemá důvod se mačkat do šířky textu */
   /*
@@ -418,7 +410,7 @@ Licence: Josef SAIKO</pre>
   }
   .game-section:fullscreen,
   .game-section.fs-fallback {
-    width: 100%; left: auto; transform: none;
+    left: auto; transform: none;
     background: #10131a;
     padding: 12px 14px;
     display: flex; flex-direction: column;
@@ -503,7 +495,6 @@ Licence: Josef SAIKO</pre>
   }
   #pile-left .pile-count { left: calc(var(--card-w) * .8); }
   #pile-right .pile-count { right: calc(var(--card-w) * .8); }
-  #pile-me { position: absolute; right: 16px; bottom: 12px; margin: 0; }
   #pile-me img { right: 0; }
   #pile-me .pile-count { right: calc(var(--card-w) * .75); }
 
@@ -780,7 +771,7 @@ Licence: Josef SAIKO</pre>
 
   /* štych: karty leží podle sedadel — levý soupeř vlevo, pravý vpravo, já dole */
   #trick {
-    flex: 1; min-height: 0; position: relative;
+    flex: 1; position: relative;
     min-height: calc(var(--card-w) * 2.1);
   }
   /*
@@ -964,7 +955,7 @@ Licence: Josef SAIKO</pre>
   .card-btn.selected img { transform: translateY(-18px); outline: 3px solid #ffd75e; border-radius: 6px; }
 
   /* blokace interakcí během animací */
-  #table.animating .card-btn, #table.animating .action-btn { pointer-events: none; }
+  #table.animating .card-btn, #table.animating .action-btn, #table.animating .bid-chip { pointer-events: none; }
 
   /* dohraný štych: zvýraznění vítězné karty a odlet k vítězi */
   #trick .played { transition: transform .42s ease-in, opacity .42s ease-in; }
@@ -1094,21 +1085,6 @@ Licence: Josef SAIKO</pre>
     justify-content: space-between; padding: 10px 10px 0;
     color: var(--on-frame-dim); font-size: 14px;
   }
-  .game-controls label {
-    display: inline-flex; align-items: center; gap: 8px;
-    font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase;
-    color: var(--on-frame-dim);
-  }
-  .game-controls select {
-    font-family: inherit; font-weight: 500; font-size: 14px; line-height: 1.2;
-    padding: 6px 26px 6px 10px; border-radius: 6px;
-    border: 0; background: var(--chip); color: var(--on-frame); cursor: pointer;
-    text-transform: none; letter-spacing: normal;
-    appearance: none; -webkit-appearance: none;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 20 20' fill='none' stroke='%238f99a8' stroke-width='1.8'%3E%3Cpath d='M6 8l4 4 4-4'/%3E%3C/svg%3E");
-    background-repeat: no-repeat; background-position: right 8px center;
-  }
-  .game-controls select:hover { background-color: var(--chip-hover); }
   .ctl-right { display: flex; align-items: center; gap: 10px; margin-left: auto; }
   .ctl-btn {
     font-family: inherit; font-weight: 600; font-size: clamp(16px, 1.15vw, 22px); line-height: 1.2;
@@ -1123,10 +1099,6 @@ Licence: Josef SAIKO</pre>
   .ctl-btn.icon { display: grid; place-items: center; width: 44px; height: 44px; padding: 0; }
   /* `display: grid` výš by jinak přebilo atribut hidden (web spuštěný z plochy skrývá fullscreen) */
   .ctl-btn[hidden] { display: none; }
-
-  footer { text-align: center; color: var(--muted); font-size: 13px; margin-top: 26px; }
-  footer a { color: inherit; }
-  footer .attribution { font-size: 11px; opacity: .8; }
 
   @media (prefers-reduced-motion: reduce) {
     .card-btn, .bubble, .action-btn { transition: none; }

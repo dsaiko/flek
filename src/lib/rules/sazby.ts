@@ -47,14 +47,15 @@ export const SAZBY_CSM: Sazby = {
  * Strop, který nikdy nesepne. Originál žádný limit neuplatňuje — jedno rozdání
  * v RE! se vyrovnalo na 1638,40 Kč při základu 0,10 Kč, tedy **16384× základ**,
  * zatímco ČSM stropuje na 500×. Skutečná mez (pokud vůbec existuje) změřená
- * není, proto hodnota jen leží tak vysoko, že na ni nejde dosáhnout: nejdražší
- * komponenta při `maxFlekLevel` 9 je dvě sedmy 30 × 2⁹ × 2 (červená) = 30 720.
+ * není, proto hodnota jen leží tak vysoko, že na ni nejde dosáhnout. Nejdražší
+ * je prohrané červené kilo bez jediného bodu při devíti flecích:
+ * 4 × 2^(100/10 + 1) × 2⁹ × 2 = 8 388 608 (dřívější milion na něj nestačil).
  *
  * Záměrně NENÍ `Infinity`: `applyLimit()` by si s ním poradil, ale sav by ho
  * uložil jako `null` (JSON `Infinity` neumí) a validace `isSazby()` by ho pak
  * odmítla — hráči by se při načtení vynulovalo konto.
  */
-const BEZ_LIMITU = 1_000_000;
+const BEZ_LIMITU = 2 ** 40;
 
 /**
  * Sazebník ORIGINÁLU FLEK!/RE! — změřeno v DOSBoxu 2026-09-22 z vyúčtování,
@@ -71,7 +72,7 @@ export const SAZBY_FLEK: Sazby = {
   hra: 1, // změřeno: „Hra 0.10 Kč" holé, bez násobků
   sedma: 2, // změřeno: „Sedma 0.20 Kč"
   tichaSedma: 1, // NEZMĚŘENO — ponechána poloviční sazba dle ČSM
-  kilo: 4, // změřeno: prohrané kilo 0,40 × 2^(schodek/10 + 1)
+  kilo: 4, // změřeno: prohrané kilo 0,40 × 2^(schodek/10 + 1) — viz `originalKilo`
   ticheKilo: 2, // NEZMĚŘENO — ponechána poloviční sazba dle ČSM
   betl: 10, // změřeno: „Flekovaný betl 2.00" = 1,00 × 2
   durch: 20, // změřeno: „Durch 2.00"
@@ -86,6 +87,13 @@ export const SAZBY_FLEK: Sazby = {
   maxFlekLevel: 9,
   limit: BEZ_LIMITU,
   limitRaised: BEZ_LIMITU,
+  /*
+   * Schodek jen z vlastních bodů a o dvě zdvojnásobení víc než ČSM. Originál
+   * v obou vyúčtováních kila navíc nevypsal řádek „Hra"; tady se hra platí dál
+   * jako v ČSM, protože bez ní by flek na hru v kilové hře nic neznamenal
+   * a jak ho originál nabízí, změřené není (§47).
+   */
+  originalKilo: true,
 };
 
 const PRESETY: Record<SazbyPreset, Sazby> = { csm: SAZBY_CSM, flek: SAZBY_FLEK };

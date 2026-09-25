@@ -1,7 +1,7 @@
 /**
  * assets.ts — synchronizace karetních sad do public/cards/
  *
- * cards/modern, cards/modern-en (SVG) → public/cards/… (jen *.svg)
+ * cards/modern, cards/modern-{en,de,fr} (SVG) → public/cards/… (jen *.svg)
  * Historickou sadu (WebP) připravuje scripts/prep-history-cards.ts.
  * public/cards/ je generovaný adresář — není v gitu.
  *

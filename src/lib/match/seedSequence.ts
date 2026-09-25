@@ -9,7 +9,11 @@
 export interface SeedSequence {
   /** Seed pro další rozdání. */
   next: () => number;
-  /** Obnovený zápas už `handsPlayed` rozdání spotřeboval — přeskoč je. */
+  /**
+   * Zápas už `handsPlayed` rozdání spotřeboval — přeskoč je. Nový zápas
+   * (vynulované konto) volá `resumeAfter(0)`: invariant je „další seed =
+   * N + handNo", jinak by reload po vynulování vrátil už odehrané rozdání.
+   */
   resumeAfter: (handsPlayed: number) => void;
 }
 
@@ -41,7 +45,8 @@ export function createSeedSequence(
 ): SeedSequence {
   let counter = urlSeed ?? 0;
   return {
-    next: () => (urlSeed === null ? randomSeed() : counter++),
+    // `>>> 0`: za 2^32−1 pokračuje od nuly, stejně jako by seed zkrátil `Random`
+    next: () => (urlSeed === null ? randomSeed() : (counter++) >>> 0),
     resumeAfter: (handsPlayed) => {
       if (urlSeed !== null) counter = urlSeed + handsPlayed;
     },

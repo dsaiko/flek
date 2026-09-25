@@ -46,7 +46,7 @@ export function settlementHtml(r: HandResult, v: PlayerView, deps: HtmlDeps): st
          · ${esc(t('defendersSide'))} ${esc(r.cardPoints.defenders + r.marriagePoints.defenders)}</div>`
       : '';
 
-  const flekWord = lang === 'de' ? 'Kontra' : 'flek';
+  const flekWord = lang === 'de' ? 'Kontra' : lang === 'fr' ? 'contre' : 'flek';
   const rows = r.components
     .map((comp) => {
       const won = comp.wonBy === mydSide;

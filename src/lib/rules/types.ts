@@ -132,6 +132,14 @@ export interface Sazby {
    * obrany (volený B/15, licitovaný čl. II/18).
    */
   limitRaised: number;
+  /**
+   * Prohrané hlášené kilo počítané jako v originálu FLEK!/RE! (změřeno,
+   * docs/original-notes.md, vyúčtování č. 3 a 5): násobek 2^(schodek/10 + 1),
+   * kde schodek je jen to, co držiteli chybí do sta (karty + nejvyšší hláška).
+   * Hlášky protistrany se k němu NEpřičítají (ČSM čl. V/5 je přičítá).
+   * Chybí-li (ČSM a savy před 0.0.16), platí pravidla ČSM.
+   */
+  originalKilo?: boolean;
 }
 
 export interface RulesConfig {
