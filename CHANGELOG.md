@@ -4,6 +4,21 @@ Poznámky k vydání. Sekci pro daný tag z tohohle souboru vytáhne CI a použi
 jako text releasu na GitHubu (`.github/workflows/release.yml`) — nadpis sekce se
 stane názvem vydání. Nová verze = **přidat sekci sem** a až pak tagovat.
 
+## v0.0.17 — v kapse jako aplikace
+
+Na telefonu Flek! vypadá jako mobilní aplikace, ne jako zmenšený stůl z počítače. Na počítači
+a tabletu se nic nemění.
+
+- Stůl přes celý displej, bez rámečku.
+- Nahoře lišta jako v aplikaci: **☰** vlevo, **⚙** vpravo, uprostřed hraná varianta. Pod ☰ je
+  menu s **Novou hrou**, nápovědou, jazyky a celou obrazovkou.
+- Soupeři jako karty se jménem, kontem a počtem karet v ruce.
+- Když jsi na tahu, uprostřed stolu velkým písmem stojí, co máš udělat. Tlačítka jsou velká,
+  na dosah palce.
+- Tvoje karty jsou větší a nad nimi je řádek s rolí a kontem.
+- Úvodní obrazovka: varianty jako seznam a velké tlačítko **Rozdat** dole.
+- Zúčtování a nastavení vyjíždí zespodu.
+
 ## v0.0.16 — po revizi
 
 Celková kontrola kódu proti pravidlům ČSM a hledání chyb. Samotná sehrávka, zúčtování, fleky
