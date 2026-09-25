@@ -1,7 +1,8 @@
 /**
  * verify.ts — testy projektu (vzor mars: node:assert, spouští se `make verify`)
  *
- * Zatím: konzistence karetních sad. Poroste s enginem (viz docs/marias-design.md §8).
+ * Engine a pravidla, AI, persistence, UI logika bez DOM, karetní sady, CSP krok
+ * buildu, strážce workflow a poznámky k vydání. Browser testy jsou ve smoke.ts.
  */
 
 import assert from 'node:assert/strict';
@@ -1574,7 +1575,7 @@ const KULE = 2 as const;
     });
     const flekAct = { type: 'flek' as const, seat: 0 as const, target: 'hra' as const };
     // ve větě „flek NA hru" se vykřičník nehodí, proto se u jména odřízne
-    const word = (level: number): string => flekName(level).replace(/!$/, '');
+    const word = (level: number): string => flekName(level).replace(/\s*!$/, '');
     for (const [count, level] of [[1, 0], [2, 1], [3, 2]] as const) {
       const text = bubbleText(flekAct as never, mkFlekState(count) as never) as string;
       assert.ok(text.startsWith(word(level)), `${count}. flek se hlásí jako „${word(level)}": ${text}`);
@@ -2060,14 +2061,14 @@ const KULE = 2 as const;
     }
 
     // SRI musí být NA TOM SKRIPTU, ne kdekoliv v souboru
-    const tag = /<script\b[^>]*?\bsrc="https:\/\/gc\.zgo\.at\/[^"]+"[\s\S]*?><\/script>/.exec(layout);
+    // hledá se v layoutu BEZ komentářů: zakomentovaný tag by jinak kontrolu prošel
+    const liveLayout = layout.replace(/<!--[\s\S]*?-->/g, '').replace(/\{\/\*[\s\S]*?\*\/\}/g, '');
+    const tag = /<script\b[^>]*?\bsrc="https:\/\/gc\.zgo\.at\/[^"]+"[\s\S]*?><\/script>/.exec(liveLayout);
     assert.ok(tag, 'skript analytiky se nenašel (nebo není samostatný tag)');
     const tagStr = (tag as RegExpExecArray)[0];
     assert.match(tagStr, /src="https:\/\/gc\.zgo\.at\/count\.v\d+\.js"/, 'analytika musí být na verzované URL');
     assert.match(tagStr, /integrity="sha(256|384|512)-[A-Za-z0-9+/=]{40,}"/, 'skript analytiky musí mít SRI hash');
     assert.match(tagStr, /crossorigin="anonymous"/, 'SRI vyžaduje crossorigin na TÉMŽE tagu');
-    // hash musí odpovídat skutečnému obsahu → aspoň že není zakomentovaný
-    assert.equal(/^\s*<!--/.test(tagStr), false, 'skript nesmí být zakomentovaný');
     console.log('PASS regrese i21/i29 — CSP direktivy nejsou rozvolněné, SRI je na skriptu analytiky');
   }
 
@@ -2465,6 +2466,45 @@ const KULE = 2 as const;
     console.log('PASS regrese i21 — UCB explorace škáluje rozsahem odměn');
   }
 
+  // ── review 2026-09-25: AI nehraje krále/svrška bez hlášky, kterou drží ──
+  {
+    const { ismctsMove, withoutSilentMarriages } = await import('../src/lib/ai/ismcts');
+    const { decideAuction, playPolicy } = await import('../src/lib/ai/heuristics');
+    const { Random: RandomM } = await import('../src/lib/random');
+    const rngM = new RandomM(11);
+    // první pozice ve voleném, kde hráč na tahu může hlásit
+    let found: { v: ReturnType<typeof view>; legal: ReturnType<typeof legalActions> } | null = null;
+    for (let seed = 300; seed < 400 && found === null; seed += 1) {
+      let st = apply(initialState(defaultConfig('voleny'), 2), { type: 'deal', seed });
+      for (let guard = 0; guard < 120 && st.phase.name !== 'scored' && found === null; guard += 1) {
+        const seat = ([0, 1, 2] as const).find((x) => legalActions(view(st, x)).length > 0);
+        if (seat === undefined) break;
+        const v = view(st, seat);
+        const legal = legalActions(v);
+        if (v.phase.name === 'tricks' && legal.some((a) => a.type === 'play' && a.announceMarriage)) found = { v, legal };
+        else st = apply(st, v.phase.name === 'tricks' ? playPolicy(v, rngM) : decideAuction(v, 'normal', rngM));
+      }
+    }
+    assert.ok(found !== null, 'scénář: v žádném rozdání se nedalo hlásit — test by nic neověřil');
+    const { v, legal } = found as NonNullable<typeof found>;
+    const loud = legal.filter((a) => a.type === 'play' && a.announceMarriage).map((a) => (a as { card: number }).card);
+    const kept = withoutSilentMarriages(legal);
+    for (const c of loud) {
+      assert.equal(kept.filter((a) => a.type === 'play' && a.card === c).length, 1, 'z dvojčat zůstane jen hlášená varianta');
+    }
+    // ostatní karty zůstanou, a bez hlášky se nemění nic
+    assert.equal(kept.length, legal.length - loud.length, 'jiné tahy se nesmí ztratit');
+    const quiet = legal.filter((a) => !(a.type === 'play' && a.announceMarriage));
+    assert.deepEqual(withoutSilentMarriages(quiet), quiet, 'bez hlášky se seznam nemění');
+    // a hledání tiché dvojče vůbec nezvažuje (jinak se o návštěvy dělí a remízu vyhrává ticho)
+    const r = ismctsMove(v, { seed: 1, iterations: 400 });
+    for (const e of r.stats.evaluations) {
+      const a = e.action;
+      assert.ok(!(a.type === 'play' && !a.announceMarriage && loud.includes(a.card)), `ISMCTS zvažuje tichou hlášku ${a.type === 'play' ? a.card : ''}`);
+    }
+    console.log(`PASS review 2026-09-25 — AI hlásí, co může (${loud.length} hlášk${loud.length === 1 ? 'a' : 'y'} v pozici, tiché dvojče mimo strom)`);
+  }
+
   // ── i23: popisky ve všech třech jazycích (currentLang čte document) ────
   {
     const classes = new Set<string>();
@@ -2685,10 +2725,10 @@ const KULE = 2 as const;
      * durch a dvě sedmy (plus škálování kila, strop fleků a limit). Kdyby se
      * rozdíl rozlezl jinam, je to chyba v presetu, ne nový objev.
      */
-    const rozdilne = (Object.keys(SAZBY_CSM) as (keyof typeof SAZBY_CSM)[])
+    const rozdilne = ([...new Set([...Object.keys(SAZBY_CSM), ...Object.keys(SAZBY_FLEK)])] as (keyof typeof SAZBY_CSM)[])
       .filter((k) => SAZBY_CSM[k] !== SAZBY_FLEK[k]).sort();
     assert.deepEqual(rozdilne,
-      ['betl', 'durch', 'dveSedmy', 'kiloScaling', 'limit', 'limitRaised', 'maxFlekLevel'].sort(),
+      ['betl', 'durch', 'dveSedmy', 'kiloScaling', 'limit', 'limitRaised', 'maxFlekLevel', 'originalKilo'].sort(),
       'preset FLEK! se od ČSM smí lišit jen v těchto položkách');
 
     // strop fleků je ustanovení ČSM (čl. IV), na preset originálu se nevztahuje
@@ -2696,8 +2736,46 @@ const KULE = 2 as const;
       'originálu se licitovaný strop 4 (boty) nevnucuje — devět fleků v něm prošlo');
     assert.equal(defaultConfig('licitovany').sazby.maxFlekLevel, 4, 'výchozí preset zůstává ČSM');
 
-    // limit nesmí sepnout: nejdražší možná komponenta musí zůstat pod ním
-    const nejdrazsi = SAZBY_FLEK.dveSedmy * 2 ** SAZBY_FLEK.maxFlekLevel * SAZBY_FLEK.cervenyMultiplier;
+    /*
+     * Prohrané kilo podle originálu — obě změřená vyúčtování přes `settle()`,
+     * ne jen hodnoty polí (dřív tady test prošel, i když vzorec neseděl).
+     * Aktér 0, obrana 1+2; body se staví ze štychů, hláška obrany je trumfová 40.
+     */
+    const { settle } = await import('../src/lib/rules/scoring');
+    const { DECK, pointsOf, CERVENE: RED } = await import('../src/lib/cards');
+    const kiloCase = (preset: 'flek' | 'csm', declarerPts: number, trump: 0 | 1 | 2 | 3, kiloFleks: number) => {
+      const valuables = DECK.filter((c) => pointsOf(c) > 0);
+      const blanks = DECK.filter((c) => pointsOf(c) === 0);
+      let vi = 0;
+      let bi = 0;
+      let need = declarerPts - 10; // poslední štych bere aktér
+      const tricks = Array.from({ length: 10 }, (_, t) => {
+        const declWins = t === 9 || (t < 8 && need > 0);
+        const first = t < 8 ? valuables[vi++] : blanks[bi++];
+        if (t < 8 && declWins) need -= 10;
+        const cards = [first, blanks[bi++], blanks[bi++]];
+        return { plays: cards.map((c, i) => ({ seat: i as 0 | 1 | 2, card: c })), winner: (declWins ? 0 : 1) as 0 | 1 | 2 };
+      });
+      const r = settle({
+        handNo: 1, config: defaultConfig('voleny', preset),
+        contract: { mode: 'hra', trump, declarer: 0, sedma: null, kilo: 0, dveSedmy: false },
+        flekLevels: { kilo: kiloFleks }, tricks, marriages: [{ seat: 1, suit: trump }],
+      });
+      assert.equal(r.cardPoints.declarer, declarerPts, 'fixtura: body aktéra');
+      return r.components.find((c) => c.target === 'kilo')?.amount;
+    };
+    // č. 3: „100 ♦", aktér 70, obrana 20+40 → „Prohrané kilo 6.40" = 64 × 0,10 Kč
+    assert.equal(kiloCase('flek', 70, 2, 0), 64, 'vyúčtování č. 3: prohrané kilo 6,40 Kč');
+    // č. 5: „100 ♥" s flekem, aktér 10, obrana 80+40 → 819,20 × 2 (červená) = 1638,40
+    assert.equal(RED, 0, 'fixtura: červená je barva 0');
+    assert.equal(kiloCase('flek', 10, 0, 1), 16384, 'vyúčtování č. 5: prohraná stovka s flekem, červená 1638,40 Kč');
+    // ČSM počítá dál po svém: schodek + hlášky obrany, 1 + … lineárně (čl. V/5)
+    assert.equal(kiloCase('csm', 70, 2, 0), 4 * (3 + 4), 'ČSM: 30 schodku + 40 hlášky obrany = 7 kroků');
+
+    // limit nesmí sepnout: nejdražší je prohrané červené kilo bez bodu při max. flecích
+    const nejdrazsi = SAZBY_FLEK.kilo * 2 ** (100 / 10 + 1) * 2 ** SAZBY_FLEK.maxFlekLevel * SAZBY_FLEK.cervenyMultiplier;
+    assert.ok(nejdrazsi > SAZBY_FLEK.dveSedmy * 2 ** SAZBY_FLEK.maxFlekLevel * SAZBY_FLEK.cervenyMultiplier,
+      'fixtura: kilo je dražší než dvě sedmy');
     assert.ok(nejdrazsi < SAZBY_FLEK.limit,
       `limit originálu musí zůstat nedosažitelný (nejdražší komponenta ${nejdrazsi})`);
 
@@ -2794,7 +2872,12 @@ const KULE = 2 as const;
       patch(tr, (x) => { (x.phase as Record<string, unknown>).trickNo = bad; });
       assert.equal(loadMatch(), null, `trickNo ${bad} musí být odmítnuto (hra by nikdy neskončila)`);
     }
-    patch(tr, (x) => { (x.phase as Record<string, unknown>).trickNo = 9; });
+    // poslední štych doopravdy dohraný až k němu — přepsat jen číslo by
+    // nechalo v rukou deset karet a to sav (správně) odmítne jako nehratelný
+    let last: St9 = tr;
+    while (last.phase.name === 'tricks' && last.phase.trickNo < 9) last = apply(last, acts9(last)[0]);
+    assert.ok(last.phase.name === 'tricks' && last.phase.trickNo === 9, 'fixtura: poslední štych');
+    patch(last, () => {});
     assert.ok(loadMatch(), 'trickNo 9 (poslední štych) je legitimní');
 
     // (i9) mód stojícího závazku teče do contract.mode a odtud do t()
@@ -2930,6 +3013,60 @@ const KULE = 2 as const;
     st = apply(st, actsA(st).find((a) => a.type === 'discard' && a.cards.every((c) => ptsA(c) === 0)) as ActA);
     assert.equal(seatOnTurn(view(st, 0)), 0, 'deklaruje aktér');
     console.log('PASS regrese i33 — „na tahu" zná i fázi volby trumfu');
+  }
+
+  // ── review 2026-09-25: obránce ve voleném barvu do ohlášení nezná (VII/1) ──
+  {
+    const { trumplessChoicePending: pending } = await import('../src/lib/rules/legal');
+    const { forhont } = await import('../src/lib/rules/types');
+    type StT = ReturnType<typeof initialState>;
+    type Seat = 0 | 1 | 2;
+    let hidden = 0;
+    let declaredSeen = 0;
+    let takenOver = 0;
+    let states = 0;
+    const acting = (st: StT): Seat | undefined => ([0, 1, 2] as const).find((x) => legalActions(view(st, x)).length > 0);
+    for (let seed = 1; seed <= 150; seed += 1) {
+      for (const takeoverStyle of ['retake', 'keep'] as const) {
+        const config = { ...defaultConfig('voleny'), talonOnTakeover: takeoverStyle };
+        let st: StT = apply(initialState(config, (seed % 3) as Seat), { type: 'deal', seed });
+        const fh = forhont(st.dealer);
+        for (let guard = 0; guard < 80 && st.phase.name !== 'tricks' && st.phase.name !== 'scored'; guard += 1) {
+          states += 1;
+          const p = st.phase;
+          if (p.name === 'discard-talon' || p.name === 'takeover' || p.name === 'declare') {
+            // nová podmínka (podle aktéra) se na skutečném stavu shoduje se starou (trump === null)
+            const old = st.config.variant === 'voleny' && p.standing.bid === null && p.standing.mode === null && p.standing.trump === null;
+            assert.equal(pending(st.config, p.standing, st.dealer), old, `seed ${seed}: sebraný talon podle aktéra ≠ podle trumfu`);
+            if (old) takenOver += 1;
+            for (const seat of [0, 1, 2] as const) {
+              const vp = view(st, seat).phase as typeof p;
+              if (seat === fh) {
+                assert.equal(vp.standing.trump, p.standing.trump, 'forhont svou barvu vidí');
+              } else {
+                assert.equal(vp.standing.trump, null, `seed ${seed}: obránce ${seat} vidí barvu ve fázi ${p.name}`);
+                if (p.standing.trump !== null) hidden += 1;
+              }
+            }
+          }
+          if (p.name === 'fleks' && st.contract?.mode === 'hra') {
+            // po ohlášení je barva veřejná — ze závazku
+            for (const seat of [0, 1, 2] as const) assert.equal(view(st, seat).contract?.trump, st.contract.trump);
+            declaredSeen += 1;
+          }
+          const seat = acting(st);
+          if (seat === undefined) break;
+          const acts = legalActions(view(st, seat));
+          // střídej schválení a sebrání talonu, ať se potkají obě cesty
+          st = apply(st, acts.find((a) => a.type === 'takeover' && a.claim === (seed % 4 === 0 ? 'take' : 'good'))
+            ?? acts.find((a) => a.type === 'choose-trump' && a.card !== 'from-people') ?? acts[0]);
+        }
+      }
+    }
+    assert.ok(hidden > 100, `scénář: skrytá barva se potkala jen ${hidden}× — test by nic neověřil`);
+    assert.ok(takenOver > 10, `scénář: sebraný talon se potkal jen ${takenOver}×`);
+    assert.ok(declaredSeen > 50, `scénář: ohlášená barevná hra se potkala jen ${declaredSeen}×`);
+    console.log(`PASS review 2026-09-25 — obránce barvu do ohlášení nezná (${hidden} pohledů, ${takenOver}× sebraný talon, ${states} stavů)`);
   }
 
   // ── odložený trumf: co leží na stole, není v ruce (a do talonu nesmí) ───
@@ -3268,8 +3405,9 @@ const KULE = 2 as const;
     }
 
     // vysoutěžený betl platí už při odhozu do talonu, ne až po deklaraci
-    const discarding = (mode: 'betl' | null, trump: 0 | null = null): HandView['phase'] =>
-      ({ name: 'discard-talon', standing: { declarer: 0, mode, trump, bid: null } });
+    // dealer 2 → forhont 0; obránce, který sebral talon, je 1
+    const discarding = (mode: 'betl' | null, trump: 0 | null = null, declarer: 0 | 1 = 0): HandView['phase'] =>
+      ({ name: 'discard-talon', standing: { declarer, mode, trump, bid: null } });
     assert.equal(handOrderMode({ ...baseV, phase: discarding('betl') }), 'natural');
     // volený: forhont má trumf zvolený ještě před odhozem — hlásit může cokoli
     assert.equal(
@@ -3278,12 +3416,21 @@ const KULE = 2 as const;
     );
     // volený: bez trumfu odhazuje ten, kdo „sebral talon" — hraje betl, nebo durch (čl. VII/1)
     assert.equal(
-      handOrderMode({ ...baseV, phase: discarding(null, null) }), 'natural',
+      handOrderMode({ ...baseV, seat: 1, phase: discarding(null, null, 1) }), 'natural',
       'kdo sebral talon, hraje bez trumfů, i když druh ještě nevybral',
+    );
+    /*
+     * A obránce, který se na odhoz forhonta jen dívá: barvu nezná (view ji
+     * skrývá, čl. VII/1), ale hra bez trumfů to není — řadí se do barevné.
+     * S rozhodováním podle `trump === null` by mu vějíř přeskočil do betlu.
+     */
+    assert.equal(
+      handOrderMode({ ...baseV, seat: 1, phase: discarding(null, null, 0) }), 'trump',
+      'obránci bez viditelné barvy se vějíř nesmí přerovnat jako do betlu',
     );
     // licitovaný: trumf null je jen „bez červeného příhozu" — řadí se do barevné hry
     assert.equal(
-      handOrderMode({ ...baseV, config: defaultConfig('licitovany'), phase: discarding(null, null) }), 'trump',
+      handOrderMode({ ...baseV, config: defaultConfig('licitovany'), phase: discarding(null, null, 1) }), 'trump',
       'v licitovaném chybějící trumf neznamená hru bez trumfů',
     );
 
@@ -3342,7 +3489,61 @@ const KULE = 2 as const;
     const seq = createSeedSequence(2 ** 32 - 3);
     const three = [seq.next(), seq.next(), seq.next()];
     assert.equal(new Set(three).size, 3, 'tři hry = tři různé seedy');
+    // za horní mezí pokračuje od nuly — ne 2^32, který by `Random` zkrátil na týž seed 0
+    const top = createSeedSequence(2 ** 32 - 1);
+    assert.deepEqual([top.next(), top.next()], [2 ** 32 - 1, 0], 'posloupnost přeteče na 0, ne mimo 32 bitů');
+    // nový zápas (vynulované konto): resumeAfter(0) začne znovu od N, takže
+    // reload po dvou hrách nového zápasu dá N+2 — stejně jako bez reloadu
+    const reset = createSeedSequence(100);
+    reset.next(); reset.next(); // dvě hry starého zápasu
+    reset.resumeAfter(0);
+    const live = [reset.next(), reset.next(), reset.next()];
+    const reloaded = createSeedSequence(100);
+    reloaded.resumeAfter(2);
+    assert.equal(reloaded.next(), live[2], 'reload uprostřed nového zápasu pokračuje tam, kde zápas je');
     console.log('PASS regrese i2 — seed jen celé číslo v rozsahu, posloupnost se nezasekne');
+  }
+
+  // ── review 2026-09-25: sav, ze kterého nejde hrát dál, se nenačte ───────
+  {
+    const store = new Map<string, string>();
+    (globalThis as { localStorage?: unknown }).localStorage = {
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: (k: string, val: string) => void store.set(k, val),
+      removeItem: (k: string) => void store.delete(k),
+    };
+    const { saveMatch, loadMatch } = await import('../src/lib/match/persist');
+    // sehrávka v půlce štychu
+    // holá hra se nedohrává (autoSettlePlainHra), tak ji tu hrajeme
+    let st = apply(initialState({ ...defaultConfig('voleny'), autoSettlePlainHra: false }, 2), { type: 'deal', seed: 21 });
+    for (let guard = 0; guard < 120; guard += 1) {
+      if (st.phase.name === 'tricks' && st.phase.trickNo === 3 && st.phase.trick.length === 1) break;
+      const seat = ([0, 1, 2] as const).find((x) => legalActions(view(st, x)).length > 0);
+      if (seat === undefined) break;
+      const acts = legalActions(view(st, seat));
+      st = apply(st, acts.find((a) => a.type === 'choose-trump' && a.card !== 'from-people')
+        ?? acts.find((a) => a.type === 'discard' && a.cards.every((c) => c % 8 !== 3 && c % 8 !== 7))
+        ?? acts.find((a) => a.type === 'declare' && a.mode === 'hra' && !a.sedma && !a.kilo)
+        ?? acts.find((a) => a.type === 'takeover' && a.claim === 'good')
+        ?? acts.find((a) => a.type === 'good') ?? acts[0]);
+    }
+    assert.ok(st.phase.name === 'tricks' && st.phase.trickNo === 3, 'fixtura: sehrávka ve čtvrtém štychu');
+    saveMatch(st);
+    assert.ok(loadMatch(), 'poctivý sav se načte');
+    const toAct = (st.phase as { toAct: 0 | 1 | 2 }).toAct;
+    const other = ((toAct + 1) % 3) as 0 | 1 | 2;
+    const tamper = (f: (h: number[][]) => void): void => {
+      const hands = st.hands.map((h) => h.slice());
+      f(hands);
+      saveMatch({ ...st, hands: hands as typeof st.hands });
+    };
+    // všech 32 karet sedí, ale hráč na tahu nemá čím hrát → stůl by zamrzl
+    tamper((h) => { h[other].push(...h[toAct].splice(0)); });
+    assert.equal(loadMatch(), null, 'sav s prázdnou rukou hráče na tahu se nesmí načíst');
+    // karta přesunutá do cizí ruky: legální tah existuje, ale ruce neodpovídají štychu
+    tamper((h) => { h[other].push(h[toAct].pop() as number); });
+    assert.equal(loadMatch(), null, 'sav s rukama, které nesedí k číslu štychu, se nesmí načíst');
+    console.log('PASS review 2026-09-25 — sav, ze kterého nejde hrát, se odmítne');
   }
 
   // ── i4/i5/i24: sav — nemožné převzetí, zlomkový trumf, platné módy ─────
@@ -3514,9 +3715,18 @@ const KULE = 2 as const;
     assert.match(out, /'sha256-[A-Za-z0-9+/=]+'/, 'hash inline skriptu musí být v politice');
     assert.ok(out.startsWith('<meta http-equiv="Content-Security-Policy"'), 'atribut se nesmí rozbít');
 
-    // stránka v jednoduchých uvozovkách se taky musí zpracovat
-    const single = "<meta content='script-src \"self\" \\'unsafe-inline\\''><script>window.y=1</script>";
-    assert.equal(scriptSrcAllowsInline(withScriptHashes(single)), false, 'jednoduché uvozovky taky');
+    // stránka v jednoduchých uvozovkách (apostrofy politiky jako &#39;) se taky
+    // musí zpracovat — a výsledek musí být platný atribut, ne content='…'sha…''
+    const single = "<meta http-equiv=\"Content-Security-Policy\" content='script-src &#39;self&#39; &#39;unsafe-inline&#39;'>"
+      + '<script>window.y=1</script>';
+    assert.equal(scriptSrcAllowsInline(single), true, 'vstup testu musí být bezzubý, jinak test nic nedokazuje');
+    const singleOut = withScriptHashes(single);
+    assert.equal(scriptSrcAllowsInline(singleOut), false, 'jednoduché uvozovky taky');
+    assert.match(
+      singleOut,
+      /content=" ?script-src 'self' 'sha256-[A-Za-z0-9+/=]+'">/,
+      'politika z jednoduchých uvozovek se musí zapsat do platného atributu',
+    );
 
     // ochrana proti tomu, že krok vypadne z buildu
     const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')) as {
@@ -4435,6 +4645,13 @@ console.log('PASS vzdání — platí se celý stojící závazek, mimo legalAct
     name: 'discard-talon',
     standing: { declarer: 0, mode: null, trump: null, bid: { kind: 'durch', cervena: false } },
   };
+  // aktér odhazuje s talonem v ruce — jinak by sav nešel hrát dál a (správně) neprošel
+  {
+    const st = okSave.state as unknown as { hands: number[][]; talon: number[]; unseen: number[] };
+    st.hands[0] = [...st.hands[0], ...st.unseen, ...st.talon];
+    st.unseen = [];
+    st.talon = [];
+  }
   store.set('flek.match.v1', JSON.stringify(okSave));
   assert.notEqual(load(), null, 'platný vysoutěžený závazek se načíst musí');
 

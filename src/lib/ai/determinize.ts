@@ -22,9 +22,10 @@ export interface Constraints {
   /** mustHave[seat] = karty, které hráč prokazatelně drží (hlášky, sedma proti). */
   mustHave: [Set<Card>, Set<Card>, Set<Card>];
   /**
-   * Karty, u kterých veřejná informace omezuje MOŽNÁ místa (sedadlo/talon):
-   *  - ukázaná trumfová karta (i „z lidu") je v ruce forhonta, nebo v talonu
-   *  - hlášená sedma aktéra je v jeho ruce, nebo (teoreticky) v talonu
+   * Karty, u kterých veřejná informace omezuje MOŽNÁ místa (sedadlo/talon).
+   * Dnes se neplní: zvolená trumfová karta leží lícem dolů (§24), takže ji
+   * obrana nezná, a jiný zdroj takového omezení zatím není. Mechanismus
+   * zůstává kvůli testům, které hlídají, že se omezení z karty neudělá.
    */
   allowed: Map<Card, Set<number>>;
 }

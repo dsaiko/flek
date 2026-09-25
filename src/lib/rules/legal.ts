@@ -175,15 +175,20 @@ const isValuable = (c: Card): boolean => rankOf(c) === ESO || rankOf(c) === R10;
  * Stojící závazek je hra BEZ TRUMFŮ, jejíž druh (betl/durch) se teprve
  * vybere: tak vypadá `standing` obránce, který ve voleném „sebral odložený
  * talon" (Obecná pravidla čl. VII/1) a po odhozu ohlásí betl či durch.
- * Ve voleném nemůže trumf chybět z jiného důvodu — forhont ho zvolil ještě
- * před odhozem. V licitovaném `trump === null` znamená jen „bez červeného
- * příhozu", proto se ptáme na variantu.
+ * Ve voleném trumf volí vždycky forhont, takže bez druhu hry stojí jiný
+ * aktér jen tehdy, když talon sebral obránce.
+ *
+ * Rozhoduje se podle AKTÉRA, ne podle `trump === null`: obránci barvu do
+ * ohlášení závazku nevidí (`view()` ji skrývá, čl. VII/1), takže v jejich
+ * pohledu chybí trumf i u obyčejné barevné hry. V licitovaném `trump === null`
+ * znamená jen „bez červeného příhozu", proto se ptáme na variantu.
  */
 export function trumplessChoicePending(
   config: RulesConfig,
-  st: { mode: GameMode | null; trump: Suit | null; bid: BidLevel | null },
+  st: { declarer: Seat; mode: GameMode | null; bid: BidLevel | null },
+  dealer: Seat,
 ): boolean {
-  return config.variant === 'voleny' && st.bid === null && st.mode === null && st.trump === null;
+  return config.variant === 'voleny' && st.bid === null && st.mode === null && st.declarer !== forhont(dealer);
 }
 
 /** Všechny závazky licitačního žebříčku (bez nelegálních kombinací). */
@@ -314,7 +319,7 @@ export function legalActions(v: PlayerView): PlayerAction[] {
        * kartami před očima. Barevná hra tu není: zvedl talon právě proto,
        * že barvu neschválil.
        */
-      if (trumplessChoicePending(v.config, st)) {
+      if (trumplessChoicePending(v.config, st, v.dealer)) {
         for (const mode of ['betl', 'durch'] as const) {
           out.push({ type: 'declare', seat: me, mode, sedma: false, kilo: false });
         }
@@ -488,4 +493,3 @@ export function actionMatchesLegal(action: PlayerAction, legal: PlayerAction[]):
   return legal.some((l) => norm(l) === target);
 }
 
-export { nextSeat };

@@ -20,6 +20,7 @@ import { claimPlan } from '../src/lib/rules/claim';
 import { think } from '../src/lib/ai/think';
 import { VERSION as SAVE_VERSION } from '../src/lib/match/persist';
 import { TALK_TABLES } from '../src/lib/ui/tableTalk';
+import { discardWarnings } from '../src/lib/ui/discardWarnings';
 
 // Pevný seed: smoke musí být reprodukovatelný. Se seedem 10 vede odhoz, který
 // smoke volí (první a poslední karta v ruce), na varovný popup — bez toho by
@@ -29,7 +30,8 @@ const outDir = process.argv[3] ?? 'docs';
 mkdirSync(outDir, { recursive: true });
 
 const browser = await chromium.launch();
-const page = await browser.newPage({ viewport: { width: 1200, height: 900 }, deviceScaleFactor: 2 });
+// vlastní kontext (ne browser.newPage): kontrola konta po reloadu v něm otevírá druhou záložku
+const page = await (await browser.newContext({ viewport: { width: 1200, height: 900 }, deviceScaleFactor: 2 })).newPage();
 page.setDefaultTimeout(8000); // kliky mohou čekat na konec animací
 page.on('dialog', (d) => void d.dismiss());
 // CSP porušení hlásí prohlížeč jako console error — blokovaný worker by jinak
@@ -288,18 +290,19 @@ let asideCardAlt: string | null = null;
 let concedeSurvivedAi = false;
 /** Texty bublin viděné během hry — hlášky (§5.8) musí být opravdu vidět. */
 const bubblesSeen = new Set<string>();
+const TALK_LANGS = ['cs', 'en', 'de', 'fr'] as const;
 /** Všechny folklórní hlášky — pro kontrolu, že dva soupeři neřeknou totéž. */
 const ALL_TALK = new Set<string>(
   [TALK_TABLES.POLITE, TALK_TABLES.PUB].flatMap((table) =>
     Object.values(table as Record<string, Record<string, readonly string[]>>).flatMap((lines) =>
-      (['cs', 'en', 'de'] as const).flatMap((lang) => [...(lines[lang] ?? [])]),
+      TALK_LANGS.flatMap((lang) => [...(lines[lang] ?? [])]),
     ),
   ),
 );
 /** Hlášky „přemýšlím" ve všech jazycích a sadách — nesmí přežít soupeřův tah. */
 const THINKING = new Set<string>(
   [TALK_TABLES.POLITE.thinking, TALK_TABLES.PUB.thinking].flatMap((t) =>
-    t === undefined ? [] : (['cs', 'en', 'de'] as const).flatMap((lang) => [...(t[lang] ?? [])]),
+    t === undefined ? [] : TALK_LANGS.flatMap((lang) => [...(t[lang] ?? [])]),
   ),
 );
 let fromPeopleCancelled = false;
@@ -686,6 +689,10 @@ await page.click('[data-act="confirm"]'); // Playwright počká, až tlačítko 
 await page.waitForSelector('#center-float .felt-panel:not(.warn)', { timeout: 4000 });
 await page.click('#btn-new');
 await page.waitForSelector('#intro-panel', { state: 'visible', timeout: 4000 });
+// kontroly konta a varianty níž se do měření restartu nepočítají (mají vlastní
+// čekání); stránka se u nich ale NESMÍ načíst znovu — reload by opuštěný
+// řetěz animací zahodil a měření by zadrhnutí nemělo jak uvidět
+const checksStart = Date.now();
 
 /*
  * Úvodní obrazovka je vstup do KAŽDÉ hry, ne začátek nového zápasu: konto
@@ -711,17 +718,20 @@ await page.waitForSelector('#intro-panel', { state: 'visible', timeout: 4000 });
    * A totéž musí přežít RELOAD. Uložený idle stav nese jen konto a odehrané
    * hry, takže se přebírá bez ptaní — kdyby ho obnova odmítala (jako každý
    * jiný idle sav), byl by zápis kvůli bance mrtvý kód a refresh na úvodní
-   * obrazovce by konto smazal.
+   * obrazovce by konto smazal. Načítá se v druhé záložce téhož kontextu
+   * (sdílí localStorage), ať první stránka o svůj stav nepřijde.
    */
-  await page.reload();
-  await page.waitForSelector('#intro-panel', { state: 'visible', timeout: 5000 });
-  const moneyAfterReload = ((await page.locator('#seat-me .seat-meta, .me-meta').first().innerText()) ?? '').trim();
+  const twin = await page.context().newPage();
+  await twin.goto(url);
+  await twin.waitForSelector('#intro-panel', { state: 'visible', timeout: 5000 });
+  const moneyAfterReload = ((await twin.locator('#seat-me .seat-meta, .me-meta').first().innerText()) ?? '').trim();
   if (/^0[,.]00/.test(moneyAfterReload) || !/[1-9]/.test(moneyAfterReload)) {
     console.error(`CHYBA: reload úvodní obrazovky smazal konto (u hráče stojí „${moneyAfterReload}")`);
     await browser.close();
     process.exit(1);
   }
-  const lastAfterReload = ((await page.locator('#intro-last').innerText()) ?? '').trim();
+  const lastAfterReload = ((await twin.locator('#intro-last').innerText()) ?? '').trim();
+  await twin.close();
   if (lastAfterReload.length === 0) {
     console.error('CHYBA: reload smazal shrnutí minulé hry');
     await browser.close();
@@ -757,9 +767,10 @@ await page.waitForSelector('#intro-panel', { state: 'visible', timeout: 4000 });
 }
 
 
+const checksMs = Date.now() - checksStart;
 await page.click('#actions .action-btn.primary');
 await page.waitForSelector('#table.animating', { state: 'detached', timeout: 6000 });
-const restartMs = Date.now() - restartStart;
+const restartMs = Date.now() - restartStart - checksMs;
 if ((await page.locator('#hand .card-btn').count()) === 0) {
   console.error('CHYBA: po restartu uprostřed rozdávání se nerozdalo');
   await browser.close();
@@ -805,15 +816,7 @@ if (audio.created === 0 || audio.started === 0) {
 console.log(`Zvuky: ${audio.started} přehraných v ${audio.created} kontextu`);
 
 // hlášky u stolu: aspoň jedna folklórní (ne jen funkční popisek) musí padnout
-const folklore = new Set<string>();
-for (const table of [TALK_TABLES.POLITE, TALK_TABLES.PUB]) {
-  for (const lines of Object.values(table as Record<string, Record<string, readonly string[]>>)) {
-    for (const lang of ['cs', 'en', 'de'] as const) {
-      for (const line of lines[lang] ?? []) folklore.add(line);
-    }
-  }
-}
-const heard = [...bubblesSeen].filter((b) => folklore.has(b));
+const heard = [...bubblesSeen].filter((b) => ALL_TALK.has(b));
 if (heard.length === 0) {
   console.error(
     `CHYBA: během hry nepadla ani jedna hláška u stolu (bubliny: ${[...bubblesSeen].join(' | ')})`,
@@ -1255,6 +1258,105 @@ if (cspViolations.length > 0) {
   console.log(`Nic za mnou: betl uprostřed štychu dohrán (${handBefore} karet), vyhraný`);
 }
 
+/*
+ * Odhoz do talonu: tři chyby, které našlo review 2026-09-25 (§47).
+ *  1. Dvojklik na „Odhodit" — po odhozu se nic neanimuje, nová tlačítka
+ *     vzniknou pod kurzorem a druhé kliknutí zmáčklo „Betl" (převzetí).
+ *  2. Varování drželo vybraný pár z doby otevření, ale ruka pod ním dál
+ *     reagovala: potvrzení pak odhodilo jiné karty, než byly zvednuté.
+ *  3. Po přepnutí jazyka zůstal text varování v původním jazyce.
+ * A k tomu dlaždice licitace, které zámek během animace nebral.
+ */
+{
+  const { payload, warnPair, calmPair } = discardScene();
+  const dp = await browser.newPage({ viewport: { width: 1400, height: 900 } });
+  dp.on('dialog', (d) => void d.accept());
+  const fail = async (msg: string): Promise<never> => {
+    console.error(`CHYBA: odhoz — ${msg}`);
+    await browser.close();
+    process.exit(1);
+  };
+  const load = async (): Promise<void> => {
+    await dp.goto(url);
+    await dp.evaluate(([match, settings]) => {
+      localStorage.setItem('flek.match.v1', match);
+      localStorage.setItem('flek.settings.v1', settings);
+    }, [payload, JSON.stringify({ variant: 'voleny', sounds: false, lang: 'cs' })]);
+    await dp.reload();
+    await dp.waitForSelector('#discard-confirm', { timeout: 10000 });
+    await dp.waitForSelector('#table.animating', { state: 'detached', timeout: 6000 });
+  };
+  const history = async (): Promise<PlayerActionS[]> => {
+    const raw = await dp.evaluate(() => localStorage.getItem('flek.match.v1'));
+    return raw === null ? [] : (JSON.parse(raw) as { state: { history: PlayerActionS[] } }).state.history;
+  };
+  const selected = async (): Promise<number[]> =>
+    (await dp.locator('#hand .card-btn.selected').evaluateAll((els) => els.map((e) => Number((e as HTMLElement).dataset.card))))
+      .sort((a, b) => a - b);
+  const pick = async (cards: readonly number[]): Promise<void> => {
+    for (const c of cards) await dp.click(`#hand .card-btn[data-card="${c}"]`);
+  };
+
+  // 1. dvojklik: z odhozu smí vzniknout právě jedna akce
+  await load();
+  await pick(calmPair);
+  const before = (await history()).length;
+  await dp.dblclick('#discard-confirm');
+  await dp.waitForTimeout(600);
+  const added = (await history()).slice(before);
+  if (added.length !== 1 || added[0].type !== 'discard') {
+    await fail(`dvojklik na „Odhodit" udělal ${added.length} akcí: ${added.map((a) => a.type).join(', ')}`);
+  }
+
+  // 2. + 3. varování: ruka pod ním nereaguje, text se přeloží, odhodí se zvednutý pár
+  await load();
+  await pick(warnPair);
+  await dp.click('#discard-confirm');
+  await dp.waitForSelector('#center-float .felt-panel.warn', { timeout: 3000 });
+  const other = (await dp.locator('#hand .card-btn').evaluateAll((els) => els.map((e) => Number((e as HTMLElement).dataset.card))))
+    .find((c) => !warnPair.includes(c));
+  await dp.click(`#hand .card-btn[data-card="${other}"]`, { force: true });
+  await dp.click(`#hand .card-btn[data-card="${warnPair[0]}"]`, { force: true });
+  const sel = await selected();
+  if (sel.join() !== [...warnPair].sort((a, b) => a - b).join()) {
+    await fail(`ruka pod varováním reagovala (zvednuté ${sel.join()}, varování je o ${warnPair.join()})`);
+  }
+  await dp.click('#btn-lang');
+  await dp.click('.langpill button[data-lang="en"]');
+  const warnText = (await dp.locator('#center-float .felt-panel.warn').innerText()).replace(/\s+/g, ' ');
+  if (!/Careful/.test(warnText) || !/Discard/.test(warnText) || /Pozor|Odhodit/.test(warnText)) {
+    await fail(`varování po přepnutí do angličtiny zní „${warnText}"`);
+  }
+  const mark = (await history()).length;
+  await dp.click('#center-float [data-act="confirm"]');
+  await dp.waitForTimeout(400);
+  const done = (await history()).slice(mark)[0];
+  if (done?.type !== 'discard' || [...done.cards].sort((a, b) => a - b).join() !== [...warnPair].sort((a, b) => a - b).join()) {
+    await fail(`potvrzené varování odhodilo ${done?.type === 'discard' ? done.cards.join() : String(done?.type)} místo ${warnPair.join()}`);
+  }
+  await dp.close();
+
+  // 4. dlaždice licitace musí zámek animace brát stejně jako tlačítka
+  const lp = await browser.newPage({ viewport: { width: 1400, height: 900 } });
+  lp.on('dialog', (d) => void d.accept());
+  await lp.goto(url);
+  await lp.evaluate(([match, settings]) => {
+    localStorage.setItem('flek.match.v1', match);
+    localStorage.setItem('flek.settings.v1', settings);
+  }, [auctionSave(), JSON.stringify({ variant: 'licitovany', sounds: false })]);
+  await lp.reload();
+  await lp.waitForSelector('#actions .bid-chip', { timeout: 15000 });
+  const lockedChip = await lp.evaluate(`(() => {
+    document.getElementById('table').classList.add('animating');
+    const r = getComputedStyle(document.querySelector('#actions .bid-chip')).pointerEvents;
+    document.getElementById('table').classList.remove('animating');
+    return r;
+  })()`);
+  if (lockedChip !== 'none') await fail(`dlaždice licitace během animace berou kliknutí (pointer-events: ${String(lockedChip)})`);
+  await lp.close();
+  console.log('Odhoz: dvojklik udělá jednu akci, varování drží zvednutý pár a mluví jazykem stolu; dlaždice mají zámek');
+}
+
 await browser.close();
 
 // vyčerpání smyčky NENÍ úspěch — jinak by test procházel, i když hra uvízne
@@ -1621,6 +1723,21 @@ function declareSave(): string {
       ?? acts[0]);
   }
   throw new Error('scénář hlášení: člověk se k hlášení nedostal');
+}
+
+/**
+ * Volený, člověk (forhont) odhazuje do talonu. `warnPair` je legální pár
+ * s esem nebo desítkou (varování), `calmPair` legální pár bez varování.
+ */
+function discardScene(): { payload: string; warnPair: [number, number]; calmPair: [number, number] } {
+  const payload = mobileSave('voleny', 10, 'discard-talon');
+  const st = (JSON.parse(payload) as { state: ReturnType<typeof initialState> }).state;
+  const v = view(st, 0);
+  const pairs = legalActions(v).flatMap((a) => (a.type === 'discard' ? [a.cards as unknown as [number, number]] : []));
+  const warnPair = pairs.find((p) => discardWarnings(v.hand, p as never, 'hra').some((w) => w.kind === 'valuable'));
+  const calmPair = pairs.find((p) => discardWarnings(v.hand, p as never, 'hra').length === 0);
+  if (warnPair === undefined || calmPair === undefined) throw new Error('scénář odhozu nemá pár s varováním i bez něj');
+  return { payload, warnPair, calmPair };
 }
 
 /**

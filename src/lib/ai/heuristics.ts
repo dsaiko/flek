@@ -147,7 +147,7 @@ export function decideAuction(v: PlayerView, difficulty: Difficulty, rng: Random
       const st = v.phase.standing;
       // kdo sebral talon (volený), bude hrát betl nebo durch — odhazuje podle
       // toho, kam se s dvanácti kartami spíš vejde (durch jen s jistotami)
-      const trumpless = trumplessChoicePending(v.config, st);
+      const trumpless = trumplessChoicePending(v.config, st, v.dealer);
       const mode = st.mode ?? (trumpless ? (durchHoles(hand) <= t.durchHoles ? 'durch' : 'betl') : 'hra');
       const pair = chooseDiscard(hand, st.trump, mode);
       return (

@@ -15,10 +15,12 @@ import {
 import { settle } from './scoring';
 import { trickWinner } from './tricks';
 import type {
+  ComponentResult,
   Contract,
   FlekState,
   FlekTarget,
   GameState,
+  HandResult,
   PlayerAction,
   RulesConfig,
   Seat,
@@ -129,7 +131,7 @@ function biddingHolder(state: GameState & { phase: { name: 'bidding' } }): Seat 
  * názor prvního, takže na pořadí záleží.
  */
 function speakingOrder(after: Seat): Seat[] {
-  return [nextSeat(after), nextSeat(nextSeat(after))];
+  return defendersOf(after); // tatáž dvojice ve směru hraní, jen pod jménem, co říká proč
 }
 
 /** Komponenty závazku, ke kterým se dá vyjádřit. */
@@ -177,7 +179,7 @@ function stillHasSay(state: GameState, contract: Contract, f: FlekState, seat: S
  * Posun flekování po kolech (čl. V/4). Vrací `null`, když kolo skončilo bez
  * jediného zvýšení — to je „schválení závazku některou ze stran" a konec fáze.
  */
-function advanceFleks(state: GameState, contract: Contract, f: FlekState): FlekState | null {
+function advanceFleks(contract: Contract, f: FlekState): FlekState | null {
   const members = flekSideMembers(contract, f.toAct);
   const next = members.find((m) => !f.spoke.includes(m));
   if (next !== undefined) return { ...f, toAct: next };
@@ -447,7 +449,7 @@ function reduce(state: GameState, action: PlayerAction): GameState {
       const askColour =
         state.config.variant === 'voleny' && phase.standing.mode === null &&
         // obránce, který talon sebral (trumf žádný), rovnou hlásí betl/durch
-        !trumplessChoicePending(state.config, phase.standing);
+        !trumplessChoicePending(state.config, phase.standing, state.dealer);
       return {
         ...state,
         hands,
@@ -482,7 +484,7 @@ function reduce(state: GameState, action: PlayerAction): GameState {
        * zbývající dva hráči přebrat hru ještě na Durcha" (čl. VII/1), takže
        * se ještě jednou otevře převzetí. Durch je konečný a rovnou se flekuje.
        */
-      if (trumplessChoicePending(state.config, st) && action.mode === 'betl') {
+      if (trumplessChoicePending(state.config, st, state.dealer) && action.mode === 'betl') {
         const standing: Standing = { declarer: action.seat, mode: 'betl', trump: null, bid: null };
         return {
           ...state,
@@ -558,7 +560,7 @@ function reduce(state: GameState, action: PlayerAction): GameState {
         ? raised
         : { ...raised, spoke: [...f.spoke, action.seat] };
       // kolo se zvýšením nemůže skončit fází, jen předá slovo protistraně
-      const next = advanceFleks(state, state.contract, spoken) as FlekState;
+      const next = advanceFleks(state.contract, spoken) as FlekState;
       return { ...state, phase: { name: 'fleks', fleks: next } };
     }
 
@@ -590,7 +592,7 @@ function reduce(state: GameState, action: PlayerAction): GameState {
       const announcedSpoken: FlekState = stillHasSay(state, contract, announced, action.seat)
         ? announced
         : { ...announced, spoke: [...f.spoke, action.seat] };
-      const next = advanceFleks(state, contract, announcedSpoken) as FlekState;
+      const next = advanceFleks(contract, announcedSpoken) as FlekState;
       return { ...state, contract, phase: { name: 'fleks', fleks: next } };
     }
 
@@ -598,7 +600,7 @@ function reduce(state: GameState, action: PlayerAction): GameState {
       if (phase.name !== 'fleks' || !state.contract) throw new InvariantError('good mimo fázi');
       const f = phase.fleks;
       const spoke: FlekState = { ...f, spoke: [...f.spoke, action.seat] };
-      const next = advanceFleks(state, state.contract, spoke);
+      const next = advanceFleks(state.contract, spoke);
       if (next !== null) return { ...state, phase: { name: 'fleks', fleks: next } };
 
       /*
@@ -703,7 +705,7 @@ function settlePlainHra(
   delta[contract.declarer] = sign * 2 * amount;
   delta[d1] = -sign * amount;
   delta[d2] = -sign * amount;
-  const result: import('./types').HandResult = {
+  const result: HandResult = {
     handNo: state.handNo,
     contract,
     cardPoints: { declarer: 0, defenders: 0 },
@@ -732,7 +734,7 @@ function settlePlainHra(
 function settleEvenOut(state: GameState, contract: Contract): GameState {
   const s = state.config.sazby;
   const cerveny = contract.trump === CERVENE ? s.cervenyMultiplier : 1;
-  const result: import('./types').HandResult = {
+  const result: HandResult = {
     handNo: state.handNo,
     contract,
     cardPoints: { declarer: 0, defenders: 0 },
@@ -758,14 +760,6 @@ function settleEvenOut(state: GameState, contract: Contract): GameState {
   };
 }
 
-/**
- * Vzdání hry (house rule, §5.5.2). Kdo vzdá, **platí sám**: soupeřům jde sazba
- * stojícího závazku včetně fleků. Spoluhráč za cizí rozhodnutí neplatí, proto
- * se nedělí po stranách jako u běžného zúčtování.
- *
- * Bez kontraktu (ještě se nekomentovalo) se platí základní sazba hry — vzdát
- * rozdanou hru něco stát musí, jinak by to bylo zdarma řešení špatných karet.
- */
 /**
  * Závazek, který se u vzdání platí.
  *
@@ -794,7 +788,7 @@ function contractToSettle(state: GameState): Contract | null {
   const kind = st.bid?.kind ?? null;
   // kdo sebral talon a ještě nevybral, hraje hru bez trumfů — vzdání platí
   // aspoň betl, jinak by zvednutý talon byl levným únikem za sazbu hry
-  const mode = st.mode ?? (kind === 'betl' || kind === 'durch' ? kind : trumplessChoicePending(state.config, st) ? 'betl' : 'hra');
+  const mode = st.mode ?? (kind === 'betl' || kind === 'durch' ? kind : trumplessChoicePending(state.config, st, state.dealer) ? 'betl' : 'hra');
   const colour = mode === 'hra';
   // vysoutěžený závazek musí deklarace pokrýt (legal.ts), takže sedma/kilo
   // z příhozu jsou pro vzdávajícího závazné stejně jako by byly ohlášené
@@ -811,6 +805,14 @@ function contractToSettle(state: GameState): Contract | null {
   };
 }
 
+/**
+ * Vzdání hry (house rule, §5.5.2). Kdo vzdá, **platí sám**: soupeřům jde sazba
+ * stojícího závazku včetně fleků. Spoluhráč za cizí rozhodnutí neplatí, proto
+ * se nedělí po stranách jako u běžného zúčtování.
+ *
+ * Bez kontraktu (ještě se nekomentovalo) se platí základní sazba hry — vzdát
+ * rozdanou hru něco stát musí, jinak by to bylo zdarma řešení špatných karet.
+ */
 function concede(state: GameState, seat: Seat): GameState {
   const s = state.config.sazby;
   const contract = contractToSettle(state);
@@ -828,9 +830,9 @@ function concede(state: GameState, seat: Seat): GameState {
    * flekovým multiplikátorem. Kilo se platí v základu: škálování po deseti
    * bodech vychází z odehraných bodů, a ty u vzdané hry neexistují.
    */
-  const components: import('./types').ComponentResult[] = [];
+  const components: ComponentResult[] = [];
   const push = (
-    target: import('./types').FlekTarget,
+    target: FlekTarget,
     baseRate: number,
     extraMultiplier: number,
     note: string,
@@ -872,7 +874,7 @@ function concede(state: GameState, seat: Seat): GameState {
     delta[seat] -= amount;
   }
 
-  const result: import('./types').HandResult = {
+  const result: HandResult = {
     handNo: state.handNo,
     ...(limited ? { limit: cap } : {}),
     contract: contract ?? {
@@ -905,8 +907,8 @@ function flekRaisersFromHistory(state: GameState): Seat[] {
 }
 
 /** Finální úrovně fleků — z historie akcí aktuální hry (fleks fáze už neexistuje). */
-function flekLevelsFromHistory(state: GameState): Partial<Record<import('./types').FlekTarget, number>> {
-  const levels: Partial<Record<import('./types').FlekTarget, number>> = {};
+function flekLevelsFromHistory(state: GameState): Partial<Record<FlekTarget, number>> {
+  const levels: Partial<Record<FlekTarget, number>> = {};
   // projdi akce od posledního 'deal'
   for (let i = state.history.length - 1; i >= 0; i -= 1) {
     const a = state.history[i];

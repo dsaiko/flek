@@ -10,7 +10,8 @@
  * Licence: MIT © 2026 Dušan Saiko (skeny samotné jsou public domain, viz cards/history/README.md)
  */
 
-import { existsSync, mkdirSync, readdirSync, renameSync, rmSync, statSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
@@ -81,9 +82,17 @@ const files = readdirSync(SRC).filter((f) => /\.png$/i.test(f)).sort();
 
 // rychlá cesta: už vygenerováno (přegenerování vynutí `--force`).
 // Kontroluj JMENOVITĚ každou očekávanou kartu, ne jen počet souborů — jinak by
-// 32 náhodných zbytků v adresáři vypadalo jako hotová sada.
+// 32 náhodných zbytků v adresáři vypadalo jako hotová sada. A jen pro tentýž
+// vstup: otisk tohoto skriptu (všechna nastavení výš) a zdrojových skenů — po
+// změně výšky, kvality nebo skenu by jinak do buildu šly staré odvozeniny.
+// (mimo public/, jinak by se otisk nasadil na web)
+const STAMP = join(ROOT, 'node_modules', '.cache', 'flek-history-cards.stamp');
+const fingerprint = createHash('sha256')
+  .update(readFileSync(fileURLToPath(import.meta.url)))
+  .update(files.map((f) => `${f}:${statSync(join(SRC, f)).size}:${statSync(join(SRC, f)).mtimeMs}`).join('\n'))
+  .digest('hex');
 const expected = files.map((f) => f.replace(/\.png$/i, '.webp'));
-const done = expected.every((f) => {
+const done = existsSync(STAMP) && readFileSync(STAMP, 'utf8') === fingerprint && expected.every((f) => {
   const p = join(OUT, f);
   return existsSync(p) && statSync(p).size > 0;
 });
@@ -108,4 +117,6 @@ for (const r of results) {
   total += r.kb;
   console.log(`${r.file.padEnd(8)} ${String(r.w).padStart(4)}×${r.h}  ${String(r.kb).padStart(4)} kB`);
 }
+mkdirSync(dirname(STAMP), { recursive: true });
+writeFileSync(STAMP, fingerprint);
 console.log(`OK: ${results.length} karet → ${OUT} (celkem ${Math.round(total / 102.4) / 10} MB)`);

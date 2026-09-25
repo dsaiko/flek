@@ -6,7 +6,7 @@
  * později posílal server vzdálenému klientovi.
  */
 
-import { forhont, type GameState, type PlayerAction, type PlayerView, type PublicAction, type Seat } from './types';
+import { forhont, type GameState, type Phase, type PlayerAction, type PlayerView, type PublicAction, type Seat } from './types';
 
 /** Redakce jedné akce do veřejné podoby. */
 export function redact(action: PlayerAction): PublicAction {
@@ -33,6 +33,23 @@ export function redact(action: PlayerAction): PublicAction {
   }
 }
 
+/**
+ * Fáze pro dané sedadlo. Ruce a talon žijí mimo `Phase`; skrytá je v ní jen
+ * **barva trumfu ve voleném před ohlášením závazku**. Forhont ji zvolil kartou
+ * lícem dolů a „nahlásí závazek" (tedy i barvu, čl. IV/2) až poté, co obrana
+ * na „Barva?" hru schválí (Obecná pravidla čl. VII/1). Obránce se tedy
+ * rozhoduje, jestli sebrat talon na betl/durch, bez znalosti trumfů. Dřív
+ * `phase.standing.trump` dostala všechna sedadla (§24 ji mylně měl za veřejnou).
+ */
+function phaseFor(state: GameState, seat: Seat): Phase {
+  const p = state.phase;
+  if (state.config.variant !== 'voleny' || seat === forhont(state.dealer)) return p;
+  if ((p.name === 'discard-talon' || p.name === 'takeover' || p.name === 'declare') && p.standing.trump !== null) {
+    return { ...p, standing: { ...p.standing, trump: null } };
+  }
+  return p;
+}
+
 export function view(state: GameState, seat: Seat): PlayerView {
   return {
     seat,
@@ -43,15 +60,15 @@ export function view(state: GameState, seat: Seat): PlayerView {
     /*
      * Zvolená trumfová karta leží stranou LÍCEM DOLŮ (ČSM, Obecná pravidla
      * Čl. VII/1) — vidí ji jen ten, kdo ji volil. Dřív byla ve view veřejná
-     * a AI tak znala forhontovu přesnou kartu; barva trumfů je veřejná sama
-     * o sobě (nese ji `phase.standing` / `contract`), konkrétní karta ne.
+     * a AI tak znala forhontovu přesnou kartu. Ani barvu ostatní do ohlášení
+     * závazku neznají — viz `phaseFor`.
      */
     revealedTrump: forhont(state.dealer) === seat ? state.revealedTrump : null,
     unseenCount: state.unseen.length,
     talonKnown: state.talonKnowledge[seat].slice(),
     talon: state.talonOwner === seat ? state.talon.slice() : null,
     contract: state.contract,
-    phase: state.phase, // fáze neobsahují skrytá data (ruce/talon žijí mimo Phase)
+    phase: phaseFor(state, seat),
     publicHistory: state.history.map(redact),
     handResults: state.handResults,
     ledger: [...state.ledger],

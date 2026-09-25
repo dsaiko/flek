@@ -26,7 +26,6 @@ export { esc };
 export interface TableCallbacks {
   onAction: (action: PlayerAction) => void;
   onDeal: () => void;
-  onNewMatch: () => void;
   /**
    * „Vše za mnou" (§39) — zbytek dohraje controller sám.
    *
@@ -163,10 +162,8 @@ export class TableUI {
    * Otevřený popup na stole. Překreslení TÝMŽ stavem (přepnutí jazyka nebo
    * vzoru karet) čistí `#center-float`, což by jinak popup i s čekající volbou
    * hráče tiše zahodilo — proto se umí znovu postavit.
-   */
-  /**
-   * Otevřený popup i s jeho „lepivostí" v jednom objektu.
    *
+   * „Lepivost" je v témže objektu.
    * Vlastnost nesmí žít zvlášť: kdyby zůstala v samostatném poli, přežila by
    * popup, pro který byla nastavená — po sticky dotazu by se pak neplatný
    * dotaz na hlášku překreslil nad stavem, do kterého už nepatří.
@@ -203,21 +200,32 @@ export class TableUI {
     this.root = root;
     this.opts = opts;
     this.cb = cb;
+    /*
+     * Dvojklik: když krok nic neanimuje (odhoz → hlášení), nová tlačítka
+     * vzniknou dřív, než dopadne druhé kliknutí — a to by zmáčklo tlačítko,
+     * které na místě prvního mezitím vyrostlo (nechtěný betl). Druhé a další
+     * kliknutí série se proto na ovládání stolu zahodí; klávesnice má detail 0.
+     */
+    root.addEventListener('click', (e) => {
+      if (e.detail > 1 && (e.target as Element | null)?.closest?.('.action-btn, .bid-chip, .card-btn')) {
+        e.stopPropagation();
+        e.preventDefault();
+      }
+    }, true);
   }
 
   /**
-   * Potvrzovací popup na stole — pro akce mimo herní smyčku (ukončení hry).
-   * Vypadá stejně jako varování u odhozu, aby stůl mluvil jedním hlasem.
-   */
-  /**
-   * Potvrzovací dotaz v panelu na stole.
+   * Potvrzovací dotaz v panelu na stole — pro akce mimo herní smyčku
+   * (ukončení hry). Vypadá stejně jako varování u odhozu, aby stůl mluvil
+   * jedním hlasem. Texty se předávají jako funkce: popup se po přepnutí
+   * jazyka překresluje a musí se přeložit znovu.
    *
    * `sticky` = dotaz NENÍ o aktuálním stavu hry (typicky „opravdu ukončit?"),
    * takže nesmí zmizet, když mezitím táhne AI. Bez toho hráč otevře dialog,
    * soupeř zahraje a tlačítko pod prstem se ztratí.
    */
-  confirm(message: string, confirmLabel: string, onConfirm: () => void, sticky = false): void {
-    this.showConfirmPopup([message], confirmLabel, onConfirm, sticky);
+  confirm(message: () => string, confirmLabel: () => string, onConfirm: () => void, sticky = false): void {
+    this.showConfirmPopup(() => [message()], confirmLabel, onConfirm, sticky);
   }
 
   /**
@@ -598,7 +606,7 @@ export class TableUI {
     // nahrazovala novým <img> a v Chromu problikávala (viz setSrc/syncChildren)
     if (box.dataset.key !== key) {
       box.dataset.key = key;
-      box.innerHTML = faceDown || card !== null
+      box.innerHTML = faceDown || card !== null || trump === null
         ? `<img alt="">`
         : `<div class="suit-plate">${suitIcon(trump, 64)}</div>`;
       const label = document.createElement('div');
@@ -986,6 +994,10 @@ export class TableUI {
   }
 
   private onCardClick(c: Card, v: PlayerView): void {
+    // otevřený dotaz se týká stavu, pro který vznikl (varování drží vybraný
+    // pár): ruka pod ním do zavření nereaguje, jinak by potvrzení odhodilo
+    // jiné karty, než jsou zvednuté
+    if (this.openPopup !== null && !this.openPopup.sticky) return;
     const phase = v.phase;
     if (phase.name === 'choose-trump') {
       this.cb.onAction({ type: 'choose-trump', seat: v.seat, card: c });
@@ -999,9 +1011,9 @@ export class TableUI {
       if (choice.ask) {
         const { withMarriage, plain, points } = choice.ask;
         this.showChoicePopup(
-          `${t('announceQuestion')} (${points})`,
-          { label: t('announceYes'), onPick: () => this.cb.onAction(withMarriage) },
-          { label: t('announceNo'), onPick: () => this.cb.onAction(plain) },
+          () => `${t('announceQuestion')} (${points})`,
+          { label: () => t('announceYes'), onPick: () => this.cb.onAction(withMarriage) },
+          { label: () => t('announceNo'), onPick: () => this.cb.onAction(plain) },
         );
         return;
       }
@@ -1071,10 +1083,9 @@ export class TableUI {
             if (!action) return;
             // rizikové odhozy potvrdit popupem vestavěným do stolu
             // hra bez trumfů (i když druh ještě nepadl): varování nemají o čem být (§27)
-            const warns = discardWarnings(v.hand, cards, knownTrumpless(v) ? 'betl' : knownMode(v)).map((w) =>
-              w.kind === 'valuable' ? t('talonWarn') : marriageWarn(w.suit),
-            );
-            if (warns.length > 0) this.showConfirmPopup(warns, t('discardConfirm'), () => this.cb.onAction(action));
+            const warns = discardWarnings(v.hand, cards, knownTrumpless(v) ? 'betl' : knownMode(v));
+            const texts = (): string[] => warns.map((w) => (w.kind === 'valuable' ? t('talonWarn') : marriageWarn(w.suit)));
+            if (warns.length > 0) this.showConfirmPopup(texts, () => t('discardConfirm'), () => this.cb.onAction(action));
             else this.cb.onAction(action);
           }, { primary: true, disabled: !legalPair, id: 'discard-confirm' });
         }
@@ -1126,14 +1137,14 @@ export class TableUI {
              * stejným popupem jako u rizikového odhozu.
              */
             const settles = passSettlesWithoutPlay(v);
-            const warn = settles === 'flek-bez-re' ? t('noReWarn')
-              : settles === 'vyrovnano' ? t('evenOutWarn') : null;
+            const warn = settles === 'flek-bez-re' ? 'noReWarn'
+              : settles === 'vyrovnano' ? 'evenOutWarn' : null;
             btn(t('good'), () => {
-              if (warn !== null) this.showConfirmPopup([warn], t('good'), () => this.cb.onAction(a));
+              if (warn !== null) this.showConfirmPopup(() => [t(warn)], () => t('good'), () => this.cb.onAction(a));
               else this.cb.onAction(a);
             }, { primary: true });
           } else if (a.type === 'flek') {
-            const level = (v.phase.name === 'fleks' ? v.phase.fleks.levels[a.target] ?? 0 : 0) + 0;
+            const level = v.phase.name === 'fleks' ? v.phase.fleks.levels[a.target] ?? 0 : 0;
             btn(`${flekName(level)} ${t('na')} ${targetLabel(a.target)}`, () => this.cb.onAction(a));
           } else if (a.type === 'announce-proti') {
             const label = a.sedma && a.kilo ? `${t('sedmaProti')} + ${t('kiloProti')}` : a.sedma ? t('sedmaProti') : t('kiloProti');
@@ -1246,20 +1257,20 @@ export class TableUI {
   // ── potvrzovací popup vestavěný do stolu ─────────────────────────────────────
 
   private showConfirmPopup(
-    messages: string[], confirmLabel: string, onConfirm: () => void, sticky = false,
+    messages: () => string[], confirmLabel: () => string, onConfirm: () => void, sticky = false,
   ): void {
     this.openPopup = { paint: () => this.paintConfirmPopup(messages, confirmLabel, onConfirm), sticky };
     this.paintConfirmPopup(messages, confirmLabel, onConfirm);
   }
 
-  private paintConfirmPopup(messages: string[], confirmLabel: string, onConfirm: () => void): void {
+  private paintConfirmPopup(messages: () => string[], confirmLabel: () => string, onConfirm: () => void): void {
     const float = $(this.root, '#center-float');
     float.classList.add('open');
     float.innerHTML = `<div class="felt-panel warn">
-      ${messages.map((m) => `<p class="warn-msg">⚠️ ${esc(m)}</p>`).join('')}
+      ${messages().map((m) => `<p class="warn-msg">⚠️ ${esc(m)}</p>`).join('')}
       <div class="felt-actions">
         <button class="action-btn" data-act="cancel">${t('back')}</button>
-        <button class="action-btn primary" data-act="confirm">${esc(confirmLabel)}</button>
+        <button class="action-btn primary" data-act="confirm">${esc(confirmLabel())}</button>
       </div>
     </div>`;
     float.querySelector('[data-act="cancel"]')?.addEventListener('click', () => {
@@ -1277,9 +1288,9 @@ export class TableUI {
 
   /** Dvě rovnocenné volby v panelu na stole (např. ohlásit hlášku, nebo ne). */
   private showChoicePopup(
-    question: string,
-    primary: { label: string; onPick: () => void },
-    secondary: { label: string; onPick: () => void },
+    question: () => string,
+    primary: { label: () => string; onPick: () => void },
+    secondary: { label: () => string; onPick: () => void },
   ): void {
     // volba je vždycky o AKTUÁLNÍM stavu → nikdy sticky
     this.openPopup = { paint: () => this.paintChoicePopup(question, primary, secondary), sticky: false };
@@ -1287,17 +1298,17 @@ export class TableUI {
   }
 
   private paintChoicePopup(
-    question: string,
-    primary: { label: string; onPick: () => void },
-    secondary: { label: string; onPick: () => void },
+    question: () => string,
+    primary: { label: () => string; onPick: () => void },
+    secondary: { label: () => string; onPick: () => void },
   ): void {
     const float = $(this.root, '#center-float');
     float.classList.add('open');
     float.innerHTML = `<div class="felt-panel warn">
-      <p class="warn-msg">${esc(question)}</p>
+      <p class="warn-msg">${esc(question())}</p>
       <div class="felt-actions">
-        <button class="action-btn" data-act="secondary">${esc(secondary.label)}</button>
-        <button class="action-btn primary" data-act="primary">${esc(primary.label)}</button>
+        <button class="action-btn" data-act="secondary">${esc(secondary.label())}</button>
+        <button class="action-btn primary" data-act="primary">${esc(primary.label())}</button>
       </div>
     </div>`;
     const close = (): void => {
@@ -1378,9 +1389,9 @@ const setSrc = (img: HTMLImageElement, src: string): void => {
   if (img.getAttribute('src') !== src) img.src = src;
 };
 
-/** Zajistí, že kontejner má přesně `count` dětí daného typu, a vrátí je. */
 /**
- * Sladí počet dětí kontejneru s `count` (recyklace místo překreslování).
+ * Zajistí, že kontejner má přesně `count` dětí daného typu, a vrátí je
+ * (recyklace místo překreslování).
  * Exportováno kvůli testu ukončení při záporném/nečíselném vstupu.
  */
 export function syncChildren<T extends HTMLElement>(
@@ -1728,8 +1739,11 @@ const TARGET_ACC: Record<Lang, Record<string, string>> = {
   fr: { hra: 'le jeu', sedma: 'la sept', kilo: 'le cent', betl: 'le bettel', durch: 'le durch', dveSedmy: 'les deux sept' },
 };
 
-/** Jméno fleku bez vykřičníku — do věty „Flek na hru" se „Flek!" nehodí. */
-const flekWord = (level: number): string => flekName(level).replace(/!$/, '');
+/**
+ * Jméno fleku bez vykřičníku — do věty „Flek na hru" se „Flek!" nehodí.
+ * I s mezerou před ním: francouzština píše „Contre !" (jinak „Contre  na…").
+ */
+const flekWord = (level: number): string => flekName(level).replace(/\s*!$/, '');
 
 function flekSummary(state: GameState): string {
   const counts: Record<string, number> = {};
@@ -1760,7 +1774,7 @@ function flekSummary(state: GameState): string {
  */
 export function trumpAsideOf(
   v: PlayerView,
-): { card: Card | null; suit: Suit; faceDown: boolean; holder: Seat | null } | null {
+): { card: Card | null; suit: Suit | null; faceDown: boolean; holder: Seat | null } | null {
   const p = v.phase;
   if (p.name !== 'discard-talon' && p.name !== 'declare' && p.name !== 'takeover' && p.name !== 'fleks') {
     return null;
@@ -1769,8 +1783,8 @@ export function trumpAsideOf(
   const mode = v.contract?.mode ?? st?.mode ?? null;
   // betl a durch trumf nemají — zvolená karta se vrací do ruky hned při deklaraci
   if (mode === 'betl' || mode === 'durch') return null;
+  // obránce ve voleném barvu do ohlášení nezná (view ji skrývá) — rub leží i tak
   const suit = v.contract?.trump ?? st?.trump ?? null;
-  if (suit === null) return null;
   /*
    * Volí vždy forhont. Po převzetí hraje někdo jiný a zvolená karta je zpátky
    * v cizí ruce — ležet na stole už nemá co.
@@ -1791,6 +1805,7 @@ export function trumpAsideOf(
     return { card: mine ? v.revealedTrump : null, suit, faceDown: !mine, holder: declarer };
   }
   // licitovaný: žádná karta se nevynáší, trumf je jen barva ze závazku
+  if (suit === null) return null;
   return { card: null, suit, faceDown: false, holder: null };
 }
 
@@ -1823,7 +1838,7 @@ export function knownTrumpless(v: PlayerView): boolean {
   const p = v.phase;
   const standing =
     p.name === 'discard-talon' || p.name === 'declare' || p.name === 'takeover' ? p.standing : null;
-  return standing !== null && trumplessChoicePending(v.config, standing);
+  return standing !== null && trumplessChoicePending(v.config, standing, v.dealer);
 }
 
 /**

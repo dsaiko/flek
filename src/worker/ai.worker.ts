@@ -3,7 +3,7 @@
  *
  * Žádný stav mezi požadavky. Zrušení: think je synchronní v rámci requestu,
  * proto se `cancel` uplatní zahozením odpovědi na straně match controlleru
- * (requestId) — worker navíc přeskočí požadavky zrušené ještě ve frontě.
+ * (requestId) — viz komentář u `onmessage`.
  */
 
 import { think } from '../lib/ai/think';
