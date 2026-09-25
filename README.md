@@ -9,9 +9,12 @@ still the standard card game of Czech pubs.
 
 The engine is a pure reducer in TypeScript, the two opponents are a heuristic
 plus an Information-Set Monte Carlo tree search running in a Web Worker, and the
-whole thing is a static page with no backend.
+whole thing is a static page with no backend (the only request that leaves the
+page is a GoatCounter hit counter, allowed by name in a strict CSP).
 
-Live site: **[flek.saiko.cz](https://flek.saiko.cz)**
+Live site: **[flek.saiko.cz](https://flek.saiko.cz)** · current version
+**0.0.15**, see [`CHANGELOG.md`](CHANGELOG.md) and the
+[releases](https://github.com/dsaiko/flek/releases)
 
 ![The opening screen: pick between the chosen and the auction variant](docs/screenshot-intro.jpg)
 
@@ -44,9 +47,28 @@ variant kalhoty (the auction rules stop at the fourth) — and a red trump doubl
 the colour contracts again.
 
 The UI speaks Czech, English, German and French, and the money is kept across
-hands in a running account. The question mark at the bottom left opens an
-in-game help with the rules in plain language, links to the official ones, the
-tributes and the card attribution — in all four languages.
+hands in a running account that survives a reload. The question mark at the
+bottom left opens an in-game help with the rules in plain language, links to the
+official ones, the tributes and the card attribution — in all four languages.
+
+Around the table:
+
+- the opponents talk: short remarks in speech bubbles (a polite and a pub set),
+  plus synthesised sounds, both switchable in the settings;
+- **Vše za mnou** ("the rest is mine") appears when nobody can take another
+  trick from you, and **Nic za mnou** in betl when you cannot take one any
+  more; the rest of the hand is then played out card by card. Both are decided
+  from what you can see, never from the other hands;
+- bids and declarations are a compact ladder of tiles (`7`, `100`, `100+7`,
+  betl, durch) that fits on one line in every language;
+- risky discards (an ace or a ten into the talon, breaking a marriage) and a
+  pass that would cost money without a card played ask for confirmation.
+
+**On a phone** the table fills the screen and switches to a portrait layout
+when held upright. Browsers that can go full screen do so from the toolbar
+button; Safari on iPhone cannot, so there the button explains how to add the
+game to the home screen (Share → Add to Home Screen), from where it starts full
+screen without the browser bars. On Android, "Install app" does the same.
 
 ### Rules
 
@@ -75,8 +97,9 @@ What the rules describe and this engine deliberately does not do:
   the players who flekked. The 500x/750x limit is applied, that split is not;
 - **tournament machinery**: premium points, the fourth player sitting a hand
   out, cutting and stacking the cards, and most of the renonces;
-- a player raises at most **one component per turn**, where the rules let them
-  answer every part of the contract in one breath.
+- a player raises **one component per click** and keeps the word while they
+  have something left to say, where the rules let them answer every part of
+  the contract in one breath.
 
 In English, the game is usually called **Marriage**; the [pagat.com description
 of mariáš](https://www.pagat.com/marriage/marias.html) is a good introduction.
@@ -104,6 +127,9 @@ no shortcut, and what they are given is all they have.
 
 ## Run locally
 
+Needs Node 24. The browser tests also need the Playwright browsers once:
+`npx playwright install chromium webkit`.
+
 ```bash
 make setup
 make dev
@@ -112,20 +138,30 @@ make dev
 Checks and build:
 
 ```bash
-make verify        # engine tests, no browser (91 blocks of assertions)
+make verify        # tests without a browser: engine and rules, AI fairness,
+                   # saves, UI logic, card sets, the CSP step, the CI guard
 make build         # typecheck + static build into dist/
-make smoke         # browser tests (Playwright: Chromium + WebKit)
+make smoke         # browser tests (Playwright: Chromium + WebKit, desktop and phone sizes)
 make all           # verify + build + smoke
-make preview
+make preview       # serve dist/ on 127.0.0.1:8083
 make capture       # regenerate the README screenshot
+make cards         # regenerate the modern SVG decks (committed output)
+make help          # every target
 ```
 
 Every pull request into `main` runs `make all` in GitHub Actions
 ([`ci.yml`](.github/workflows/ci.yml)); pushing a `v*` tag runs it again and
-publishes the GitHub release ([`release.yml`](.github/workflows/release.yml)).
+publishes the GitHub release ([`release.yml`](.github/workflows/release.yml))
+with the notes taken from the matching section of `CHANGELOG.md`.
 
-Any deal can be reproduced by adding a seed to the URL: `?seed=10` deals the
-same cards every time, and subsequent hands continue from that seed.
+URL parameters:
+
+- `?seed=10` deals the same cards every time, and subsequent hands continue
+  from that seed;
+- `?lang=cs|en|de|fr` picks the language (otherwise the browser's, then the
+  last one used);
+- `?sazby=flek` plays for the rates of the original FLEK!/RE! instead of the
+  association's.
 
 ## Architecture
 
@@ -134,15 +170,24 @@ src/lib/cards.ts               card encoding, orders, points
 src/lib/rules/types.ts         GameState, Phase, PlayerAction, Contract, Sazby
 src/lib/rules/legal.ts         legalActions() — the single source of legality
 src/lib/rules/engine.ts        apply(state, action) → state, invariants
+src/lib/rules/tricks.ts        who wins a trick, follow / overtake / trump
 src/lib/rules/scoring.ts       settlement, per-component, zero sum
+src/lib/rules/sazby.ts         rates (ČSM and FLEK!), per-variant config
 src/lib/rules/view.ts          view(state, seat) → PlayerView, hides other hands
+src/lib/rules/claim.ts         "vše za mnou" / "nic za mnou", from the view only
 src/lib/ai/heuristics.ts       hand evaluation for every auction decision
+src/lib/ai/determinize.ts      deals consistent with what a seat knows
 src/lib/ai/ismcts.ts           Information-Set MCTS for card play
 src/worker/ai.worker.ts        the AI off the main thread
 src/lib/match/controller.ts    match loop, autosave, AI scheduling
+src/lib/match/persist.ts       save format, deep validation, migrations
 src/lib/ui/table.ts            the table: rendering, animations, popups
+src/lib/ui/tableTalk.ts        what the opponents say, and when
+src/lib/ui/i18n.ts             the four languages
+src/scripts/main.ts            wiring: settings, toolbar, full screen
 src/pages/index.astro          the page and all of its CSS
-scripts/verify.ts              engine tests
+scripts/csp.ts                 replaces 'unsafe-inline' with hashes after the build
+scripts/verify.ts              tests without a browser
 scripts/smoke.ts               browser tests
 ```
 
@@ -162,10 +207,12 @@ and the same redacted object is what a server would send to a remote client.
 The table is sized from the **height of the felt** (`container-type: size` plus
 `cqh` units), because the layout is height-constrained: the opponents, the trick
 and your hand have to fit above each other. The proportions therefore hold in a
-window, in fullscreen and at other aspect ratios. The frame keeps a fixed
-1400/900 ratio, so its width is capped by the window height as well — the whole
-table has to fit on screen without scrolling, and a smoke test checks exactly
-that at 1440x900.
+window, in fullscreen and at other aspect ratios. On a desktop the frame keeps
+a fixed 1400/900 ratio, so its width is capped by the window height as well —
+the whole table has to fit on screen without scrolling, and a smoke test checks
+exactly that at 1440x900. On phones, low landscape screens, in portrait and in
+full screen the frame drops the ratio and fills the screen; the smoke test
+checks five phone and tablet sizes for overlaps.
 
 ## Cards
 
@@ -179,11 +226,17 @@ that at 1440x900.
 
 ## Deployment
 
-The site has its own bucket and distribution: `dist/` is synced to
-`s3://flek.saiko.cz/` and the distribution is invalidated. `make deploy-s3-dryrun`
-shows what would change. Credentials and bucket names live in `Makefile.local`,
-which is deliberately not in the repository. Deployment is a manual `make deploy`;
-tagging a release does not touch the site.
+The site has its own private S3 bucket behind CloudFront. `make deploy` builds,
+uploads `dist/` to `s3://flek.saiko.cz/` (hashed assets first, `index.html`
+last), invalidates the distribution, waits for it, and only then deletes files
+the new build no longer has — so a page still open on the old version keeps its
+scripts. `make deploy-s3-dryrun` shows what would change. Cache headers and the
+security headers come from CloudFront response headers policies.
+
+`Makefile.local` (not in the repository) sets `AWS_PROFILE`, `S3_BUCKET` (must
+be exactly `flek.saiko.cz`) and `CLOUDFRONT_DIST`. Deployment is manual and does
+not run the tests — deploy a commit that passed `make all`; tagging a release
+does not touch the site.
 
 ## License
 
@@ -207,19 +260,33 @@ ISMCTS ve Web Workeru a celé je to statická stránka bez backendu.
 
 Věnováno mému otci, **Josefu Saikovi**, který miloval matematiku.
 
-Živý web: **[flek.saiko.cz](https://flek.saiko.cz)**
+Živý web: **[flek.saiko.cz](https://flek.saiko.cz)** · verze **0.0.15**
+([změny](CHANGELOG.md))
+
+Hra mluví česky, anglicky, německy a francouzsky, konto se přenáší mezi hrami
+a přežije i obnovení stránky. Soupeři u stolu prohodí slovo, v sehrávce se
+nabízí **Vše za mnou** a v betlu **Nic za mnou** (obojí se počítá jen z toho,
+co hráč vidí). Na telefonu se stůl roztáhne přes celou obrazovku a na výšku se
+přeskládá; na iPhonu jde celá obrazovka jen z plochy (Sdílet → Přidat na
+plochu), tlačítko celé obrazovky to v Safari vysvětlí.
+
+Potřebuje Node 24; pro browser testy jednou `npx playwright install chromium webkit`.
 
 ```bash
 make setup
 make dev
 make all           # verify + build + smoke
 make capture       # znovu vytvoří snímek pro README
+make help          # všechny cíle
 ```
 
-Každý pull request do `main` spustí `make all` v GitHub Actions; na web se nasazuje
-ručně přes `make deploy`, tag vydání web nemění.
+Každý pull request do `main` spustí `make all` v GitHub Actions; tag `v*`
+vydá release s textem z `CHANGELOG.md`. Na web se nasazuje ručně přes
+`make deploy` (bez testů — nasazuje se commit, který prošel `make all`), tag
+vydání web nemění.
 
-Rozdání jde zopakovat seedem v URL: `?seed=10` rozdá pokaždé stejné karty.
+Rozdání jde zopakovat seedem v URL: `?seed=10` rozdá pokaždé stejné karty;
+`?lang=en` přepne jazyk, `?sazby=flek` hraje o sazby originálu.
 Živý návrhový dokument je [`docs/marias-design.md`](docs/marias-design.md),
 pozorované chování originálu [`docs/original-notes.md`](docs/original-notes.md).
 
