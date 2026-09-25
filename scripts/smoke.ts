@@ -1490,6 +1490,8 @@ if (!trumpBackInHand) {
   // iPhone v Safari: dotyk a žádné Fullscreen API → tlačítko ukáže návod
   {
     const { ctx, pg } = await pageWith(`Object.defineProperty(Document.prototype, 'fullscreenEnabled', { get: () => false });`);
+    // na telefonu je tlačítko v menu pod ☰ (§48)
+    await pg.click('#btn-menu');
     await pg.click('#btn-fullscreen');
     const shown = await pg.locator('#fs-hint-float').isVisible();
     const fallback = await pg.evaluate(`document.querySelector('#game-section').classList.contains('fs-fallback')`);
@@ -1501,6 +1503,9 @@ if (!trumpBackInHand) {
   // spuštěno z plochy: celá obrazovka už je, tlačítko pryč
   {
     const { ctx, pg } = await pageWith(`Object.defineProperty(Navigator.prototype, 'standalone', { get: () => true });`);
+    // s OTEVŘENÝM menu — v zavřeném je tlačítko neviditelné vždycky a kontrola by nic neověřila
+    await pg.click('#btn-menu');
+    await pg.waitForSelector('#menu-sheet .sheet', { state: 'visible' });
     const hidden = await pg.locator('#btn-fullscreen').isHidden();
     await ctx.close();
     if (!hidden) fail('ve webu spuštěném z plochy tlačítko celé obrazovky zůstalo');
@@ -1579,13 +1584,16 @@ if (!trumpBackInHand) {
             .filter((e) => e && e.textContent.trim() !== '').map((e) => { const r = document.createRange(); r.selectNodeContents(e); return box(r); }),
           seats: [...['#seat-left .seat-id', '#seat-right .seat-id'].map((s) => { const r = document.createRange(); r.selectNodeContents(document.querySelector(s)); return box(r); }),
             ...all('.opp-row .backs')],
-          heads: [one('#seat-left .seat-head'), one('#seat-right .seat-head')],
+          // box sedadla, ne hlavičky: na telefonu je hlavička \`display: contents\` (§48)
+          heads: [one('#seat-left'), one('#seat-right')],
+          status: ['#status'].map((s) => document.querySelector(s))
+            .filter((e) => e && e.textContent.trim() !== '').map((e) => { const r = document.createRange(); r.selectNodeContents(e); return box(r); }),
           backs: all('.opp-row .backs'),
           trick: all('#trick .played'),
           panels: all('#center-float .felt-panel'),
           piles: all('.opp-row .pile img'),
         };
-      })()`)) as { sw: number; vw: number; vh: number; table: Box; hand: Box[]; buttons: Box[]; meta: Box | null; center: Box[]; seats: Box[]; heads: (Box | null)[]; backs: Box[]; trick: Box[]; piles: Box[]; panels: Box[] };
+      })()`)) as { sw: number; vw: number; vh: number; table: Box; hand: Box[]; buttons: Box[]; meta: Box | null; center: Box[]; seats: Box[]; heads: (Box | null)[]; backs: Box[]; trick: Box[]; piles: Box[]; panels: Box[]; status: Box[] };
       await ctx.close();
       const where = `${label}, ${phase}`;
       const problems: string[] = [];
@@ -1603,7 +1611,8 @@ if (!trumpBackInHand) {
       // bez rubů by kontroly níž prošly naprázdno (Math.max prázdného pole je -Infinity)
       if (m.backs.length !== 2) problems.push(`ruby soupeřů: čekal jsem dva řádky, našel ${m.backs.length}`);
       const backsBottom = Math.max(...m.backs.map((b) => b.b));
-      if (portrait && m.center.some((c) => c.t < backsBottom - 1)) problems.push('řádek se stavem není pod ruby soupeřů');
+      // výzva (ne pilulka varianty — ta je na telefonu v horní liště, §48)
+      if (portrait && m.status.some((c) => c.t < backsBottom - 1)) problems.push('řádek se stavem není pod ruby soupeřů');
       // štych leží nad rukou a mimo blok „Ty" a akce; pakl soupeře ve stole a mimo řádek se stavem
       const mine = [...m.hand, ...m.buttons, ...(m.meta === null ? [] : [m.meta])];
       if (m.trick.some((c) => mine.some((b) => overlap(c, b)))) problems.push('karta ve štychu leží přes ruku, akce nebo blok „Ty"');
@@ -1624,6 +1633,53 @@ if (!trumpBackInHand) {
     await mb.close();
   }
   console.log(`Mobil: stůl přes celou výšku, ruka i nabídka v šířce, nic se nesráží (${runs.map((r) => r[0]).join(', ')})`);
+}
+
+/*
+ * Telefon jako aplikace (§48): nahoře jen ☰ a ⚙, „Nová hra", nápověda, jazyky
+ * a celá obrazovka se na telefonu stěhují do spodního menu — a po přechodu
+ * na širokou obrazovku zpátky do lišty. Stěhování (ne kopie) je podstatné:
+ * posluchače a id zůstávají jen jednou.
+ */
+{
+  const mb = await chromium.launch();
+  const ctx = await mb.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+  const pg = await ctx.newPage();
+  await pg.goto(url);
+  await pg.waitForSelector('#intro-panel', { state: 'visible' });
+  const fail = async (msg: string): Promise<never> => {
+    console.error(`CHYBA: menu telefonu — ${msg}`);
+    await mb.close();
+    await browser.close();
+    process.exit(1);
+  };
+  const visible = async (sel: string): Promise<boolean> => pg.locator(sel).isVisible();
+  if (!(await visible('#btn-menu')) || !(await visible('#btn-settings'))) await fail('v horní liště chybí ☰ nebo ⚙');
+  if (await visible('#btn-new')) await fail('„Nová hra" je vidět i se zavřeným menu');
+  await pg.click('#btn-menu');
+  for (const sel of ['#menu-sheet #btn-new', '#menu-sheet #btn-help', '#menu-sheet .langpill button[data-lang="de"]']) {
+    if (!(await visible(sel))) await fail(`v otevřeném menu chybí ${sel}`);
+  }
+  if ((await pg.locator('#btn-new').count()) !== 1) await fail('„Nová hra" je na stránce víckrát — stěhovat, ne kopírovat');
+  // volba jazyka v menu přepne stránku a menu zavře
+  await pg.click('#menu-sheet .langpill button[data-lang="de"]');
+  await pg.waitForTimeout(150);
+  const lang = await pg.evaluate(`document.documentElement.classList.contains('lang-de')`);
+  if (!lang) await fail('vlajka v menu nepřepnula jazyk');
+  if (await visible('#menu-sheet .sheet')) await fail('menu po volbě jazyka zůstalo otevřené');
+  // tlačítko z menu dělá svou práci (nápověda se otevře)
+  await pg.click('#btn-menu');
+  await pg.click('#menu-sheet #btn-help');
+  if (!(await visible('#help-float'))) await fail('nápověda z menu se neotevřela');
+  await pg.keyboard.press('Escape');
+  // široké okno: všechno zpátky v liště, ☰ pryč
+  await pg.setViewportSize({ width: 1400, height: 900 });
+  await pg.waitForTimeout(200);
+  if (await visible('#btn-menu')) await fail('na desktopu zůstalo ☰');
+  const home = await pg.evaluate(`['btn-new', 'btn-help', 'btn-fullscreen', 'lang-list'].every((id) => document.getElementById(id).closest('.game-controls'))`);
+  if (!home || !(await visible('#btn-new'))) await fail('po rozšíření okna se ovládání nevrátilo do lišty');
+  await mb.close();
+  console.log('Menu telefonu: ☰ a ⚙ nahoře, v menu Nová hra, nápověda a jazyky; na desktopu zpátky v liště');
 }
 
 /*

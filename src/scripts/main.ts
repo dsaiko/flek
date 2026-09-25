@@ -389,6 +389,48 @@ document.addEventListener('keydown', (ev) => {
 syncLangFlag();
 
 /*
+ * Telefon jako aplikace (§48): nahoře jen ☰ a ozubené kolo, ostatní ovládání
+ * („Nová hra", nápověda, jazyky, celá obrazovka) je ve spodním menu. Prvky se
+ * do menu STĚHUJÍ, ne kopírují — posluchače i id zůstávají, takže se nic
+ * nezdvojuje a testy je najdou tam, kde zrovna jsou. Media query je táž
+ * jako v CSS (`index.astro`, blok „Telefon").
+ */
+const PHONE_QUERY = '(max-width: 600px) and (orientation: portrait), (max-height: 500px) and (orientation: landscape)';
+const phoneMq = matchMedia(PHONE_QUERY);
+const menuBtn = $('btn-menu');
+const menuSheet = $<HTMLElement>('menu-sheet');
+const sheetBody = $('menu-sheet-body');
+const sheetLangs = $('menu-sheet-langs');
+const movable: { el: HTMLElement; home: HTMLElement; before: Node | null; into: HTMLElement }[] = [
+  ['btn-new', sheetBody], ['btn-help', sheetBody], ['btn-fullscreen', sheetBody], ['lang-list', sheetLangs],
+].map(([id, into]) => {
+  const el = $<HTMLElement>(id as string);
+  return { el, home: el.parentElement as HTMLElement, before: el.nextSibling, into: into as HTMLElement };
+});
+const openMenu = (open: boolean): void => {
+  menuSheet.hidden = !open;
+  menuBtn.setAttribute('aria-expanded', String(open));
+};
+function placeControls(): void {
+  if (phoneMq.matches) {
+    for (const m of movable) m.into.appendChild(m.el);
+  } else {
+    // zpátky v opačném pořadí, ať `before` ukazuje na uzel, který už stojí na místě
+    for (const m of [...movable].reverse()) m.home.insertBefore(m.el, m.before);
+    openMenu(false);
+  }
+}
+placeControls();
+phoneMq.addEventListener('change', placeControls);
+menuBtn.addEventListener('click', () => openMenu(menuSheet.hidden === true));
+// klik na pozadí nebo na položku menu zavře (položka svou akci udělá sama)
+menuSheet.addEventListener('click', (ev) => {
+  const target = ev.target as Element;
+  if (target === menuSheet || target.closest('#menu-sheet-body button, #menu-sheet-langs button')) openMenu(false);
+});
+document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape' && !menuSheet.hidden) openMenu(false); });
+
+/*
  * Celá obrazovka (§46).
  *
  * Spuštěno z plochy (manifest, `display: fullscreen`): hra už celou obrazovku
@@ -440,6 +482,7 @@ function updateControlLabels(): void {
     el.setAttribute('aria-label', label);
     if (withTitle) el.title = label;
   };
+  name('btn-menu', t('menu'));
   name('btn-help', t('help'));
   name('btn-settings', t('settings'));
   name('btn-fullscreen', t('fullscreen'));
