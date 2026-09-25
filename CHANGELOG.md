@@ -4,6 +4,36 @@ Poznámky k vydání. Sekci pro daný tag z tohohle souboru vytáhne CI a použi
 jako text releasu na GitHubu (`.github/workflows/release.yml`) — nadpis sekce se
 stane názvem vydání. Nová verze = **přidat sekci sem** a až pak tagovat.
 
+## v0.0.16 — po revizi
+
+Celková kontrola kódu proti pravidlům ČSM a hledání chyb. Samotná sehrávka, zúčtování, fleky
+i licitace obstály; opravilo se tohle:
+
+### Trumfy až po ohlášení
+
+Ve voleném mariáši obránci znali barvu trumfu už ve chvíli, kdy se rozhodovali, jestli
+sebrat talon na betl nebo durch. Podle pravidel (čl. VII/1) ji aktér ohlásí až poté, co obrana
+hru schválí. Soupeři to nevyužívali, ale znát to neměli — teď barvu uvidí až v závazku.
+
+### Dvojklik a varování u odhozu
+
+- Dvojklik na **Odhodit** zmáčkl i tlačítko, které se hned potom objevilo na stejném místě —
+  ve voleném to nechtěně ohlásilo betl. Druhé kliknutí se teď zahodí.
+- Když vyskočilo varování (eso nebo desítka do talonu) a mezitím jsi v ruce změnil výběr,
+  potvrzení odhodilo původní dvojici. Pod otevřeným dotazem se teď na ruku kliknout nedá.
+- Dotazy na stole se po přepnutí jazyka přeloží.
+- Dlaždice licitace se během rozdávání nedají zmáčknout (tlačítka už to uměla).
+
+### Soupeři hlásí
+
+Soupeř občas zahrál krále nebo svrška bez hlášky, kterou držel. Teď hlásí vždycky, když může.
+
+### Drobnosti
+
+- Tlačítka nápovědy, nastavení a celé obrazovky mají popisky v jazyce hry.
+- Poškozený uložený stav, ze kterého nejde hrát dál, se místo zamrzlého stolu zahodí.
+- Se sazbami originálu (`?sazby=flek`) se prohrané kilo počítá tak, jak ho počítal RE!.
+
 ## v0.0.15 — přes celou obrazovku
 
 ### Flek! na ploše telefonu
