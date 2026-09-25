@@ -1704,16 +1704,24 @@ if (!trumpBackInHand) {
     await pg.waitForTimeout(300);
     const r = (await pg.evaluate(`(() => {
       const panel = document.querySelector('#center-float .felt-panel');
-      panel.scrollTop = panel.scrollHeight;
       const btn = [...panel.querySelectorAll('.felt-actions button')].pop();
+      // telefon (§48): tlačítka jsou přišpendlená dole — vidět i BEZ rolování
+      const b0 = btn.getBoundingClientRect(), t0 = document.querySelector('#table').getBoundingClientRect();
+      const pinned = b0.top >= t0.top - 1 && b0.bottom <= t0.bottom + 1;
+      panel.scrollTop = panel.scrollHeight;
       const b = btn.getBoundingClientRect(), t = document.querySelector('#table').getBoundingClientRect();
       const hit = document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2);
       return { inside: b.top >= t.top - 1 && b.bottom <= t.bottom + 1, hit: hit === btn || btn.contains(hit),
-        label: btn.textContent.trim(), scrolls: panel.scrollHeight > panel.clientHeight };
-    })()`)) as { inside: boolean; hit: boolean; label: string; scrolls: boolean };
+        label: btn.textContent.trim(), scrolls: panel.scrollHeight > panel.clientHeight, pinned };
+    })()`)) as { inside: boolean; hit: boolean; label: string; scrolls: boolean; pinned: boolean };
     await ctx.close();
     if (!r.inside || !r.hit) {
       console.error(`CHYBA: zúčtování ${w}×${h} — „${r.label}" ${r.inside ? 'nebere klik' : 'není ani po doscrollování vidět'}`);
+      await lb.close();
+      process.exit(1);
+    }
+    if (!r.pinned) {
+      console.error(`CHYBA: zúčtování ${w}×${h} — „${r.label}" je vidět až po doscrollování (tlačítka mají být přišpendlená dole)`);
       await lb.close();
       process.exit(1);
     }
@@ -1724,7 +1732,7 @@ if (!trumpBackInHand) {
     }
   }
   await lb.close();
-  console.log('Zúčtování na nízkém displeji: panel se dá doscrollovat a „Další hra" je vidět a bere klik (812×220, 360×640)');
+  console.log('Zúčtování na nízkém displeji: tlačítka jsou vidět bez rolování, panel se dá doscrollovat a „Další hra" bere klik (812×220, 360×640)');
 }
 
 /**

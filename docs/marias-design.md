@@ -2549,3 +2549,15 @@ Negativní kontrola: bez posluchače změny media query smoke hlásí, že se ov
 **Co zůstává:** skutečný iPhone (výřez, indikátor domů, `backdrop-filter`) ověří jen uživatel.
 Prostřední část stolu je při volbě trumfu prázdná — předloha tam má čárkované místo „TRUMF ?",
 to zatím nemáme.
+
+**Dodatek po zkoušce na iPhonu (v0.0.18).** Uživatel poslal dva snímky na šířku:
+- *Karty v ruce strašně u sebe.* Ruka byla uprostřed a nesměla do bloku „Ty" vlevo dole, takže
+  dostala ~290 px a pevné překrytí z úzkého telefonu na výšku (krok 0,32 karty). Na šířku má teď
+  ruka vlastní pruh vedle „Ty" a paklu (`--hand-avail`), velikost karty dává výška a rozestup se
+  dopočítá z šířky pruhu — nejvýš 0,6, nejmíň 0,2 karty.
+- *Zúčtování na šířku nefunguje* (tlačítka pod hranou) a *panely ať jsou přes celé okno*. Panely
+  (zúčtování, dotazy a varování, nastavení, nápověda, průběh hry) jsou na telefonu obrazovka pod
+  horní lištou: obsah se roluje a tlačítka jsou `position: sticky` dole. Smoke to hlídá bez
+  rolování (812×220 i 360×640); negativní kontrola: bez `sticky` hlásí, že „Další hra" je vidět až
+  po doscrollování.
+- Blok „Ty" a karta trumfu ležely pod zaobleným rohem — spodní řada teď respektuje `safe-area`.

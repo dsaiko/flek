@@ -1384,7 +1384,9 @@ Licence: Josef SAIKO</pre>
     .me-meta .seat-name { font-size: 15px; }
     #ledger-me { order: 3; margin-left: auto; font-size: 14px; color: rgba(246,247,249,.75); font-variant-numeric: tabular-nums; }
     #contract-me:not(:empty) { order: 2; margin: 0; font-size: 12px; align-self: center; }
-    .me-row { bottom: calc(var(--safe-bottom) * .5); }
+    /* spodní řada (ruka, „Ty", pakl) mimo výřez displeje a zaoblené rohy */
+    .me-row { bottom: calc(var(--safe-bottom) * .5); left: var(--safe-left); right: var(--safe-right); }
+    #trump-aside { right: calc(var(--safe-right) + 4px); }
     /* vějíř klesá ke krajům (až o 1,4 × 5,5² px) — spodek ruky nesmí za hranu */
     #hand { padding-bottom: 56px; min-height: calc(var(--hand-w) * 1.6); }
     @media (max-height: 500px) and (orientation: landscape) { #hand { padding-bottom: 44px; } }
@@ -1400,16 +1402,61 @@ Licence: Josef SAIKO</pre>
     .felt-sub, .felt-panel .felt-others { color: rgba(246,247,249,.65); }
     .felt-actions { border-top-color: rgba(255,255,255,.12); }
     .felt-actions .action-btn { max-width: none; }
-    #center-float { padding: calc(var(--safe-top) + var(--bar-h) + 6px) var(--safe-right) calc(10px + var(--safe-bottom)) var(--safe-left); }
-    #center-float .felt-panel:not(.warn) { margin: auto 0 0; width: 100%; max-width: 520px; margin-inline: auto; }
-    #settings-float, #help-float, #fs-hint-float {
-      align-items: flex-end; padding: calc(var(--safe-top) + 8px) 0 0; background: rgba(4,10,18,.55);
+    /*
+     * Panely (zúčtování, dotazy, nastavení, nápověda) nejsou na telefonu okna
+     * nad stolem, ale obrazovka pod horní lištou. Obsah se roluje, tlačítka
+     * jsou přišpendlená dole — vidět jsou vždycky, i na šířku, kde se panel
+     * do 375 px nevejde. Obsah drží čitelný sloupec, na šířku uprostřed.
+     */
+    #center-float, #settings-float, #help-float, #fs-hint-float {
+      padding: calc(var(--safe-top) + var(--bar-h) + 6px) 0 0; align-items: stretch; justify-content: stretch;
+      background: none;
     }
-    #settings-float .felt-panel, #help-float .felt-panel, #fs-hint-float .felt-panel {
-      width: min(520px, 100%); max-width: none; min-width: 0; margin: 0 auto;
-      border-radius: 22px 22px 0 0; border-bottom: 0; padding-bottom: calc(14px + var(--safe-bottom));
+    #center-float.open { pointer-events: auto; }
+    #center-float .felt-panel, #settings-float .felt-panel, #help-float .felt-panel, #fs-hint-float .felt-panel {
+      width: 100%; max-width: none; min-width: 0; height: 100%; max-height: none; margin: 0; box-sizing: border-box;
+      display: flex; flex-direction: column; overflow-y: auto; overscroll-behavior: contain;
+      border: 0; border-top: 1px solid rgba(255,255,255,.1); border-radius: 22px 22px 0 0;
+      background: #152536; box-shadow: 0 -12px 40px rgba(0,0,0,.45);
+      padding: 20px max(calc(var(--safe-right) + 8px), calc((100% - 560px) / 2)) 0
+        max(calc(var(--safe-left) + 8px), calc((100% - 560px) / 2));
+      animation: sheet-rise .22s cubic-bezier(.2,.8,.3,1);
     }
-    .help-panel { max-height: 100%; }
+    #center-float .felt-panel.warn { border-top-color: rgba(225,182,0,.6); }
+    /* průběh hry: stejná obrazovka, štychy se rolují, tlačítka dole */
+    #center-float .replay {
+      width: 100%; height: 100%; max-height: none; margin: 0; box-sizing: border-box;
+      display: flex; flex-direction: column; overflow-y: auto; overscroll-behavior: contain; pointer-events: auto;
+      background: #152536; border-top: 1px solid rgba(255,255,255,.1); border-radius: 22px 22px 0 0;
+      box-shadow: 0 -12px 40px rgba(0,0,0,.45);
+      padding: 16px calc(var(--safe-right) + 8px) 0 calc(var(--safe-left) + 8px);
+    }
+    #center-float .replay .felt-actions {
+      position: sticky; bottom: 0; margin-top: auto; flex: none; border-top: 1px solid rgba(255,255,255,.12);
+      background: #152536; padding: 12px max(0px, calc((100% - 560px) / 2)) calc(12px + var(--safe-bottom));
+    }
+    #center-float .replay .felt-actions .action-btn { min-height: 52px; }
+    @keyframes sheet-rise { from { transform: translateY(24px); opacity: 0; } }
+    @media (prefers-reduced-motion: reduce) {
+      #center-float .felt-panel, #settings-float .felt-panel, #help-float .felt-panel, #fs-hint-float .felt-panel { animation: none; }
+    }
+    /* dotaz nebo varování: zpráva uprostřed, tlačítka dole */
+    #center-float .felt-panel.warn { justify-content: center; }
+    #center-float .felt-panel.warn .warn-msg { font-size: 18px; line-height: 1.4; margin: 0 0 10px; }
+    #center-float .felt-panel.warn > :first-child { margin-top: auto; }
+    .felt-panel .felt-actions {
+      position: sticky; bottom: 0; z-index: 1; margin-top: auto; flex: none;
+      background: #152536; padding: 12px 0 calc(12px + var(--safe-bottom));
+    }
+    .felt-panel .felt-actions .action-btn { min-height: 52px; padding: 0 12px; line-height: 1.2; }
+    /* zúčtování na výšku: obsah uprostřed volné plochy nad tlačítky, ne nalepený nahoře */
+    #center-float .felt-panel:not(.warn) > :first-child { margin-top: auto; }
+    /* nápověda se roluje celá, ne jen text uvnitř — tlačítko „Hotovo" zůstane dole */
+    .help-panel .help-body { overflow: visible; min-height: auto; flex: none; font-size: 15px; }
+    .help-x { top: 12px; right: max(12px, calc((100% - 560px) / 2 - 36px)); }
+    /* zúčtování: větší řádky, jako obrazovka výsledku */
+    #center-float .felt-panel h3 { font-size: 22px; }
+    #center-float .felt-panel td { padding: 6px 4px; font-size: 16px; }
     .set-row select, .set-row input { min-height: 40px; font-size: 15px; }
   }
 
@@ -1496,8 +1543,19 @@ Licence: Josef SAIKO</pre>
     #table {
       --bar-h: 44px;
       --card-w: clamp(44px, 15cqh, 72px);
-      --hand-w: min(20cqh, 70px, calc((100cqw - 340px) / (1.9 + .32 * (var(--hand-n, 12) - 1))));
-      --hand-overlap: -.34;
+      /*
+       * Ruka má vlastní pruh vedle bloku „Ty" (vlevo) a paklu (vpravo), takže
+       * se nemusí mačkat do středu mezi ně. Velikost karty dává výška, rozestup
+       * se dopočítá z šířky pruhu: nejvýš 0,6 karty (vějíř je čitelný), nejmíň
+       * 0,2 karty — a teprve když ani to nestačí, zmenší se karta.
+       */
+      --hand-avail: calc(100cqw - 272px);
+      --hand-w: min(23cqh, 76px, calc(var(--hand-avail) / (1.4 + .2 * (var(--hand-n, 12) - 1))));
+    }
+    #hand { padding-left: 216px; padding-right: 56px; }
+    .card-btn {
+      margin: 0 max(calc(var(--hand-w) * -.4), min(calc(var(--hand-w) * -.2),
+        calc(((var(--hand-avail) - var(--hand-w) * 1.4) / max(var(--hand-n, 12) - 1, 1) - var(--hand-w)) / 2)));
     }
     .game-section { --bar-h: 44px; }
     #btn-menu, .game-controls .ctl-btn.icon { width: 40px; height: 40px; }
@@ -1508,7 +1566,7 @@ Licence: Josef SAIKO</pre>
     /* v toku (ne absolutně): pilulka varianty uvnitř se musí dál měřit od stolu */
     .center-top { margin: 2px 196px 0; gap: 0; }
     #status.me-turn { font-size: 17px; }
-    #trick .played { top: 50%; }
+    #trick .played { top: 45%; }
     #contract-center { top: 34%; }
     .me-meta {
       left: 0; right: auto; bottom: calc(10px + var(--safe-bottom) * .5);
