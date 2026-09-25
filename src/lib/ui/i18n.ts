@@ -98,6 +98,8 @@ const STRINGS = {
   history: { cs: '1860 (historické)', en: '1860 (historical)', de: '1860 (historisch)', fr: '1860 (historiques)' },
   fullscreen: { cs: 'Celá obrazovka', en: 'Fullscreen', de: 'Vollbild', fr: 'Plein écran' },
   help: { cs: 'Nápověda', en: 'Help', de: 'Hilfe', fr: 'Aide' },
+  menu: { cs: 'Menu', en: 'Menu', de: 'Menü', fr: 'Menu' },
+  yourTurnEyebrow: { cs: 'Tvůj tah', en: 'Your move', de: 'Du bist dran', fr: 'À toi' },
   close: { cs: 'Zavřít', en: 'Close', de: 'Schließen', fr: 'Fermer' },
   language: { cs: 'Jazyk', en: 'Language', de: 'Sprache', fr: 'Langue' },
   opponent: { cs: 'Protihráč', en: 'Opponent', de: 'Gegner', fr: 'Adversaire' },

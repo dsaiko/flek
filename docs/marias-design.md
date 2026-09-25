@@ -2507,3 +2507,45 @@ ověřen spuštěním (sondy mimo repo) a každá oprava má test, který s vrá
 - Watchdog testy ve `verify.ts` spí ~15 s reálného času a pomocník „akce hráče na tahu" je
   v souboru desetkrát; úklid testů je samostatná práce.
 
+
+## 48. Telefon jako aplikace (2026-09-25)
+
+Uživatel: *„mobilní design není hezký … potřebujeme mobile-first přístup, desktop nech, jak je"* —
+s předlohou z Claude Design („Kolo 5 — Mobil", úvod a stůl na výšku i na šířku) a volnou rukou:
+*„aby to vypadalo jako mobilní aplikace, ne jen zmenšenina desktopu"*.
+
+**Kde platí.** Jen na telefonu: `(max-width: 600px) and (orientation: portrait), (max-height: 500px)
+and (orientation: landscape)`. Tablet na výšku zůstává u rozložení z §44, desktop beze změny
+(snímek 1440×900 před a po se liší jen náhodně losovanými kartami úvodu). Stejnou query čte
+`main.ts` (`PHONE_QUERY`). Celý mobilní vzhled je jeden blok na konci stylů — nic nad ním se neměnilo.
+
+**Co se změnilo:**
+- **Sukno od okraje k okraji**, bez rámu a zlatého lemu; výřez displeje a indikátor domů přes
+  `env(safe-area-inset-*)`.
+- **Lišta nahoře jako v aplikaci:** ☰ vlevo, ⚙ vpravo, varianta jako pilulka uprostřed
+  (`#status-eyebrow`). Spodní lišta zmizela. „Nová hra / Ukončit hru", nápověda, jazyky
+  a celá obrazovka jsou ve **spodním menu** (`#menu-sheet`). Prvky se do něj **stěhují, ne
+  kopírují** — posluchače i id zůstávají jednou; při rozšíření okna se vrátí do lišty.
+- **Soupeři jako karty:** avatar, jméno a konto, dva naznačené ruby a počet karet v kolečku
+  (CSS čítač — počítá i skryté ruby, takže nepotřebuje JS). Na výšku vedle sebe nahoře, na šířku
+  po stranách. Pakl a vystavené hlášky pod kartou, bublina přes ně.
+- **Výzva uprostřed:** když je hráč na tahu, nad textem stojí „TVŮJ TAH" (`data-turn` z `table.ts`,
+  desktop ho nečte) a text je velký. Tlačítka jsou velká (48 px) v palcové zóně; vedlejší jsou
+  obrysová, hlavní zlaté.
+- **Řádek „Ty"** přes celou šířku nad vějířem (jméno, závazek, role a konto vpravo); na šířku jako
+  pilulka vlevo dole. Vějíř je větší a má pod sebou místo na pokles krajních karet.
+- **Úvod:** vějíř čtyř karet nahoře, titulek, varianty jako řádky se zaškrtávátkem, „Rozdat" přes
+  celou šířku dole; na šířku ve dvou sloupcích. Nízký telefon (≤ 700 px) úvod zhustí.
+- **Panely tmavé**, zúčtování a nastavení vyjíždí zespodu.
+
+**Testy (smoke):** nový blok „Menu telefonu" — nahoře jen ☰ a ⚙, „Nová hra" se zavřeným menu
+není vidět, v otevřeném menu je „Nová hra", nápověda i vlajky, „Nová hra" je na stránce jednou,
+vlajka přepne jazyk a menu zavře, nápověda z menu se otevře, po rozšíření okna je všechno zpátky
+v liště. Mobilní kontroly (§44) měří box sedadla místo hlavičky (ta je teď `display: contents`)
+a „stav pod ruby" jen u výzvy — pilulka varianty je v horní liště. Kontrola „z plochy bez tlačítka"
+otevírá menu, jinak by prošla naprázdno (v zavřeném menu je tlačítko neviditelné vždycky).
+Negativní kontrola: bez posluchače změny media query smoke hlásí, že se ovládání nevrátilo do lišty.
+
+**Co zůstává:** skutečný iPhone (výřez, indikátor domů, `backdrop-filter`) ověří jen uživatel.
+Prostřední část stolu je při volbě trumfu prázdná — předloha tam má čárkované místo „TRUMF ?",
+to zatím nemáme.

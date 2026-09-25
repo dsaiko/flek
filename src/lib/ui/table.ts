@@ -1216,6 +1216,8 @@ export class TableUI {
     }
     const el = $(this.root, '#status');
     const iAct = legal.some((a) => a.type !== 'deal');
+    // nadpis nad výzvou — ukazuje ho jen telefon (§48), desktop ho nečte
+    el.dataset.turn = iAct && v.phase.name !== 'idle' && v.phase.name !== 'scored' ? t('yourTurnEyebrow') : '';
     if (v.phase.name === 'idle') {
       el.textContent = '';
     } else if (v.phase.name === 'scored') {

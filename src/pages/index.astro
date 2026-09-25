@@ -305,6 +305,10 @@ Licence: Josef SAIKO</pre>
       </div>
 
       <div class="game-controls">
+        <!-- telefon (§48): lišta nahoře jako v aplikaci, zbytek ovládání v menu -->
+        <button id="btn-menu" class="ctl-btn icon" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="menu-sheet">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+        </button>
         <div class="ctl-left">
           <button id="btn-help" class="ctl-btn icon" title="Nápověda / Help" aria-label="Nápověda / Help">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
@@ -312,6 +316,7 @@ Licence: Josef SAIKO</pre>
               <path d="M9.2 9.3a2.9 2.9 0 1 1 3.6 2.8c-.5.15-.8.6-.8 1.1v.7" stroke-linecap="round"/>
               <circle cx="12" cy="17" r="1.05" fill="currentColor" stroke="none"/>
             </svg>
+            <span class="ctl-label"><span class="cs">Nápověda a pravidla</span><span class="en">Help and rules</span><span class="de">Hilfe und Regeln</span><span class="fr">Aide et règles</span></span>
           </button>
         </div>
         <div class="ctl-right">
@@ -350,9 +355,21 @@ Licence: Josef SAIKO</pre>
           </div>
           <button id="btn-fullscreen" class="ctl-btn icon" title="Fullscreen" aria-label="Fullscreen">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15"/></svg>
+            <span class="ctl-label"><span class="cs">Celá obrazovka</span><span class="en">Full screen</span><span class="de">Vollbild</span><span class="fr">Plein écran</span></span>
           </button>
         </div>
       </div>
+      </div>
+      <!-- menu telefonu (§48): main.ts sem na telefonu přestěhuje „Nová hra",
+           nápovědu, jazyky a celou obrazovku; na desktopu zůstává prázdné -->
+      <div id="menu-sheet" hidden>
+        <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="menu-sheet-title">
+          <div class="sheet-grip"></div>
+          <div class="sheet-title" id="menu-sheet-title"><span class="cs">Menu</span><span class="en">Menu</span><span class="de">Menü</span><span class="fr">Menu</span></div>
+          <div class="sheet-body" id="menu-sheet-body"></div>
+          <div class="sheet-caption"><span class="cs">Jazyk</span><span class="en">Language</span><span class="de">Sprache</span><span class="fr">Langue</span></div>
+          <div class="sheet-langs" id="menu-sheet-langs"></div>
+        </div>
       </div>
     </section>
 
@@ -1196,5 +1213,342 @@ Licence: Josef SAIKO</pre>
     .center-top { order: 3; flex-basis: 100%; }
     .backs .back { width: calc(var(--card-w) * .5); margin-right: calc(var(--card-w) * -.34); }
     #seat-right .backs .back { margin-left: calc(var(--card-w) * -.34); }
+  }
+
+  /* ══ Telefon jako aplikace (§48) ═══════════════════════════════════════════
+     Desktop a tablet zůstávají, jak jsou; tenhle blok platí jen pro telefon
+     (na výšku úzký, na šířku nízký) a všechno nad ním přebíjí. Předloha:
+     Claude Design „Kolo 5 — Mobil": sukno od okraje k okraji, nahoře lišta
+     jako v aplikaci (☰ · varianta · ⚙), soupeři jako karty, výzva uprostřed,
+     ovládání v palcové zóně. Stejnou media query čte main.ts (PHONE_QUERY). */
+  #btn-menu, #menu-sheet, .ctl-label { display: none; }
+
+  @media (max-width: 600px) and (orientation: portrait), (max-height: 500px) and (orientation: landscape) {
+    body { background: #0e2a45; }
+    .game-section, .game-section:fullscreen, .game-section.fs-fallback {
+      --safe-top: max(env(safe-area-inset-top), 10px);
+      --safe-bottom: env(safe-area-inset-bottom);
+      --safe-left: max(env(safe-area-inset-left), 12px);
+      --safe-right: max(env(safe-area-inset-right), 12px);
+      --bar-h: 48px;
+      padding: 0; background: #0e2a45;
+    }
+    .table-frame, .game-section:fullscreen .table-frame, .game-section.fs-fallback .table-frame {
+      padding: 0; border-radius: 0; background: none; box-shadow: none; position: relative;
+    }
+    #table {
+      border-radius: 0; box-shadow: none;
+      background: radial-gradient(ellipse 130% 70% at 50% 42%, #2a6496 0%, #1b4a74 50%, #0e2a45 100%);
+      padding: calc(var(--safe-top) + var(--bar-h) + 10px) var(--safe-right) 0 var(--safe-left);
+      font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+    #intro, #help-float, #settings-float, #fs-hint-float { border-radius: 0; }
+
+    /* ── horní lišta: ☰ vlevo, ⚙ vpravo, varianta jako pilulka uprostřed ── */
+    .game-controls {
+      position: absolute; z-index: 30; top: var(--safe-top); left: var(--safe-left); right: var(--safe-right);
+      height: var(--bar-h); min-height: 0; padding: 0; gap: 0;
+      display: flex; align-items: center; justify-content: space-between; pointer-events: none;
+    }
+    .game-controls button { pointer-events: auto; }
+    .ctl-left, .ctl-right { display: contents; }
+    .langmenu { display: none; }
+    #btn-menu, .game-controls .ctl-btn.icon {
+      display: grid; place-items: center; width: 44px; height: 44px; padding: 0;
+      border-radius: 9999px; color: #f6f7f9;
+      background: rgba(8,22,38,.5); border: 1px solid rgba(255,255,255,.08);
+      -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+    }
+    #btn-settings { margin-left: auto; }
+    #status-eyebrow {
+      position: absolute; z-index: 7; left: 50%; transform: translateX(-50%);
+      top: calc(var(--safe-top) + (var(--bar-h) - 34px) / 2);
+      height: 34px; box-sizing: border-box; padding: 0 16px; min-height: 0;
+      display: flex; align-items: center; white-space: nowrap;
+      border-radius: 9999px; background: rgba(8,22,38,.5); border: 1px solid rgba(225,182,0,.35);
+      font-size: 12px; font-weight: 700; letter-spacing: .1em;
+    }
+    #status-eyebrow:empty { display: none; }
+
+    /* ── menu: spodní panel ── */
+    #menu-sheet {
+      display: block; position: fixed; inset: 0; z-index: 60;
+      background: rgba(4,10,18,.55); animation: sheet-fade .16s ease-out;
+    }
+    #menu-sheet[hidden] { display: none; }
+    #menu-sheet .sheet {
+      position: absolute; left: 50%; bottom: 0; transform: translateX(-50%);
+      width: min(480px, 100%); box-sizing: border-box; max-height: 100%; overflow-y: auto;
+      background: #1c2127; color: #f6f7f9; border-radius: 22px 22px 0 0;
+      padding: 8px 16px calc(16px + var(--safe-bottom));
+      box-shadow: 0 -12px 40px rgba(0,0,0,.5);
+      display: flex; flex-direction: column; gap: 8px;
+      animation: sheet-up .22s cubic-bezier(.2,.8,.3,1);
+    }
+    @keyframes sheet-up { from { transform: translate(-50%, 40%); opacity: 0; } }
+    @keyframes sheet-fade { from { opacity: 0; } }
+    .sheet-grip { width: 38px; height: 5px; border-radius: 3px; background: rgba(255,255,255,.22); margin: 2px auto 4px; }
+    .sheet-title { font-size: 13px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: #8f99a8; text-align: center; }
+    .sheet-caption { font-size: 12px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: #8f99a8; margin: 6px 4px 0; }
+    .sheet-body { display: flex; flex-direction: column; gap: 8px; }
+    #menu-sheet .ctl-btn {
+      display: flex; align-items: center; gap: 14px; width: 100%; height: 54px; box-sizing: border-box;
+      padding: 0 16px; border-radius: 14px; border: 0;
+      background: rgba(255,255,255,.06); color: #f6f7f9; font-size: 16px; font-weight: 600; text-align: left;
+    }
+    #menu-sheet .ctl-btn[hidden] { display: none; }
+    #menu-sheet .ctl-btn svg { flex: none; width: 22px; height: 22px; }
+    #menu-sheet .ctl-btn.primary {
+      justify-content: center; background: var(--gold); color: #1c2127; border: 0; font-size: 17px; font-weight: 700;
+    }
+    #menu-sheet .ctl-label { display: inline; }
+    #menu-sheet .langpill, #menu-sheet .langpill[hidden] {
+      position: static; display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;
+      background: none; border: 0; box-shadow: none; padding: 0;
+    }
+    #menu-sheet .langpill button {
+      width: auto; height: 50px; border-radius: 14px; opacity: .55; background: rgba(255,255,255,.06);
+    }
+    #menu-sheet .langpill button.on { opacity: 1; background: rgba(225,182,0,.16); box-shadow: inset 0 0 0 2px var(--gold); }
+
+    /* ── herní tlačítka: velká, do palce ── */
+    #actions { gap: 10px; padding-inline: 0; }
+    .action-btn {
+      min-height: 48px; box-sizing: border-box; border-radius: 14px; font-size: 16px; font-weight: 700;
+      padding: 0 22px; box-shadow: none;
+    }
+    #actions .action-btn:not(.primary), .felt-actions .action-btn:not(.primary) {
+      background: rgba(8,22,38,.45); color: #f6f7f9; border: 1px solid rgba(246,247,249,.35);
+    }
+    .action-btn.primary { box-shadow: 0 8px 20px rgba(225,182,0,.22); }
+    .bid-chip { min-height: 46px; font-size: 16px; padding: 0 12px; }
+    .bid-chip.mode { font-size: 14px; }
+    .action-note { font-size: 13px; text-align: center; }
+
+    /* ── výzva uprostřed: kdo je na tahu a co má udělat ── */
+    #status { font-size: 15px; font-weight: 600; color: rgba(246,247,249,.78); text-align: center; line-height: 1.3; }
+    #status:not(:empty) { background: none; padding: 0; }
+    #status.me-turn { font-size: 21px; font-weight: 700; color: #f6f7f9; text-wrap: balance; }
+    #status.me-turn:not([data-turn=""])::before {
+      content: attr(data-turn); display: block; margin-bottom: 4px;
+      font-size: 12px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; color: var(--gold);
+    }
+
+    /* ── soupeři jako karty: avatar · jméno a konto · ruby s počtem ── */
+    .seatbox, #seat-right {
+      display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; column-gap: 8px;
+      padding: 10px; border-radius: 16px; text-align: left; min-width: 0;
+      background: rgba(8,22,38,.5); border: 1px solid rgba(255,255,255,.08);
+    }
+    .seatbox .seat-head, #seat-right .seat-head { display: contents; }
+    .seatbox .avatar { grid-column: 1; grid-row: 1; width: 34px; height: 34px; font-size: 15px; font-weight: 700; }
+    .seatbox .seat-id, #seat-right .seat-id { grid-column: 2; grid-row: 1; align-items: flex-start; min-width: 0; }
+    .seatbox .seat-name { font-size: 15px; }
+    .seatbox .seat-sub { font-size: 12px; line-height: 1.25; color: rgba(246,247,249,.65); white-space: normal;
+      font-variant-numeric: tabular-nums; }
+    .seatbox .seat-contract { grid-column: 1 / -1; grid-row: 2; justify-self: start; min-height: 0; margin: 8px 0 0; font-size: 13px; }
+    .seatbox .seat-contract:empty { display: none; }
+    /* ruby: dva naznačené + počet v kolečku (počítá CSS čítač, i skryté ruby se počítají) */
+    .seatbox .backs, #seat-right .backs {
+      grid-column: 3; grid-row: 1; position: relative; display: block;
+      width: 40px; height: 44px; min-height: 0; padding: 0; counter-reset: backs;
+    }
+    .seatbox .backs .back, #seat-right .backs .back {
+      position: absolute; left: 12px; top: 1px; width: 27px; margin: 0; border-radius: 3px;
+      counter-increment: backs; box-shadow: 0 1px 4px rgba(0,0,0,.45);
+    }
+    .seatbox .backs .back:first-child { left: 0; top: 4px; transform: rotate(-10deg); }
+    .seatbox .backs .back:nth-child(n+3) { visibility: hidden; }
+    .seatbox .backs:not(:empty)::after {
+      content: counter(backs); position: absolute; right: -5px; bottom: -5px;
+      min-width: 20px; height: 20px; box-sizing: border-box; padding: 0 5px; border-radius: 9999px;
+      display: grid; place-items: center; background: #1c2127; border: 1px solid rgba(255,255,255,.22);
+      color: #f6f7f9; font-size: 11px; font-weight: 700;
+    }
+    /* pakl a vystavené hlášky pod kartou soupeře, bublina přes ně */
+    .seatbox .pile { position: absolute; top: calc(100% + 6px); margin: 0; min-width: 0; }
+    #pile-left { left: 4px; right: auto; }
+    #pile-right { right: 4px; left: auto; }
+    .seatbox .melds { position: absolute; top: calc(100% + 6px); margin: 0; min-height: 0; z-index: 2; }
+    #melds-left { left: auto; right: 4px; justify-content: flex-end; }
+    #melds-right { right: auto; left: 4px; justify-content: flex-start; }
+    .seatbox .bubble { top: calc(100% + 6px); margin-top: 0; max-width: 150px; font-size: 13px; }
+
+    /* ── ty: řádek nad vějířem ── */
+    .me-meta {
+      left: 4px; right: 4px; gap: 10px; margin: 0; z-index: 3;
+      color: rgba(246,247,249,.75); font-size: 14px;
+    }
+    .me-meta .avatar.me { width: 32px; height: 32px; font-weight: 700; }
+    .me-meta .seat-id { flex-direction: row; align-items: center; gap: 8px; flex: 1; min-width: 0; }
+    .me-meta .seat-name { font-size: 15px; }
+    #ledger-me { order: 3; margin-left: auto; font-size: 14px; color: rgba(246,247,249,.75); font-variant-numeric: tabular-nums; }
+    #contract-me:not(:empty) { order: 2; margin: 0; font-size: 12px; align-self: center; }
+    .me-row { bottom: calc(var(--safe-bottom) * .5); }
+    /* vějíř klesá ke krajům (až o 1,4 × 5,5² px) — spodek ruky nesmí za hranu */
+    #hand { padding-bottom: 56px; min-height: calc(var(--hand-w) * 1.6); }
+    @media (max-height: 500px) and (orientation: landscape) { #hand { padding-bottom: 44px; } }
+    /* panel přes stůl: řádek „Ty" by vykukoval po stranách */
+    #center-float.open ~ .me-row .me-meta { visibility: hidden; }
+
+    /* ── panely: tmavé, zúčtování a nastavení jako panel zespodu ── */
+    .felt-panel {
+      background: #152536; border: 1px solid rgba(255,255,255,.12); border-radius: 20px; color: #f6f7f9;
+      box-shadow: 0 16px 40px rgba(0,0,0,.45);
+    }
+    .felt-panel.warn { border: 1px solid rgba(225,182,0,.6); }
+    .felt-sub, .felt-panel .felt-others { color: rgba(246,247,249,.65); }
+    .felt-actions { border-top-color: rgba(255,255,255,.12); }
+    .felt-actions .action-btn { max-width: none; }
+    #center-float { padding: calc(var(--safe-top) + var(--bar-h) + 6px) var(--safe-right) calc(10px + var(--safe-bottom)) var(--safe-left); }
+    #center-float .felt-panel:not(.warn) { margin: auto 0 0; width: 100%; max-width: 520px; margin-inline: auto; }
+    #settings-float, #help-float, #fs-hint-float {
+      align-items: flex-end; padding: calc(var(--safe-top) + 8px) 0 0; background: rgba(4,10,18,.55);
+    }
+    #settings-float .felt-panel, #help-float .felt-panel, #fs-hint-float .felt-panel {
+      width: min(520px, 100%); max-width: none; min-width: 0; margin: 0 auto;
+      border-radius: 22px 22px 0 0; border-bottom: 0; padding-bottom: calc(14px + var(--safe-bottom));
+    }
+    .help-panel { max-height: 100%; }
+    .set-row select, .set-row input { min-height: 40px; font-size: 15px; }
+  }
+
+  /* ── telefon na výšku ── */
+  @media (max-width: 600px) and (orientation: portrait) {
+    #table {
+      --card-w: min(clamp(46px, 14.25cqh, 150px), 19cqw);
+      /* 12 karet: krok 0,32 karty + 1,5 karty na první kartu a natočení krajů */
+      --hand-w: min(24cqw, 15cqh, calc(100cqw / (1.9 + .32 * (var(--hand-n, 12) - 1))));
+      --hand-overlap: -.34;
+    }
+    .opp-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .center-top { grid-column: 1 / -1; margin-top: 22px; gap: 0; }
+    #trick .played { top: 42%; }
+    /* ruka: 1,6 × šířka karty + 66 px (odsazení); „Ty" těsně nad ní, akce nad „Ty" */
+    .me-meta { bottom: calc(var(--hand-w) * 1.6 + 72px); }
+    #actions { margin-bottom: 52px; }
+    #pile-me { right: 4px; bottom: calc(var(--hand-w) * 1.6 + 120px); }
+    #melds-me { left: 4px; right: auto; bottom: calc(var(--hand-w) * 1.6 + 120px); }
+
+    /* úvod: vějíř nahoře, titulek, varianty jako řádky, „Rozdat" dole přes celou šířku */
+    #table.idle .opp-row { visibility: hidden; }
+    #intro img {
+      --deco-w: min(24cqw, 96px, 13cqh);
+      left: 50%; top: calc(var(--safe-top) + var(--bar-h) + 18px + var(--deco-w) * .743);
+      opacity: 1;
+    }
+    #intro img:nth-child(3) { --rot: -20deg !important; left: calc(50% - var(--deco-w) * .68); margin-top: calc(var(--deco-w) * -.743 + 24px); z-index: 1; }
+    #intro img:nth-child(1) { --rot: -8deg !important; left: calc(50% - var(--deco-w) * .27); z-index: 2; }
+    #intro img:nth-child(4) { --rot: 8deg !important; left: calc(50% + var(--deco-w) * .27); z-index: 3; }
+    #intro img:nth-child(2) { --rot: 20deg !important; left: calc(50% + var(--deco-w) * .68); margin-top: calc(var(--deco-w) * -.743 + 24px); z-index: 4; }
+    #intro img:nth-child(n+5) { display: none; }
+    #intro-panel {
+      inset: calc(var(--safe-top) + var(--bar-h) + min(24cqw, 96px, 13cqh) * 1.75 + 44px) var(--safe-right)
+        calc(96px + var(--safe-bottom)) var(--safe-left);
+      justify-content: flex-start; gap: 22px; padding: 0;
+    }
+    .intro-head { gap: 6px; }
+    .intro-eyebrow { font-size: 12px; letter-spacing: .2em; }
+    .intro-title { font-size: 46px; }
+    .intro-sub { font-size: 15px; color: rgba(246,247,249,.7); }
+    .intro-last { font-size: 13px; }
+    #table.idle .me-row { left: var(--safe-left); right: var(--safe-right); bottom: calc(var(--safe-bottom) + 18px); padding: 0; }
+    #table.idle #actions { margin: 0; padding: 0; }
+    #table.idle #actions .action-btn { width: 100%; height: 56px; border-radius: 16px; font-size: 18px; }
+  }
+  /* nízký telefon na výšku (360×640 a menší): úvod se musí vejít nad „Rozdat" */
+  @media (max-width: 600px) and (orientation: portrait) and (max-height: 700px) {
+    #intro-panel { gap: 12px; }
+    .intro-title { font-size: 36px; }
+    .intro-sub { font-size: 13px; }
+    .intro-variants { gap: 10px; }
+    .variant-card, .variant-card:hover, .variant-card.on { padding: 10px 12px; }
+    .variant-desc { font-size: 12px; }
+  }
+
+  /* varianty jako řádky se zaškrtávátkem (obě orientace) */
+  @media (max-width: 600px) and (orientation: portrait), (max-height: 500px) and (orientation: landscape) {
+    .intro-variants { flex-direction: column; flex-wrap: nowrap; gap: 12px; width: 100%; }
+    .variant-card, .variant-card:hover, .variant-card.on {
+      height: auto; width: 100%; aspect-ratio: auto; transform: none; outline: 0; box-sizing: border-box;
+      display: grid; grid-template-columns: 56px minmax(0, 1fr) 22px; grid-template-rows: auto auto auto;
+      grid-template-areas: "fig tag radio" "fig name radio" "fig desc radio";
+      column-gap: 14px; row-gap: 2px; align-items: center;
+      padding: 12px 14px; border-radius: 18px; box-shadow: none;
+      background: rgba(8,22,38,.45); border: 2px solid rgba(255,255,255,.1); color: #f6f7f9;
+    }
+    .variant-card.on { background: rgba(225,182,0,.1); border-color: var(--gold); }
+    .variant-card::after {
+      content: ''; grid-area: radio; width: 22px; height: 22px; box-sizing: border-box;
+      border-radius: 9999px; border: 2px solid rgba(246,247,249,.35);
+    }
+    .variant-card.on::after { border-color: var(--gold); background: radial-gradient(circle, var(--gold) 0 4.5px, transparent 5px); }
+    .variant-top { grid-area: tag; justify-content: flex-start; }
+    .variant-tag { font-size: 10px; color: var(--gold); letter-spacing: .12em; }
+    .variant-figure { grid-area: fig; width: 56px; height: 56px; border-radius: 12px; overflow: hidden; background: #f3ead2; }
+    .variant-figure img { border-radius: 0; box-shadow: none; }
+    .variant-name { grid-area: name; font-size: 17px; color: #f6f7f9; }
+    .variant-desc { grid-area: desc; font-size: 13px; line-height: 1.35; color: rgba(246,247,249,.72); }
+  }
+
+  /* ── telefon na šířku: soupeři po stranách, ruka dole uprostřed ── */
+  @media (max-height: 500px) and (orientation: landscape) {
+    #table {
+      --bar-h: 44px;
+      --card-w: clamp(44px, 15cqh, 72px);
+      --hand-w: min(20cqh, 70px, calc((100cqw - 340px) / (1.9 + .32 * (var(--hand-n, 12) - 1))));
+      --hand-overlap: -.34;
+    }
+    .game-section { --bar-h: 44px; }
+    #btn-menu, .game-controls .ctl-btn.icon { width: 40px; height: 40px; }
+    .opp-row { display: block; }
+    .seatbox, #seat-right { position: absolute; top: calc(var(--safe-top) + var(--bar-h) + 8px); width: 184px; box-sizing: border-box; }
+    #seat-left { left: var(--safe-left); }
+    #seat-right { right: var(--safe-right); }
+    /* v toku (ne absolutně): pilulka varianty uvnitř se musí dál měřit od stolu */
+    .center-top { margin: 2px 196px 0; gap: 0; }
+    #status.me-turn { font-size: 17px; }
+    #trick .played { top: 50%; }
+    #contract-center { top: 34%; }
+    .me-meta {
+      left: 0; right: auto; bottom: calc(10px + var(--safe-bottom) * .5);
+      padding: 6px 14px 6px 6px; border-radius: 9999px;
+      background: rgba(8,22,38,.5); border: 1px solid rgba(255,255,255,.08);
+    }
+    .me-meta .seat-id { flex-direction: column; align-items: flex-start; gap: 0; }
+    #ledger-me { margin-left: 0; font-size: 12px; }
+    #actions { margin-bottom: 8px; }
+    #pile-me { right: 0; bottom: 12px; }
+    #melds-me { right: 0; bottom: calc(var(--card-w) * .72 + 8px); }
+    /* úvod na šířku: vlevo vějíř a titulek, vpravo varianty a „Rozdat" */
+    #table.idle .opp-row { visibility: hidden; }
+    #intro img {
+      --deco-w: min(20cqh, 88px);
+      left: 25%; top: calc(var(--safe-top) + var(--bar-h) + var(--deco-w) * .743);
+      opacity: 1;
+    }
+    #intro img:nth-child(3) { --rot: -20deg !important; left: calc(25% - var(--deco-w) * .68); margin-top: calc(var(--deco-w) * -.743 + 20px); z-index: 1; }
+    #intro img:nth-child(1) { --rot: -8deg !important; left: calc(25% - var(--deco-w) * .27); z-index: 2; }
+    #intro img:nth-child(4) { --rot: 8deg !important; left: calc(25% + var(--deco-w) * .27); z-index: 3; }
+    #intro img:nth-child(2) { --rot: 20deg !important; left: calc(25% + var(--deco-w) * .68); margin-top: calc(var(--deco-w) * -.743 + 20px); z-index: 4; }
+    #intro img:nth-child(n+5) { display: none; }
+    #intro-panel {
+      inset: calc(var(--safe-top) + var(--bar-h) + 8px) var(--safe-right) calc(80px + var(--safe-bottom)) var(--safe-left);
+      display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr auto; column-gap: 32px; row-gap: 6px;
+      align-items: end; padding: 0;
+    }
+    .intro-head { grid-column: 1; grid-row: 1 / span 2; align-self: end; gap: 2px; padding-bottom: 8px; }
+    .intro-eyebrow { font-size: 11px; letter-spacing: .2em; }
+    .intro-title { font-size: 38px; }
+    .intro-sub { font-size: 13px; color: rgba(246,247,249,.7); }
+    .intro-variants { grid-column: 2; grid-row: 1; align-self: center; gap: 8px; }
+    .variant-card, .variant-card:hover, .variant-card.on { padding: 8px 12px; grid-template-columns: 44px minmax(0, 1fr) 20px; }
+    .variant-figure { width: 44px; height: 44px; }
+    .variant-name { font-size: 15px; }
+    .variant-desc { font-size: 12px; }
+    .intro-last { grid-column: 2; grid-row: 2; font-size: 12px; }
+    #table.idle .me-row { left: calc(50% + 16px); right: var(--safe-right); bottom: calc(var(--safe-bottom) + 14px); padding: 0; }
+    #table.idle #actions { margin: 0; padding: 0; }
+    #table.idle #actions .action-btn { width: 100%; height: 52px; border-radius: 16px; font-size: 17px; }
   }
 </style>
