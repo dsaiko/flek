@@ -4,6 +4,13 @@ Poznámky k vydání. Sekci pro daný tag z tohohle souboru vytáhne CI a použi
 jako text releasu na GitHubu (`.github/workflows/release.yml`) — nadpis sekce se
 stane názvem vydání. Nová verze = **přidat sekci sem** a až pak tagovat.
 
+## v0.0.18 — karty do šířky
+
+- Na telefonu na šířku jsou karty v ruce rozestoupené, ne namačkané k sobě.
+- Zúčtování, dotazy, nastavení, nápověda i průběh hry jsou na telefonu přes celou obrazovku
+  a tlačítka jsou vždycky vidět dole — i na šířku, kde se dřív schovala pod hranu.
+- Řádek „Ty" a karta trumfu se drží dál od zaobleného rohu displeje.
+
 ## v0.0.17 — v kapse jako aplikace
 
 Na telefonu Flek! vypadá jako mobilní aplikace, ne jako zmenšený stůl z počítače. Na počítači
