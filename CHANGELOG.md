@@ -4,6 +4,12 @@ Poznámky k vydání. Sekci pro daný tag z tohohle souboru vytáhne CI a použi
 jako text releasu na GitHubu (`.github/workflows/release.yml`) — nadpis sekce se
 stane názvem vydání. Nová verze = **přidat sekci sem** a až pak tagovat.
 
+## v0.0.22 — čitelné hlášení chyby
+
+Záznam hry v hlášení chyby je teď čitelný text místo zakódované změti: seed rozdání a seznam
+tahů zapsaný symboly a kódy karet (třeba `0 --> KH` = zahraná karta). Údaje pod čarou jsou
+anglicky, stejné v každém jazyce — česky zůstává jen tvůj popis.
+
 ## v0.0.21 — nahlásit chybu
 
 Narazíš-li na chybu, klepni na **brouka** v liště (na telefonu v menu pod ☰) a popiš, co se stalo.
