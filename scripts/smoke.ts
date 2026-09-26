@@ -1487,6 +1487,30 @@ if (!trumpBackInHand) {
     fail(`hlavička: ${JSON.stringify(head)}`);
   }
 
+  /*
+   * Náhled odkazu (Open Graph): co ukáže WhatsApp nebo Messenger. Crawlery
+   * JavaScript nespouštějí, takže se čte syrové HTML ze serveru, ne DOM —
+   * a obrázek musí mít absolutní adresu, jinak ho náhled nenajde.
+   */
+  {
+    const html = await (await fetch(`${origin}/`)).text();
+    const og = (prop: string): string | undefined =>
+      new RegExp(`<meta (?:property|name)="${prop}" content="([^"]*)"`).exec(html)?.[1];
+    const image = og('og:image');
+    const missing = ['og:title', 'og:description', 'og:url', 'og:site_name'].filter((p) => !(og(p) ?? '').trim());
+    if (missing.length > 0) fail(`náhled odkazu: chybí ${missing.join(', ')}`);
+    if (image !== 'https://flek.saiko.cz/og-image.jpg') fail(`og:image musí být absolutní adresa webu, je „${String(image)}"`);
+    if (og('twitter:card') !== 'summary_large_image') fail('twitter:card není summary_large_image (malý náhled)');
+    if (og('og:image:width') !== '1200' || og('og:image:height') !== '630') fail('og:image:width/height neodpovídá 1200×630');
+    const r = await fetch(`${origin}/og-image.jpg`);
+    if (!r.ok) fail(`og-image.jpg vrátil ${r.status}`);
+    const buf = Buffer.from(await r.arrayBuffer());
+    const meta = await sharp(buf).metadata();
+    if (meta.format !== 'jpeg' || meta.width !== 1200 || meta.height !== 630) fail(`og-image.jpg je ${meta.format} ${meta.width}×${meta.height}`);
+    // WhatsApp velké obrázky v náhledu nezobrazí; 300 kB je bezpečná mez
+    if (buf.length > 300_000) fail(`og-image.jpg má ${Math.round(buf.length / 1000)} kB`);
+  }
+
   // iPhone v Safari: dotyk a žádné Fullscreen API → tlačítko ukáže návod
   {
     const { ctx, pg } = await pageWith(`Object.defineProperty(Document.prototype, 'fullscreenEnabled', { get: () => false });`);
@@ -1522,7 +1546,7 @@ if (!trumpBackInHand) {
     if (shown) fail('návod k iPhonu se ukázal i na desktopu');
   }
   await fb.close();
-  console.log('Web na plochu: manifest, ikony a hlavička v pořádku; na iPhonu návod, z plochy bez tlačítka');
+  console.log('Web na plochu: manifest, ikony, hlavička a náhled odkazu v pořádku; na iPhonu návod, z plochy bez tlačítka');
 }
 
 /*
