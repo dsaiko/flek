@@ -4,6 +4,18 @@ Poznámky k vydání. Sekci pro daný tag z tohohle souboru vytáhne CI a použi
 jako text releasu na GitHubu (`.github/workflows/release.yml`) — nadpis sekce se
 stane názvem vydání. Nová verze = **přidat sekci sem** a až pak tagovat.
 
+## v0.0.19 — nové karty
+
+Dosavadní moderní karty jsou pryč. Místo nich jsou v nastavení (**⚙ → Vzor karet**) dvě nové sady:
+
+- **Moderní barevná** — celá karta v barvě své barvy, takže ji poznáš i z nejužšího proužku
+  ve vějíři.
+- **Moderní lidová** — krémový papír, patkové písmo a dvouhlavé figury jako na tradičních kartách.
+
+Obě mají v rohu hodnotu i znak barvy pod sebou a figury značené J / Q / K (spodek, svršek, král).
+Historické karty z roku 1860 zůstávají a jsou dál výchozí. Kdo měl nastavené staré moderní karty,
+uvidí barevnou sadu.
+
 ## v0.0.18 — karty do šířky
 
 - Na telefonu na šířku jsou karty v ruce rozestoupené, ne namačkané k sobě.
