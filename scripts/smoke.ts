@@ -1718,6 +1718,7 @@ if (!trumpBackInHand) {
   const save = mobileSave('voleny', 10, 'tricks');
   for (const [w, h, phone] of [[1400, 900, false], [390, 844, true]] as const) {
     const ctx = await rb.newContext({ viewport: { width: w, height: h }, isMobile: phone, hasTouch: phone });
+    await ctx.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: new URL(url).origin });
     const pg = await ctx.newPage();
     pg.on('dialog', (d) => void d.accept());
     const fail = async (msg: string): Promise<never> => {
@@ -1754,6 +1755,21 @@ if (!trumpBackInHand) {
     }
     // panel se musí dát zavřít a tlačítka jsou vidět (na telefonu přes celou obrazovku)
     if (!(await pg.locator('#report-send').isVisible())) await fail('„Odeslat e-mailem" není vidět');
+    // „Zkopírovat": adresa, předmět i záznam ve schránce a potvrzení u adresy
+    await pg.click('#report-copy');
+    await pg.waitForTimeout(200);
+    const clip = await pg.evaluate('navigator.clipboard.readText()') as string;
+    if (!(await pg.locator('#report-copied').isVisible()) || !clip.startsWith('flek@saiko.cz\n') || !clip.includes('FLEK1:')) {
+      await fail(`„Zkopírovat" nedalo do schránky hlášení (${clip.slice(0, 40)}…)`);
+    }
+    // ⚙ nad otevřeným hlášením: nastavení se ukáže a hlášení zavře (panely se nevrství)
+    await pg.click('#btn-settings');
+    if (!(await pg.locator('#settings-float .settings-panel').isVisible()) || await pg.locator('#report-float').isVisible()) {
+      await fail('nastavení se otevřelo pod hlášením, nebo hlášení zůstalo otevřené');
+    }
+    await pg.click('#settings-close');
+    if (phone) await pg.click('#btn-menu');
+    await pg.click('#btn-report');
     await pg.click('#report-cancel');
     if (await pg.locator('#report-float').isVisible()) await fail('„Zpět" panel nezavřelo');
     await ctx.close();

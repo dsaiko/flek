@@ -8,8 +8,8 @@
  * vešel do odkazu `mailto:`. Jména hráčů ani nic jiného v něm nejsou —
  * `GameState` je nenese.
  *
- * Zpátky: `npx tsx scripts/report.ts '<FLEK1:…>'` vypíše sav k vložení do
- * localStorage (klíč `flek.match.v1`).
+ * Zpátky: `pbpaste | npx tsx scripts/report.ts` (celý e-mail ze schránky)
+ * vypíše sav k vložení do localStorage (klíč `flek.match.v1`).
  */
 
 import type { GameState } from '../rules/types';
@@ -42,11 +42,32 @@ const fromBase64Url = (s: string): Uint8Array => {
   return Uint8Array.from(bin, (ch) => ch.charCodeAt(0));
 };
 
-/** Stav → `FLEK1:…` (deflate + base64url). */
-export async function encodeReport(state: GameState): Promise<string> {
-  const json = JSON.stringify({ v: VERSION, state: trimToHand(state) });
-  const packed = await pipe(new TextEncoder().encode(json), new CompressionStream('deflate-raw'));
+/**
+ * Libovolná obálka → `FLEK1:…` (JSON, deflate, base64url). Sdílí ji
+ * `encodeReport` i testy, které skládají podvržené záznamy — ty tak jdou
+ * stejným formátem a test podvrhu se nerozejde s kódovačem.
+ */
+export async function packSave(save: unknown): Promise<string> {
+  const packed = await pipe(new TextEncoder().encode(JSON.stringify(save)), new CompressionStream('deflate-raw'));
   return REPORT_PREFIX + toBase64Url(packed);
+}
+
+/** Stav → `FLEK1:…`. */
+export async function encodeReport(state: GameState): Promise<string> {
+  return packSave({ v: VERSION, state: trimToHand(state) });
+}
+
+/**
+ * Místní čas s posunem (`2026-09-26 17:22 UTC+02:00`). Bez označení pásma by
+ * UTC vypadal jako místní čas a hlášení by se nedalo spárovat s tím, co
+ * tester vyprávěl.
+ */
+export function localStamp(d: Date): string {
+  const pad = (n: number): string => String(n).padStart(2, '0');
+  const off = -d.getTimezoneOffset();
+  const sign = off >= 0 ? '+' : '-';
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+    + ` UTC${sign}${pad(Math.floor(Math.abs(off) / 60))}:${pad(Math.abs(off) % 60)}`;
 }
 
 /**

@@ -3549,7 +3549,7 @@ const KULE = 2 as const;
 
   // ── §51: hlášení chyby — záznam hry tam a zpátky ─────────────────────────
   {
-    const { encodeReport, decodeReport, reportBody, reportMailto, trimToHand, REPORT_ADDRESS } =
+    const { encodeReport, decodeReport, reportBody, reportMailto, trimToHand, packSave, localStamp, REPORT_ADDRESS } =
       await import('../src/lib/match/report');
     const { playPolicy, decideAuction } = await import('../src/lib/ai/heuristics');
     const { Random: RandomR } = await import('../src/lib/random');
@@ -3588,15 +3588,68 @@ const KULE = 2 as const;
     }
     // do odkazu mailto: se musí vejít (klienti zvládají kolem 2000 znaků spolehlivě)
     assert.ok(longest < 1600, `záznam má ${longest} znaků — mailto by se mohl uříznout`);
-    // podvrh nebo useknutý záznam se odmítne, ne „zopakuje"
-    await assert.rejects(decodeReport('FLEK1:AAAA'), 'useknutý záznam');
-    await assert.rejects(decodeReport('bez záznamu'), 'text bez FLEK1:');
+    /*
+     * Podvrh nebo useknutý záznam se odmítne, ne „zopakuje". Podvrhy se balí
+     * sdíleným `packSave` (tentýž formát jako `encodeReport`) a každé odmítnutí
+     * se kontroluje DŮVODEM — jinak by test prošel na jakékoli chybě, třeba na
+     * rozbitém formátu, i kdyby kontrola savu z dekódování zmizela.
+     */
+    await assert.rejects(decodeReport('bez záznamu'), /FLEK1/, 'text bez FLEK1:');
+    await assert.rejects(decodeReport('FLEK1:AAAA'), (e: Error) => !/kontrolou savu/.test(e.message), 'useknutý záznam padá už na rozbalení');
     const dealt = trimToHand(apply(initialState(defaultConfig('voleny'), 2), { type: 'deal', seed: 3 }));
-    // karta chybí v ruce: všech 32 karet už nesedí
-    const bad = JSON.stringify({ v: 3, state: { ...dealt, hands: [dealt.hands[0].slice(1), dealt.hands[1], dealt.hands[2]] } });
-    const packed = new Uint8Array(await new Response(new Blob([new TextEncoder().encode(bad)]).stream().pipeThrough(new CompressionStream('deflate-raw'))).arrayBuffer());
-    const badBlob = 'FLEK1:' + btoa(String.fromCharCode(...packed)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-    await assert.rejects(decodeReport(badBlob), 'stav s chybějícími kartami musí záznam odmítnout');
+    // karta chybí v ruce: assertValid (32 karet)
+    await assert.rejects(
+      decodeReport(await packSave({ v: 3, state: { ...dealt, hands: [dealt.hands[0].slice(1), dealt.hands[1], dealt.hands[2]] } })),
+      /kar/i, 'stav s chybějící kartou');
+    // větev „validateSave vrátil null": neznámá verze, ne-stav, nehratelná pozice
+    const midTricks = await decodeReport(await encodeReport((() => {
+      let x = apply(initialState({ ...defaultConfig('voleny'), autoSettlePlainHra: false }, 2), { type: 'deal', seed: 21 });
+      for (let g = 0; g < 120 && !(x.phase.name === 'tricks' && x.phase.trickNo === 2); g += 1) {
+        const seat = ([0, 1, 2] as const).find((q) => legalActions(view(x, q)).length > 0);
+        if (seat === undefined) break;
+        const acts = legalActions(view(x, seat));
+        x = apply(x, acts.find((a) => a.type === 'choose-trump' && a.card !== 'from-people')
+          ?? acts.find((a) => a.type === 'discard' && a.cards.every((c) => c % 8 !== 3 && c % 8 !== 7))
+          ?? acts.find((a) => a.type === 'declare' && a.mode === 'hra' && !a.sedma && !a.kilo)
+          ?? acts.find((a) => a.type === 'takeover' && a.claim === 'good')
+          ?? acts.find((a) => a.type === 'good') ?? acts[0]);
+      }
+      return x;
+    })()));
+    assert.equal(midTricks.state.phase.name, 'tricks', 'fixtura: sehrávka');
+    for (const [why, save] of [
+      ['neznámá verze', { v: 99, state: midTricks.state }],
+      ['není to stav hry', { v: 3, state: {} }],
+      // karta z ruky hráče na tahu do cizí ruky: karty sedí, pozice nejde hrát
+      ['nehratelná pozice', (() => {
+        const st = midTricks.state;
+        const toAct = (st.phase as { toAct: 0 | 1 | 2 }).toAct;
+        const other = ((toAct + 1) % 3) as 0 | 1 | 2;
+        const hands = st.hands.map((h) => h.slice()) as typeof st.hands;
+        hands[other] = [...hands[other], ...hands[toAct].splice(0)];
+        return { v: 3, state: { ...st, hands } };
+      })()],
+    ] as const) {
+      await assert.rejects(decodeReport(await packSave(save)), /neprošel kontrolou savu/, `${why} se musí odmítnout jako neplatný sav`);
+    }
+    // čas v e-mailu je místní s vyznačeným posunem, ne neoznačené UTC
+    const stamp = localStamp(new Date(2026, 8, 26, 17, 22));
+    assert.match(stamp, /^2026-09-26 17:22 UTC[+-]\d\d:\d\d$/, `místní čas s pásmem (${stamp})`);
+    /*
+     * Dekódovací skript: celý e-mail jen přes stdin, argument jen samotný
+     * záznam. Text e-mailu píše tester — v příkazové řádce by apostrof
+     * v popisu otevřel cestu k vlastnímu příkazu.
+     */
+    const good = await encodeReport(midTricks.state);
+    const tsx = join(ROOT, 'node_modules', '.bin', 'tsx');
+    const viaStdin = spawnSync(tsx, [join(ROOT, 'scripts', 'report.ts')], { input: `Karta zmizela ';\nZáznam: ${good}\n`, encoding: 'utf8' });
+    assert.equal(viaStdin.status, 0, `report.ts přes stdin selhal: ${viaStdin.stderr}`);
+    assert.deepEqual(JSON.parse(viaStdin.stdout).state, midTricks.state, 'přes stdin vrátí tentýž sav');
+    const viaArg = spawnSync(tsx, [join(ROOT, 'scripts', 'report.ts'), good], { encoding: 'utf8' });
+    assert.equal(viaArg.status, 0, 'samotný záznam jako argument projde');
+    const wholeMail = spawnSync(tsx, [join(ROOT, 'scripts', 'report.ts'), `popis; Záznam: ${good}`], { encoding: 'utf8' });
+    assert.notEqual(wholeMail.status, 0, 'celý e-mail jako argument se musí odmítnout');
+    assert.match(wholeMail.stderr, /stdin/, 'a poradit stdin');
     // e-mail: popis nahoře, údaje pod čarou; žádné jméno (reportBody ho ani nedostane)
     const body = reportBody('  Karta zmizela  ', {
       appVersion: '0.0.21', when: '2026-09-26 12:00', userAgent: 'UA', viewport: '390×844 @3x', flags: 'telefon: ano',
