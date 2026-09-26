@@ -1625,8 +1625,9 @@ if (!trumpBackInHand) {
           trick: all('#trick .played'),
           panels: all('#center-float .felt-panel'),
           piles: all('.opp-row .pile img'),
+          slot: one('#trump-slot'),
         };
-      })()`)) as { sw: number; vw: number; vh: number; table: Box; hand: Box[]; buttons: Box[]; meta: Box | null; center: Box[]; seats: Box[]; heads: (Box | null)[]; backs: Box[]; trick: Box[]; piles: Box[]; panels: Box[]; status: Box[] };
+      })()`)) as { sw: number; vw: number; vh: number; table: Box; hand: Box[]; buttons: Box[]; meta: Box | null; center: Box[]; seats: Box[]; heads: (Box | null)[]; backs: Box[]; trick: Box[]; piles: Box[]; panels: Box[]; status: Box[]; slot: Box | null };
       await ctx.close();
       const where = `${label}, ${phase}`;
       const problems: string[] = [];
@@ -1653,6 +1654,21 @@ if (!trumpBackInHand) {
       if (m.piles.some((p) => m.center.some((c) => overlap(p, c)))) problems.push('pakl soupeře leží přes řádek se stavem');
       if (m.panels.some((p) => p.l < m.table.l - 1 || p.r > m.table.r + 1)) problems.push('panel zúčtování vyčnívá ze stolu');
       if (phase === 'zúčtování' && m.panels.length === 0) problems.push('panel zúčtování se neukázal');
+      /*
+       * Místo pro trumf (§52): jen telefon a jen při volbě trumfu. Nesmí sedět
+       * na výzvě, tlačítkách, ruce, bloku „Ty" ani soupeřích; musí být ve stole.
+       */
+      const onPhone = (w <= 600 && h > w) || (h <= 500 && w > h);
+      if (onPhone && phase === 'volba trumfu') {
+        if (m.slot === null) problems.push('místo „TRUMF ?" se neukázalo');
+        else {
+          const s = m.slot;
+          if (s.l < m.table.l - 1 || s.r > m.table.r + 1) problems.push('místo „TRUMF ?" vyčnívá ze stolu');
+          const clash = [...m.center, ...m.buttons, ...m.hand, ...(m.meta === null ? [] : [m.meta]), ...m.backs, ...m.heads.filter((x): x is Box => x !== null)]
+            .some((b) => overlap(b, s));
+          if (clash) problems.push('místo „TRUMF ?" leží přes výzvu, tlačítka, ruku nebo soupeře');
+        }
+      } else if (m.slot !== null) problems.push(`místo „TRUMF ?" je vidět mimo volbu trumfu na telefonu (${phase})`);
       if (phase === 'sehrávka' && (m.trick.length !== 2 || m.piles.length === 0)) {
         problems.push(`sehrávka nemá, co měřit (štych ${m.trick.length} karet, pakl ${m.piles.length})`);
       }
@@ -1789,6 +1805,41 @@ if (!trumpBackInHand) {
   }
   await rb.close();
   console.log('Hlášení chyby: z lišty i z menu, mailto na flek@saiko.cz s popisem a záznamem, který vrátí uložený stav');
+}
+
+/*
+ * Počítadlo pádů (§52): nezachycená chyba i odmítnutý promise ve stránce se
+ * pošlou do GoatCounteru jako událost — jednou, bez adres a osobních údajů.
+ * Skutečný skript GoatCounteru se nenačte (route), jeho `count` je podvržený.
+ */
+{
+  const cb = await chromium.launch();
+  const ctx = await cb.newContext({ viewport: { width: 1400, height: 900 } });
+  await ctx.route('https://gc.zgo.at/**', (r) => r.abort());
+  await ctx.addInitScript({ content: 'window.__gc = []; window.goatcounter = { count: (e) => window.__gc.push(e) };' });
+  const pg = await ctx.newPage();
+  const fail = async (msg: string): Promise<never> => {
+    console.error(`CHYBA: počítadlo pádů — ${msg}`);
+    await cb.close();
+    await browser.close();
+    process.exit(1);
+  };
+  await pg.goto(url);
+  await pg.waitForSelector('#intro-panel', { state: 'visible' });
+  await pg.evaluate(`setTimeout(() => { throw new Error('smoke-pad https://flek.saiko.cz/?seed=123456 hrac@example.com'); }, 0)`);
+  await pg.evaluate(`setTimeout(() => { throw new Error('smoke-pad https://flek.saiko.cz/?seed=123456 hrac@example.com'); }, 0)`);
+  await pg.evaluate(`Promise.reject(new Error('smoke-promise'))`).catch(() => {});
+  await pg.evaluate(`setTimeout(() => { Promise.reject(new Error('smoke-promise')); }, 0)`);
+  await pg.waitForTimeout(300);
+  const events = await pg.evaluate('window.__gc') as { path: string; title: string; event: boolean }[];
+  const win = events.filter((e) => e.path.startsWith('error/window/'));
+  if (win.length !== 1) await fail(`chyba v okně: čekal jsem jednu událost, přišlo ${win.length} (${JSON.stringify(events)})`);
+  const e = win[0];
+  if (!e.event || !e.path.includes('smoke-pad') || /https?:|@|123456/.test(e.path + e.title)) await fail(`událost nese adresu nebo osobní údaj: ${JSON.stringify(e)}`);
+  if (!/^Flek! \S+/.test(e.title)) await fail(`titulek bez verze: ${e.title}`);
+  if (!events.some((x) => x.path.startsWith('error/promise/') && x.path.includes('smoke-promise'))) await fail('odmítnutý promise se nezapočítal');
+  await cb.close();
+  console.log('Počítadlo pádů: chyba i odmítnutý promise jdou do GoatCounteru jednou, bez adres a osobních údajů');
 }
 
 /*

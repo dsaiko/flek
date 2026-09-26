@@ -51,6 +51,8 @@ const version = pkg.version;
 
         <!-- odložená trumfová karta (jako v originále: leží stranou na stole) -->
         <div id="trump-aside" hidden></div>
+        <!-- telefon (§52): čárkované místo, kam padne trumf, dokud ho hráč nevolí -->
+        <div id="trump-slot" hidden aria-hidden="true"><span class="ts-label"><span class="cs">Trumf</span><span class="en">Trump</span><span class="de">Trumpf</span><span class="fr">Atout</span></span><span class="ts-q">?</span></div>
 
         <div id="trick"></div>
 
@@ -1263,7 +1265,7 @@ Licence: Josef SAIKO</pre>
      Claude Design „Kolo 5 — Mobil": sukno od okraje k okraji, nahoře lišta
      jako v aplikaci (☰ · varianta · ⚙), soupeři jako karty, výzva uprostřed,
      ovládání v palcové zóně. Stejnou media query čte main.ts (PHONE_QUERY). */
-  #btn-menu, #menu-sheet, .ctl-label { display: none; }
+  #btn-menu, #menu-sheet, .ctl-label, #trump-slot { display: none; }
 
   @media (max-width: 600px) and (orientation: portrait), (max-height: 500px) and (orientation: landscape) {
     body { background: #0e2a45; }
@@ -1311,6 +1313,23 @@ Licence: Josef SAIKO</pre>
       font-size: 12px; font-weight: 700; letter-spacing: .1em;
     }
     #status-eyebrow:empty { display: none; }
+
+    /*
+     * Místo pro trumf (předloha 5b): čárkovaný rámeček tam, kam zvolená karta
+     * padne — na pravý okraj sukna, kde pak leží `#trump-aside`. Uprostřed
+     * stolu (jako v předloze) na menších displejích zakrýval výzvu nebo „Z lidu".
+     */
+    #trump-slot:not([hidden]) {
+      display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+      position: absolute; right: calc(var(--safe-right) + 4px); top: 46%; transform: translateY(-50%) rotate(7deg);
+      z-index: 1; pointer-events: none;
+      width: calc(var(--card-w) * .86); aspect-ratio: 62 / 106; box-sizing: border-box;
+      border: 2px dashed rgba(225,182,0,.55); border-radius: 9px;
+      color: rgba(225,182,0,.9); font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase;
+    }
+    #trump-slot { min-width: 50px; }
+    #trump-slot .ts-label { font-size: 9px; letter-spacing: .06em; }
+    #trump-slot .ts-q { font-size: 22px; font-weight: 400; letter-spacing: 0; }
 
     /* ── menu: spodní panel ── */
     #menu-sheet {

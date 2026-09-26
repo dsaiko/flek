@@ -2670,3 +2670,45 @@ Zamítnuto soudcem (s odůvodněním v `.fixpoint/20260926-172231`): zalomení z
 (bez mezer se nezalamuje), deflate bomba v lokálním CLI, závod mezi kompresí a klikem (milisekundy),
 pokrytí idle/scored bez možného selhání a podobně.
 
+
+## 52. Místo pro trumf a počítadlo pádů (2026-09-27)
+
+**TODO.md** je pryč — co v něm zbývalo, je buď hotové, nebo zamítnuté (klávesy pro hru bez myši:
+*„klávesama to už dneska nikdo hrát nebude"*), a přehled žije v paměti a v téhle kapitole.
+
+**Čárkované místo „TRUMF ?"** (jen telefon): když hráč volí trumf, na místě, kde potom leží
+trumfová karta (vpravo u okraje stolu, pootočená o 7°), je čárkovaný zlatý obrys karty s nápisem
+TRUMF a otazníkem. Na počítači se neukazuje, desktop zůstává beze změny. Hned při volbě
+z lidu (otočení karty z talonu) obrys zmizí, protože na jeho místo přijíždí karta. Uprostřed stolu
+být nemohl: na úzkém displeji tam překrýval výzvu a tlačítka. Smoke v mobilní smyčce hlídá, že
+obrys je vidět jen při volbě trumfu, leží uvnitř stolu a nepřekrývá střed, tlačítka, ruku, hlavičky
+ani rubové karty soupeřů; v ostatních fázích je skrytý. Negativní kontrola: obrys pořád skrytý →
+„místo „TRUMF ?" se neukázalo".
+
+**Počítadlo pádů přes GoatCounter** (`src/lib/ui/crashes.ts`): chyby, které testeři nenahlásí,
+jdou jako anonymní **událost** do stejného GoatCounteru, který počítá návštěvy. Cesta
+`error/<druh>/<zpráva>`, titulek `Flek! <verze> @ soubor:řádek:sloupec`. Druhy: `window`
+(nezachycená výjimka), `promise` (neobsloužené odmítnutí), `render` / `render-chain` (překreslení
+stolu), `action` a `concede` (tah hráče), `ai-worker`, `ai-stuck`, `ai-fallback`, `ai-illegal`
+(soupeři). Zpráva se zbaví adres URL, e-mailů a čísel od pěti číslic a zkrátí na 80 znaků; místo
+v kódu je jen název souboru, ne adresa. Jméno hráče ani stav hry neodchází. Každá chyba se za
+načtení stránky pošle jednou a nejvýš 5 různých, aby zacyklená chyba nezahltila statistiky. Skript
+GoatCounteru se načítá asynchronně, takže co přijde dřív, čeká ve frontě (zkouší se každé 2 s,
+nejdéle 30 s). Selhání samotného počítadla hru neshodí. CSP už `connect-src` na
+flek.goatcounter.com povoluje (beacon). GoatCounter z localhostu nepočítá, takže vývoj statistiky
+nekazí.
+
+Kde to číst: v GoatCounteru na flek.goatcounter.com → přepínač *Events* (cesty `error/…`).
+
+**Bublina „přemýšlím" během animace:** smoke ji znovu chytil po dohraném štychu (v0.0.20 opravila
+jen rozdávání). Cest, kudy se k vykreslení bubliny dojde, je víc (časovač, fronta bublin,
+překreslení z jiného místa uprostřed animace), proto se teď hlídá přímo tam, kde se kreslí:
+`paintBubble` s druhem `thinking` během `#table.animating` nic nenakreslí a začátek animace štychu
+visící bublinu schová. Pokud AI po animaci pořád počítá, další překreslení bublinu naplánuje znovu.
+
+**Testy:** verify — `cleanMessage` (URL, e-mail, dlouhé číslo, prázdná zpráva, délka),
+`codeLocation`, `crashEvent`, `CrashCounter`: fronta, než je GoatCounter načtený, jedna událost
+za stejnou chybu, strop 5, výjimka z GoatCounteru se nepropustí. Smoke — `count` podvržený přes
+init skript, gc.zgo.at zablokovaný: dvakrát stejná chyba v okně dá jednu událost bez URL, e-mailu
+a číslic, s titulkem `Flek! …`; odmítnutý promise dá svou. Negativní kontrola: počítadlo
+nezapnuté → „čekal jsem jednu událost, přišlo 0".
