@@ -16,7 +16,17 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 
-for (const set of ['modern-barevna', 'modern-lidova']) {
+const SETS = ['modern-barevna', 'modern-lidova'];
+// sady, které už neexistují (modern, modern-en/-de/-fr do 0.0.18): public/ není
+// v gitu, takže by v něm zůstaly a `make deploy` by je dál nahrával na web
+mkdirSync(join(ROOT, 'public', 'cards'), { recursive: true }); // čistý checkout ho ještě nemá
+for (const dir of readdirSync(join(ROOT, 'public', 'cards'), { withFileTypes: true })) {
+  if (dir.isDirectory() && dir.name.startsWith('modern') && !SETS.includes(dir.name)) {
+    rmSync(join(ROOT, 'public', 'cards', dir.name), { recursive: true, force: true });
+    console.log(`OK: public/cards/${dir.name} — stará sada smazána`);
+  }
+}
+for (const set of SETS) {
   const src = join(ROOT, 'cards', set);
   const out = join(ROOT, 'public', 'cards', set);
   rmSync(out, { recursive: true, force: true });
