@@ -64,10 +64,10 @@ Around the table:
 - risky discards (an ace or a ten into the talon, breaking a marriage) and a
   pass that would cost money without a card played ask for confirmation.
 - **Report a bug** (the bug icon, or the ☰ menu on a phone) opens an email to
-  flek@saiko.cz with the description, the version, the device and a compressed
-  record of the current hand; `pbpaste | npx tsx scripts/report.ts` (the whole
-  email on stdin — never on the command line) turns the record back into a
-  save that replays the hand exactly.
+  flek@saiko.cz with the description, the version, the device and a readable
+  record of the current hand (JSON: deal seed plus the moves in symbols, e.g.
+  `0 --> KH`); `pbpaste | npx tsx scripts/report.ts` (the whole email on stdin —
+  never on the command line) replays it into a save at exactly that point.
 
 **On a phone** the table fills the screen and switches to a portrait layout
 when held upright. Browsers that can go full screen do so from the toolbar

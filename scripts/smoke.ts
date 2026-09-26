@@ -21,7 +21,7 @@ import { think } from '../src/lib/ai/think';
 import { VERSION as SAVE_VERSION } from '../src/lib/match/persist';
 import { TALK_TABLES } from '../src/lib/ui/tableTalk';
 import { discardWarnings } from '../src/lib/ui/discardWarnings';
-import { decodeReport, trimToHand } from '../src/lib/match/report';
+import { decodeReport } from '../src/lib/match/report';
 
 // Pevný seed: smoke musí být reprodukovatelný. Se seedem 10 vede odhoz, který
 // smoke volí (první a poslední karta v ruce), na varovný popup — bez toho by
@@ -334,7 +334,15 @@ for (let i = 0; i < 400; i += 1) {
   if ((await page.locator('#table.animating').count()) > 0) {
     const stale = visibleBubbles.filter((b) => THINKING.has(b));
     if (stale.length > 0) {
-      console.error(`CHYBA: „${stale[0]}" visí, i když už je štych dohraný`);
+      // diagnostika: při které animaci to bylo (rozdávání, štych, „z lidu")
+      const diag = await page.evaluate(`(() => {
+        const sv = JSON.parse(localStorage.getItem('flek.match.v1') || '{}').state || {};
+        const h = sv.history || [];
+        return { phase: sv.phase && sv.phase.name, len: h.length, last: h.slice(-3).map((a) => a.type + (a.seat ?? '')),
+          status: document.getElementById('status').textContent, trick: document.querySelectorAll('#trick .played').length,
+          hand: document.querySelectorAll('#hand .card-btn').length };
+      })()`);
+      console.error(`CHYBA: „${stale[0]}" visí, i když už je štych dohraný — ${JSON.stringify(diag)}`);
       await browser.close();
       process.exit(1);
     }
@@ -1747,19 +1755,24 @@ if (!trumpBackInHand) {
     const body = decodeURIComponent(href.split('&body=')[1] ?? '');
     if (!href.startsWith('mailto:flek@saiko.cz?subject=')) await fail(`odkaz míří jinam: ${href.slice(0, 60)}`);
     if (!body.startsWith('Karta mi zmizela z ruky')) await fail('v e-mailu chybí popis');
+    if (!body.includes('--- replay data')) await fail('v e-mailu chybí údaje pro zopakování');
     if (body.includes('TajneJmeno')) await fail('e-mail obsahuje jméno hráče');
-    const back = await decodeReport(body);
-    const stored = await pg.evaluate(`JSON.parse(localStorage.getItem('flek.match.v1')).state`);
-    if (JSON.stringify(back.state) !== JSON.stringify(trimToHand(stored as Parameters<typeof trimToHand>[0]))) {
-      await fail('záznam z e-mailu nevrací uložený stav hry');
-    }
+    // záznam je čitelný text bez češtiny a přehraje se na uložený stav hry
+    // (předchozí výsledky zápasu v něm nejsou, historie začíná rozdáním)
+    const record = body.slice(body.indexOf('Record:'));
+    if (!/^[\x20-\x7e\n]+$/.test(record) || !record.includes('"moves"')) await fail(`záznam není čitelný ASCII JSON: ${record.slice(0, 80)}`);
+    const back = decodeReport(body);
+    const stored = await pg.evaluate(`JSON.parse(localStorage.getItem('flek.match.v1')).state`) as typeof back.state;
+    const deal = stored.history.map((a) => a.type).lastIndexOf('deal');
+    const want = { ...stored, history: stored.history.slice(deal), handResults: [] };
+    if (JSON.stringify(back.state) !== JSON.stringify(want)) await fail('záznam z e-mailu nevrací uložený stav hry');
     // panel se musí dát zavřít a tlačítka jsou vidět (na telefonu přes celou obrazovku)
     if (!(await pg.locator('#report-send').isVisible())) await fail('„Odeslat e-mailem" není vidět');
     // „Zkopírovat": adresa, předmět i záznam ve schránce a potvrzení u adresy
     await pg.click('#report-copy');
     await pg.waitForTimeout(200);
     const clip = await pg.evaluate('navigator.clipboard.readText()') as string;
-    if (!(await pg.locator('#report-copied').isVisible()) || !clip.startsWith('flek@saiko.cz\n') || !clip.includes('FLEK1:')) {
+    if (!(await pg.locator('#report-copied').isVisible()) || !clip.startsWith('flek@saiko.cz\n') || !clip.includes('"moves"')) {
       await fail(`„Zkopírovat" nedalo do schránky hlášení (${clip.slice(0, 40)}…)`);
     }
     // ⚙ nad otevřeným hlášením: nastavení se ukáže a hlášení zavře (panely se nevrství)
