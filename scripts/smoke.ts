@@ -21,6 +21,7 @@ import { think } from '../src/lib/ai/think';
 import { VERSION as SAVE_VERSION } from '../src/lib/match/persist';
 import { TALK_TABLES } from '../src/lib/ui/tableTalk';
 import { discardWarnings } from '../src/lib/ui/discardWarnings';
+import { decodeReport, trimToHand } from '../src/lib/match/report';
 
 // Pevný seed: smoke musí být reprodukovatelný. Se seedem 10 vede odhoz, který
 // smoke volí (první a poslední karta v ruce), na varovný popup — bez toho by
@@ -1705,6 +1706,60 @@ if (!trumpBackInHand) {
   if (saved !== 'barevna') await fail(`nastavení si vzor neuložilo (${String(saved)})`);
   await pb.close();
   console.log('Vzor karet: barevná, lidová i historická přepnou ruku i ruby; staré „modern" = barevná');
+}
+
+/*
+ * Hlášení chyby (§51): z lišty (desktop) i z menu (telefon). Odkaz mailto:
+ * musí jít na flek@saiko.cz, nést popis a záznam, ze kterého se vrátí PŘESNĚ
+ * uložený stav hry — jinak by hlášení k zopakování chyby nebylo k ničemu.
+ */
+{
+  const rb = await chromium.launch();
+  const save = mobileSave('voleny', 10, 'tricks');
+  for (const [w, h, phone] of [[1400, 900, false], [390, 844, true]] as const) {
+    const ctx = await rb.newContext({ viewport: { width: w, height: h }, isMobile: phone, hasTouch: phone });
+    const pg = await ctx.newPage();
+    pg.on('dialog', (d) => void d.accept());
+    const fail = async (msg: string): Promise<never> => {
+      console.error(`CHYBA: hlášení chyby (${w}×${h}) — ${msg}`);
+      await rb.close();
+      await browser.close();
+      process.exit(1);
+    };
+    await pg.goto(url);
+    await pg.evaluate(([match, settings]) => {
+      localStorage.setItem('flek.match.v1', match);
+      localStorage.setItem('flek.settings.v1', settings);
+    }, [save, JSON.stringify({ variant: 'voleny', sounds: false, name: 'TajneJmeno' })]);
+    await pg.reload();
+    await pg.locator('#hand .card-btn').first().waitFor({ timeout: 15000 });
+    if (phone) await pg.click('#btn-menu');
+    await pg.click('#btn-report');
+    if (!(await pg.locator('#report-float .report-panel').isVisible())) await fail('panel se neotevřel');
+    await pg.fill('#report-text', 'Karta mi zmizela z ruky');
+    // odkaz se skládá asynchronně (komprese) — počkej, až v něm popis bude
+    let href = '';
+    for (let i = 0; i < 40 && !decodeURIComponent(href).includes('Karta mi zmizela'); i += 1) {
+      await pg.waitForTimeout(50);
+      href = (await pg.getAttribute('#report-send', 'href')) ?? '';
+    }
+    const body = decodeURIComponent(href.split('&body=')[1] ?? '');
+    if (!href.startsWith('mailto:flek@saiko.cz?subject=')) await fail(`odkaz míří jinam: ${href.slice(0, 60)}`);
+    if (!body.startsWith('Karta mi zmizela z ruky')) await fail('v e-mailu chybí popis');
+    if (body.includes('TajneJmeno')) await fail('e-mail obsahuje jméno hráče');
+    const back = await decodeReport(body);
+    const stored = await pg.evaluate(`JSON.parse(localStorage.getItem('flek.match.v1')).state`);
+    if (JSON.stringify(back.state) !== JSON.stringify(trimToHand(stored as Parameters<typeof trimToHand>[0]))) {
+      await fail('záznam z e-mailu nevrací uložený stav hry');
+    }
+    // panel se musí dát zavřít a tlačítka jsou vidět (na telefonu přes celou obrazovku)
+    if (!(await pg.locator('#report-send').isVisible())) await fail('„Odeslat e-mailem" není vidět');
+    await pg.click('#report-cancel');
+    if (await pg.locator('#report-float').isVisible()) await fail('„Zpět" panel nezavřelo');
+    await ctx.close();
+  }
+  await rb.close();
+  console.log('Hlášení chyby: z lišty i z menu, mailto na flek@saiko.cz s popisem a záznamem, který vrátí uložený stav');
 }
 
 /*

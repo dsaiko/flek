@@ -63,6 +63,10 @@ Around the table:
   betl, durch) that fits on one line in every language;
 - risky discards (an ace or a ten into the talon, breaking a marriage) and a
   pass that would cost money without a card played ask for confirmation.
+- **Report a bug** (the bug icon, or the ☰ menu on a phone) opens an email to
+  flek@saiko.cz with the description, the version, the device and a compressed
+  record of the current hand; `npx tsx scripts/report.ts 'FLEK1:…'` turns the
+  record back into a save that replays the hand exactly.
 
 **On a phone** the table fills the screen and switches to a portrait layout
 when held upright. Browsers that can go full screen do so from the toolbar

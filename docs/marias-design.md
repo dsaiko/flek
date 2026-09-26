@@ -2615,3 +2615,28 @@ rozdávání stůl nejdřív vykreslí (`renderNow` naplánuje „Momentíček�
 animuje — když AI nestihla táhnout do 700 ms, hláška naskočila uprostřed rozdávání. Záleželo na
 rychlosti AI, proto jen občas. Časovač teď při `#table.animating` počká (po 200 ms zkouší znovu).
 Deterministický test na to není (závisí na délce rozmýšlení workeru); hlídá to dál ta smoke kontrola.
+
+## 51. Nahlásit chybu (2026-09-26)
+
+Před rozesláním testerům: tlačítko **Nahlásit chybu** (ikona brouka v liště vedle nápovědy, na
+telefonu v menu pod ☰) otevře panel s polem pro popis. „Odeslat e-mailem" je odkaz `mailto:` na
+**flek@saiko.cz**; „Zkopírovat" dá totéž do schránky pro zařízení bez poštovního klienta.
+
+**Co odchází:** popis, pod čarou verze, čas, user agent, velikost okna, telefon / z plochy, jazyk,
+varianta, vzor karet, IQ, fáze a číslo hry — a **záznam** `FLEK1:…`: sav (`{ v, state }`, týž tvar
+jako v localStorage) s historií oříznutou na aktuální hru, deflate + base64url (~1,2 kB, ať se vejde
+do `mailto:`). Jméno hráče v e-mailu není (`GameState` jména nenese, `reportBody` je nedostává).
+
+**Zpátky:** `npx tsx scripts/report.ts 'FLEK1:…'` (nebo celý text e-mailu) vypíše sav k vložení do
+localStorage (`flek.match.v1`); po obnovení stránky hra naváže přesně tam, kde byl tester. Záznam
+musí projít týmiž kontrolami jako načtení hry — `validateSave` se kvůli tomu vytáhl z `loadMatch`.
+
+**Testy:** verify — záznam tam a zpátky ve voleném i licitovaném (třetí rozehraná hra, historie od
+rozdání, z vráceného stavu jdou tytéž tahy), délka pod 1600 znaků, useknutý záznam a stav
+s chybějící kartou se odmítnou, tělo e-mailu a jeho zakódování beze ztráty. Smoke — z lišty
+(1400×900) i z menu (390×844): odkaz míří na flek@saiko.cz, nese popis, neobsahuje jméno hráče
+a záznam z něj vrátí přesně uložený stav. Negativní kontrola: bez `validateSave` při dekódování
+test podvrhu spadne.
+
+**Pozor:** starší Outlook na Windows ořezává `mailto:` kolem 2000 znaků — tam je jistější
+„Zkopírovat".
