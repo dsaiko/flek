@@ -10,7 +10,8 @@ still the standard card game of Czech pubs.
 The engine is a pure reducer in TypeScript, the two opponents are a heuristic
 plus an Information-Set Monte Carlo tree search running in a Web Worker, and the
 whole thing is a static page with no backend (the only request that leaves the
-page is a GoatCounter hit counter, allowed by name in a strict CSP).
+page is a GoatCounter hit counter, allowed by name in a strict CSP; the same
+counter also receives anonymous error events, see `src/lib/ui/crashes.ts`).
 
 Live site: **[flek.saiko.cz](https://flek.saiko.cz)** · current version
 **0.0.22**, see [`CHANGELOG.md`](CHANGELOG.md) and the

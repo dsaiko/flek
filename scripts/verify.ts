@@ -3547,6 +3547,39 @@ const KULE = 2 as const;
     console.log('PASS review 2026-09-25 — sav, ze kterého nejde hrát, se odmítne');
   }
 
+  // ── §52: počítadlo pádů — co odchází do GoatCounteru ─────────────────────
+  {
+    const { cleanMessage, codeLocation, crashEvent, CrashCounter } = await import('../src/lib/ui/crashes');
+    // žádný osobní údaj: adresy, e-maily a dlouhá čísla pryč, délka omezená
+    const msg = cleanMessage('Selhalo  https://flek.saiko.cz/?seed=123456 pro jan.novak@example.com  č. 9876543\n' + 'x'.repeat(200));
+    assert.ok(!/https?:|@|9876543|123456/.test(msg), `zpráva nese osobní údaj: ${msg}`);
+    assert.ok(msg.startsWith('Selhalo <url> pro <email> č. #'), msg);
+    assert.ok(msg.length <= 80, 'zpráva je zkrácená');
+    assert.equal(cleanMessage('   '), '(bez zprávy)');
+    assert.equal(codeLocation('https://flek.saiko.cz/_astro/index.BfX1.js?v=2#x', 12, 7), 'index.BfX1.js:12:7', 'jen soubor a řádek, ne celá adresa');
+    assert.equal(codeLocation(undefined), '');
+    const ev = crashEvent('render', new TypeError('x is undefined'), '0.0.23', 'table.js:5:1');
+    assert.deepEqual(ev, { path: 'error/render/TypeError: x is undefined', title: 'Flek! 0.0.23 @ table.js:5:1', event: true });
+    // každá chyba jednou, nejvýš `max` různých; dokud GoatCounter není načtený, fronta čeká
+    const sent: string[] = [];
+    let ready = false;
+    const counter = new CrashCounter(() => (ready ? (e) => sent.push(e.path) : null), '0.0.23', 3);
+    counter.report('window', new Error('A'));
+    assert.deepEqual(sent, [], 'bez načteného GoatCounteru se nic neposílá (ani nepadá)');
+    ready = true;
+    counter.report('window', new Error('B'));
+    assert.deepEqual(sent, ['error/window/Error: A', 'error/window/Error: B'], 'po načtení se pošle i fronta');
+    counter.report('window', new Error('A'));
+    assert.equal(sent.length, 2, 'táž chyba podruhé nejde');
+    counter.report('window', new Error('C'));
+    counter.report('window', new Error('D'));
+    assert.deepEqual(sent.slice(2), ['error/window/Error: C'], 'strop: nejvýš tři různé za načtení');
+    // statistika nesmí shodit hru, ani když GoatCounter sám vyhodí výjimku
+    const throwing = new CrashCounter(() => () => { throw new Error('gc down'); }, '0.0.23');
+    throwing.report('window', new Error('E'));
+    console.log('PASS §52 — počítadlo pádů: bez osobních údajů, jednou za chybu, strop a fronta do načtení GoatCounteru');
+  }
+
   // ── §51: hlášení chyby — čitelný záznam hry tam a zpátky ─────────────────
   {
     const { encodeReport, decodeReport, toRecord, moveText, parseMove, reportBody, reportMailto, localStamp, REPORT_ADDRESS } =

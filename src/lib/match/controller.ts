@@ -6,6 +6,7 @@
  * main.ts ji jen napojuje na UI; budoucí server použije tutéž třídu.
  */
 
+import { reportCrash } from '../ui/crashes';
 import type { Difficulty } from '../ai/heuristics';
 import { playPolicy } from '../ai/heuristics';
 import type { ThinkStats } from '../ai/ismcts';
@@ -273,6 +274,7 @@ export class MatchController {
     // strop kontrolovaný na VSTUPU — rekurzivní opakování je tím shora omezené
     if (this.aiFailures >= AI_MAX_FAILURES) {
       console.error('AI opakovaně selhává, smyčka se zastavuje');
+      reportCrash('ai-stuck', 'AI loop stopped after repeated failures');
       return;
     }
 
@@ -300,10 +302,12 @@ export class MatchController {
       if (this.pendingRequest !== requestId || this.stopped) return;
       // fallback: heuristika na hlavním vlákně — hra se nikdy nezasekne
       console.error('AI driver selhal, používám heuristický fallback:', e);
+      reportCrash('ai-worker', e);
       try {
         action = this.fallback(v, new Random(seed));
       } catch (e2) {
         console.error('Záložní politika selhala:', e2);
+        reportCrash('ai-fallback', e2);
         this.aiFailures += 1;
         this.pendingRequest = null;
         void this.maybeRunAi();
@@ -322,6 +326,7 @@ export class MatchController {
       // Tah už není legální (stav se pohnul, cizí odpověď…). Zkus záložní
       // politiku a hlavně nedopusť, aby smyčka umřela a hra zamrzla.
       console.error('AI tah odmítnut, zkouším záložní politiku:', e);
+      reportCrash('ai-illegal', e);
       this.aiFailures += 1;
       const actor = this.actor();
       if (actor === null || actor === this.opts.humanSeat) return;
@@ -330,6 +335,7 @@ export class MatchController {
         this.aiFailures = 0;
       } catch (e2) {
         console.error('Záložní politika také selhala:', e2);
+        reportCrash('ai-fallback', e2);
         void this.maybeRunAi(); // omezené vstupním stropem
         return;
       }
