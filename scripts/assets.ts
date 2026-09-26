@@ -1,7 +1,7 @@
 /**
  * assets.ts — synchronizace karetních sad do public/cards/
  *
- * cards/modern, cards/modern-{en,de,fr} (SVG) → public/cards/… (jen *.svg)
+ * cards/modern-barevna, cards/modern-lidova (SVG) → public/cards/… (jen *.svg)
  * Historickou sadu (WebP) připravuje scripts/prep-history-cards.ts.
  * public/cards/ je generovaný adresář — není v gitu.
  *
@@ -16,7 +16,7 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 
-for (const set of ['modern', 'modern-en', 'modern-de', 'modern-fr']) {
+for (const set of ['modern-barevna', 'modern-lidova']) {
   const src = join(ROOT, 'cards', set);
   const out = join(ROOT, 'public', 'cards', set);
   rmSync(out, { recursive: true, force: true });

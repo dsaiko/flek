@@ -13,7 +13,6 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parse as parseYaml } from 'yaml';
 
-import { FIGURE_EMBLEM, SUIT_IDENT, suitArt, type SuitCode } from '../src/lib/ui/suitArt';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -29,30 +28,15 @@ function checkDeck(dir: string, ext: string): void {
 }
 
 // karetní sady — kompletnost a shodné pojmenování napříč sadami
-checkDeck('cards/modern', 'svg');
-checkDeck('cards/modern-en', 'svg');
-// německá sada se servíruje německým hráčům (cardAssets.ts), takže musí projít
-// týmiž kontrolami jako ostatní
-checkDeck('cards/modern-de', 'svg');
-checkDeck('cards/modern-fr', 'svg');
+checkDeck('cards/modern-barevna', 'svg');
+checkDeck('cards/modern-lidova', 'svg');
 checkDeck('cards/history', 'png');
-assert.ok(existsSync(join(ROOT, 'cards/modern/back.svg')), 'chybí rub moderní sady');
-
-// EN sada má správné indexy (spodek→J, svršek→Q)
-const uh = readFileSync(join(ROOT, 'cards/modern-en/UH.svg'), 'utf8');
-const oh = readFileSync(join(ROOT, 'cards/modern-en/OH.svg'), 'utf8');
-assert.match(uh, />J</, 'EN spodek má mít index J');
-assert.match(oh, />Q</, 'EN svršek má mít index Q');
-const uhCs = readFileSync(join(ROOT, 'cards/modern/UH.svg'), 'utf8');
-assert.match(uhCs, />S</, 'CZ spodek má mít index S');
-const uhFr = readFileSync(join(ROOT, 'cards/modern-fr/UH.svg'), 'utf8');
-const ohFr = readFileSync(join(ROOT, 'cards/modern-fr/OH.svg'), 'utf8');
-assert.match(uhFr, />V</, 'FR spodek má mít index V (valet)');
-assert.match(ohFr, />D</, 'FR svršek má mít index D (dame)');
-console.log('PASS indexy CZ (S V K A) / EN (J Q K A) / FR (V D R A)');
+for (const set of ['cards/modern-barevna', 'cards/modern-lidova']) {
+  assert.ok(existsSync(join(ROOT, set, 'back.svg')), `chybí rub ${set}`);
+}
 
 // SVG neobsahují externí reference (self-contained; xmlns namespace je v pořádku)
-for (const set of ['cards/modern', 'cards/modern-en', 'cards/modern-de', 'cards/modern-fr']) {
+for (const set of ['cards/modern-barevna', 'cards/modern-lidova']) {
   for (const f of readdirSync(join(ROOT, set)).filter((f) => f.endsWith('.svg'))) {
     const svg = readFileSync(join(ROOT, set, f), 'utf8');
     assert.doesNotMatch(svg, /(href|src)\s*=\s*"https?:/, `${set}/${f}: externí odkaz`);
@@ -62,40 +46,57 @@ for (const set of ['cards/modern', 'cards/modern-en', 'cards/modern-de', 'cards/
 console.log('PASS SVG bez externích referencí');
 
 /*
- * Karty v `cards/**` jsou ZAKOMITOVANÝ výstup, ne build artefakt: `make cards`
- * v `make all` není. Bez téhle kontroly tedy úprava `suitArt.ts` změní ikonku
- * u popisku závazku v běžící hře, ale každá karta na stole zůstane stará —
- * a celá sada testů zůstane zelená. Přesně to rozejití (žilka listu měla
- * v generátoru tři tahy, v ikonce jeden) byl důvod, proč `suitArt.ts` vznikl.
- *
- * Král má na hrudi `mono` variantu, ne plnobarevnou — kontroluje se tedy proti
- * ní. Vynechat ho nestačí: `mono()` a jeho napojení na generátor se můžou
- * rozejít i tehdy, když se obrysy nehnou, a král je jediná karta, která tu
- * větev kreslí.
+ * Moderní sady (§49) jsou ZAKOMITOVANÝ výstup `scripts/gen-cards.ts`, ne build
+ * artefakt — `make cards` v `make all` není. Soubory se proto musí shodovat
+ * s tím, co generátor vyrobí teď: jinak by úprava generátoru v repu nic
+ * nezměnila, nebo by se ručně upravená karta při příštím `make cards` tiše
+ * ztratila. A v adresáři nesmí ležet nic navíc (třeba karta ze staré sady).
  */
 {
-  const setsOf = ['cards/modern', 'cards/modern-en', 'cards/modern-de', 'cards/modern-fr'];
+  const { DECKS, deckFiles } = await import('./gen-cards');
   let checked = 0;
-  for (const code of SUITS as SuitCode[]) {
-    const art = suitArt(code);
-    // tytéž volby, jakými emblém kreslí `figureBody` v gen-cards.ts
-    const emblem = suitArt(code, { mono: FIGURE_EMBLEM, detail: SUIT_IDENT[code].color });
-    for (const set of setsOf) {
-      for (const rank of RANKS) {
-        const svg = readFileSync(join(ROOT, set, `${rank}${code}.svg`), 'utf8');
-        const want = rank === 'K' ? emblem : art;
-        assert.ok(svg.includes(want), `${set}/${rank}${code}.svg nesedí se suitArt.ts — spusť \`make cards\``);
-        checked += 1;
-      }
+  for (const deck of DECKS) {
+    const want = deckFiles(deck);
+    const have = readdirSync(join(ROOT, 'cards', deck)).filter((f) => f.endsWith('.svg')).sort();
+    assert.deepEqual(have, [...want.keys()].sort(), `cards/${deck}: jiné soubory, než vyrábí generátor`);
+    for (const [name, content] of want) {
+      assert.equal(readFileSync(join(ROOT, 'cards', deck, name), 'utf8'), content,
+        `cards/${deck}/${name} nesedí s gen-cards.ts — spusť \`make cards\``);
+      checked += 1;
     }
   }
-  assert.equal(checked, setsOf.length * RANKS.length * SUITS.length, 'kontrola musí projít všechny sady');
-  // index se do karty píše taky ze sdílené palety — jinak by se dal rozejít bez alarmu
-  for (const code of SUITS as SuitCode[]) {
-    const svg = readFileSync(join(ROOT, `cards/modern/7${code}.svg`), 'utf8');
-    assert.ok(svg.includes(`fill="${SUIT_IDENT[code].index}"`), `index na 7${code} nesedí se SUIT_IDENT`);
+  assert.equal(checked, 2 * 33, 'dvě sady po 32 kartách a rubu');
+  /*
+   * Mezinárodní indexy (J / Q / K / A) a čitelný roh: ve vějíři je vidět jen
+   * levý pruh karty, proto má roh hodnotu i znak barvy. Obě sady sdílejí
+   * geometrii rohu, takže stačí indexy; znaky pak hlídá shoda s generátorem.
+   */
+  for (const deck of DECKS) {
+    const f = deckFiles(deck);
+    for (const [card, index] of [['UH', 'J'], ['OH', 'Q'], ['KH', 'K'], ['DH', 'A'], ['TH', '10'], ['7H', '7']] as const) {
+      assert.match(f.get(`${card}.svg`) as string, new RegExp(`letter-spacing="-?\\d+">${index}</text>`), `${deck}/${card}: index ${index} v rohu`);
+    }
+    // barvy se liší (v barevné sadě podkladem, v lidové znaky) — 7 každé barvy je jiná karta
+    const sevens = new Set(['7H', '7L', '7B', '7A'].map((c) => f.get(`${c}.svg`)?.replace(/<title>.*?<\/title>/, '')));
+    assert.equal(sevens.size, 4, `${deck}: sedmy různých barev musí vypadat různě`);
   }
-  console.log(`PASS karty — znaky i indexy v sadách sedí se suitArt.ts (${checked} karet)`);
+  console.log(`PASS karty — obě moderní sady sedí s generátorem (${checked} souborů), indexy J/Q/K/A`);
+}
+
+// vzor karet v nastavení: stará jediná moderní sada se převede na barevnou (§49)
+{
+  const { parsePattern, cardSrc, backSrc } = await import('../src/lib/ui/cardAssets');
+  assert.equal(parsePattern('modern', 'history'), 'barevna', 'uložené „modern" (do 0.0.18) → Moderní barevná');
+  for (const p of ['history', 'barevna', 'lidova'] as const) assert.equal(parsePattern(p, 'history'), p);
+  for (const bad of [undefined, null, 'modern-en', 'Barevna', 7]) assert.equal(parsePattern(bad, 'history'), 'history', `„${String(bad)}" → výchozí`);
+  // každá cesta, kterou UI složí, musí existovat v cards/ (public/ je jen kopie)
+  const onDisk = (url: string): string => join(ROOT, 'cards', url.replace(/^\/cards\//, '').replace(/\.webp$/, '.png'));
+  for (const p of ['history', 'barevna', 'lidova'] as const) {
+    for (let c = 0; c < 32; c += 1) assert.ok(existsSync(onDisk(cardSrc(c, p))), `${p}: ${cardSrc(c, p)} neexistuje`);
+    assert.ok(existsSync(onDisk(backSrc(p))), `${p}: rub ${backSrc(p)} neexistuje`);
+  }
+  assert.notEqual(backSrc('barevna'), backSrc('lidova'), 'každá moderní sada má svůj rub');
+  console.log('PASS vzor karet — převod starého nastavení, cesty ke kartám i rubům existují');
 }
 
 // ── engine: kódování karet a pořadí ─────────────────────────────────────────
@@ -1875,7 +1876,7 @@ const KULE = 2 as const;
   {
     const { settlementHtml, replayHtml } = await import('../src/lib/ui/resultHtml');
     const evil = '<img src=x onerror=alert(1)>';
-    const deps = { humanSeat: 0 as const, nameOf: () => evil, pattern: () => 'modern' as const };
+    const deps = { humanSeat: 0 as const, nameOf: () => evil, pattern: () => 'barevna' as const };
     const result = {
       handNo: 0,
       contract: { mode: 'hra' as const, trump: 2 as const, declarer: 0 as const, sedma: null, kilo: null, dveSedmy: false },
@@ -4142,7 +4143,7 @@ const KULE = 2 as const;
       contract: result.contract, phase: { name: 'scored' as const, result },
       publicHistory: [], handResults: [result], ledger: [2, -1, -1], handNo: 1,
     };
-    const deps = { humanSeat: 0 as const, nameOf: () => 'Franta', pattern: () => 'modern' as const };
+    const deps = { humanSeat: 0 as const, nameOf: () => 'Franta', pattern: () => 'barevna' as const };
 
     const plain = settlementHtml(result as never, v as never, deps);
     assert.equal(plain.includes('felt-talk'), false, 'bez hlášky se komentář nevykresluje');
@@ -5957,7 +5958,7 @@ console.log('PASS sav — v2 mimo komentování se migruje, rozehrané fleky z v
   // ── talon ve vyúčtování: v licitovaném při betlu/durchu zůstává rubem (čl. II/11) ──
   {
     const { replayHtml } = await import('../src/lib/ui/resultHtml');
-    const deps = { humanSeat: 0 as const, nameOf: () => 'x', pattern: () => 'modern' as const };
+    const deps = { humanSeat: 0 as const, nameOf: () => 'x', pattern: () => 'barevna' as const };
     const mkResult = (mode: 'hra' | 'betl' | 'durch') => ({
       handNo: 1,
       contract: { mode, trump: mode === 'hra' ? (2 as const) : null, declarer: 0 as const, sedma: null, kilo: null, dveSedmy: false },

@@ -13,7 +13,22 @@ import { suitArt, SUIT_ART_COLORS as C, SUIT_ART_VIEWBOX } from './suitArt';
 const RANK_CODE = ['7', '8', '9', 'T', 'U', 'O', 'K', 'D'] as const;
 const SUIT_CODE = ['H', 'L', 'B', 'A'] as const;
 
-export type Pattern = 'modern' | 'history';
+/**
+ * Vzor karet: historické skeny (1860) a dvě moderní sady z `scripts/gen-cards.ts`
+ * (§49) — „Moderní barevná" a „Moderní lidová". Moderní sady mají mezinárodní
+ * indexy J / Q / K / A, takže nepotřebují jazykové varianty.
+ */
+export type Pattern = 'history' | 'barevna' | 'lidova';
+
+/**
+ * Vzor z uloženého nastavení. Dřívější jediná moderní sada (`'modern'`,
+ * do 0.0.18) se převádí na barevnou; cokoli neznámého padne na výchozí.
+ */
+export function parsePattern(raw: unknown, fallback: Pattern): Pattern {
+  if (raw === 'history' || raw === 'barevna' || raw === 'lidova') return raw;
+  if (raw === 'modern') return 'barevna';
+  return fallback;
+}
 
 export function cardCode(c: Card): string {
   return `${RANK_CODE[rankOf(c)]}${SUIT_CODE[suitOf(c)]}`;
@@ -21,15 +36,15 @@ export function cardCode(c: Card): string {
 
 export function cardSrc(c: Card, pattern: Pattern): string {
   if (pattern === 'history') return `/cards/history/${cardCode(c)}.webp`;
-  const lang = currentLang();
-  const set =
-    lang === 'en' ? 'modern-en' : lang === 'de' ? 'modern-de' : lang === 'fr' ? 'modern-fr' : 'modern';
-  return `/cards/${set}/${cardCode(c)}.svg`;
+  return `/cards/modern-${pattern}/${cardCode(c)}.svg`;
 }
 
-/** Rub karty — historická sada vlastní rub nemá, sdílí moderní. */
-export function backSrc(): string {
-  return '/cards/modern/back.svg';
+/**
+ * Rub karty. Historická sada vlastní rub nemá — půjčuje si lidový (vínový
+ * vzor na krémovém papíře k naskenovaným kartám sedí víc než modrý barevný).
+ */
+export function backSrc(pattern: Pattern): string {
+  return `/cards/modern-${pattern === 'history' ? 'lidova' : pattern}/back.svg`;
 }
 
 const SUIT_NAME_CS = ['červené', 'zelené', 'kule', 'žaludy'];
