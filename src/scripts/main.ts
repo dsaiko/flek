@@ -5,7 +5,7 @@
 import type { Difficulty } from '../lib/ai/heuristics';
 import { MatchController } from '../lib/match/controller';
 import { clearMatch, loadMatch, saveMatch } from '../lib/match/persist';
-import { REPORT_ADDRESS, encodeReport, reportBody, reportMailto } from '../lib/match/report';
+import { REPORT_ADDRESS, encodeReport, localStamp, reportBody, reportMailto } from '../lib/match/report';
 import { createSeedSequence, parseSeedParam } from '../lib/match/seedSequence';
 import { createWorkerDriver } from '../lib/match/workerDriver';
 import { initialState } from '../lib/rules/engine';
@@ -235,6 +235,7 @@ const openSettings = (open: boolean): void => {
     // otevřenou nápovědou tedy jde na nastavení kliknout (a oba panely mají
     // stejný z-index); zavírá se tu, aby se neslepily přes sebe
     openHelp(false);
+    $('report-float').hidden = true; // ani s hlášením chyby (to leží výš a zakrylo by ho)
     nameInput.placeholder = t('you');
   }
 };
@@ -248,6 +249,7 @@ const helpFloat = $<HTMLElement>('help-float');
 const openHelp = (open: boolean): void => {
   helpFloat.hidden = !open;
   if (open) {
+    $('report-float').hidden = true; // panely se nevrství — jeden je vždycky pod druhým
     openSettings(false);
     $('help-body').scrollTop = 0; // otevřít vždy od začátku, ne tam, kde se minule skončilo
   }
@@ -282,7 +284,7 @@ async function refreshReport(): Promise<void> {
   reportSubject = `Flek! ${version} — chyba`;
   reportFull = reportBody(reportText.value, {
     appVersion: version,
-    when: new Date().toISOString().replace('T', ' ').slice(0, 16),
+    when: localStamp(new Date()),
     userAgent: navigator.userAgent,
     viewport: `${innerWidth}×${innerHeight} @${devicePixelRatio}x`,
     flags: `telefon: ${phoneMq.matches ? 'ano' : 'ne'} · z plochy: ${standalone ? 'ano' : 'ne'}`,
@@ -299,6 +301,7 @@ async function refreshReport(): Promise<void> {
 const openReport = (open: boolean): void => {
   reportFloat.hidden = !open;
   $('report-copied').hidden = true;
+  $('report-copy-failed').hidden = true;
   if (open) {
     openSettings(false);
     openHelp(false);
@@ -309,13 +312,21 @@ const openReport = (open: boolean): void => {
 $('btn-report').addEventListener('click', () => openReport(reportFloat.hidden === true));
 $('report-cancel').addEventListener('click', () => openReport(false));
 reportText.addEventListener('input', () => { void refreshReport(); });
-$('report-copy').addEventListener('click', async () => {
-  await refreshReport();
+/*
+ * Zápis do schránky HNED v obsluze kliku, bez čekání na kompresi: Safari
+ * (a každý prohlížeč na iPhonu) ho povolí jen během zpracování gesta, a po
+ * `await` by ho odmítl. Text je hotový dopředu — skládá se při otevření
+ * a s každou úpravou popisu.
+ */
+$('report-copy').addEventListener('click', () => {
+  $('report-copied').hidden = true;
+  $('report-copy-failed').hidden = true;
+  const text = `${REPORT_ADDRESS}\n${reportSubject}\n\n${reportFull}`;
+  const done = (ok: boolean): void => { $(ok ? 'report-copied' : 'report-copy-failed').hidden = false; };
   try {
-    await navigator.clipboard.writeText(`${REPORT_ADDRESS}\n${reportSubject}\n\n${reportFull}`);
-    $('report-copied').hidden = false;
+    navigator.clipboard.writeText(text).then(() => done(true), () => done(false));
   } catch {
-    /* schránka nedostupná (http, zákaz) — zbývá e-mail */
+    done(false); // schránka vůbec není (http, starý prohlížeč)
   }
 });
 reportFloat.addEventListener('click', (ev) => {

@@ -2627,7 +2627,8 @@ varianta, vzor karet, IQ, fáze a číslo hry — a **záznam** `FLEK1:…`: sav
 jako v localStorage) s historií oříznutou na aktuální hru, deflate + base64url (~1,2 kB, ať se vejde
 do `mailto:`). Jméno hráče v e-mailu není (`GameState` jména nenese, `reportBody` je nedostává).
 
-**Zpátky:** `npx tsx scripts/report.ts 'FLEK1:…'` (nebo celý text e-mailu) vypíše sav k vložení do
+**Zpátky:** `pbpaste | npx tsx scripts/report.ts` (celý e-mail přes stdin; argumentem jen samotný
+`FLEK1:…`) vypíše sav k vložení do
 localStorage (`flek.match.v1`); po obnovení stránky hra naváže přesně tam, kde byl tester. Záznam
 musí projít týmiž kontrolami jako načtení hry — `validateSave` se kvůli tomu vytáhl z `loadMatch`.
 
@@ -2640,3 +2641,22 @@ test podvrhu spadne.
 
 **Pozor:** starší Outlook na Windows ořezává `mailto:` kolem 2000 znaků — tam je jistější
 „Zkopírovat".
+
+### Fixpoint review PR #25, první kolo (2026-09-26)
+
+Tři recenzenti × čtyři čočky, 27 nálezů; soudce 20 zamítl, 7 zůstalo otevřených — všech 7 opraveno:
+
+| # | nález | oprava |
+|---|---|---|
+| i10 (high) | dokumentace radila vložit **celý e-mail** do apostrofů na příkazové řádce — popis s `'; příkaz; #` by shell spustil | celý e-mail jen přes **stdin** (`pbpaste \| npx tsx scripts/report.ts`); argument smí být jen `FLEK1:[A-Za-z0-9_-]+`, jinak skript odmítne a poradí stdin. Test spouští skript přes stdin i s podezřelým argumentem |
+| i8 | EN/DE text v panelu tvrdil opak („Your name and nothing else is sent" = jméno se posílá) | záporná věta jako v CZ/FR |
+| i13 | „Zkopírovat" čekalo na kompresi a až pak psalo do schránky — Safari/iOS zápis po `await` mimo gesto odmítne a prázdný `catch` to schoval | zápis hned v obsluze kliku (text je hotový dopředu), neúspěch se ukáže („kopírování se nepovedlo, pošli e-mail"); smoke ověří obsah schránky |
+| i2 | ⚙ nad otevřeným hlášením otevřelo nastavení POD ním (stejný z-index, dřív v DOM) | nastavení i nápověda hlášení zavřou; smoke + negativní kontrola |
+| i7 | čas v e-mailu byl UTC bez označení | `localStamp`: místní čas s `UTC±hh:mm` |
+| i16 | větev „záznam neprošel kontrolou savu" (verze, ne-stav, nehratelná pozice) žádný test nespustil | tři případy, které na ni dojdou; negativní kontrola bez větve padá |
+| i17 | `assert.rejects` bez matcheru a ručně opsaný kódovač — test podvrhu by prošel na jakékoli chybě | sdílený `packSave` (používá ho i `encodeReport`), každé odmítnutí s kontrolou důvodu |
+
+Zamítnuto soudcem (s odůvodněním v `.fixpoint/20260926-172231`): zalomení záznamu klientem
+(bez mezer se nezalamuje), deflate bomba v lokálním CLI, závod mezi kompresí a klikem (milisekundy),
+pokrytí idle/scored bez možného selhání a podobně.
+
