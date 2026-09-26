@@ -2561,3 +2561,35 @@ to zatím nemáme.
   rolování (812×220 i 360×640); negativní kontrola: bez `sticky` hlásí, že „Další hra" je vidět až
   po doscrollování.
 - Blok „Ty" a karta trumfu ležely pod zaobleným rohem — spodní řada teď respektuje `safe-area`.
+
+## 49. Nové moderní karty (2026-09-26)
+
+Uživatel: *„to, co máme jako moderní vzhled karet, zahoď — nelíbí se mi"* a z Claude Design
+dokumentu „Kolo 6 — Moderní karty" převzít **6b Barevná** jako „Moderní barevná" a **6c Lidová**
+jako „Moderní lidová". Historická sada zůstává a je dál výchozí.
+
+- **Předloha:** projekt `787ace27-09ff-400b-9860-178eb192cf28`, `Moderní karty.dc.html`
+  a hotové SVG v `cards/modern-b/` a `cards/modern-c/` (240×410, názvy 7H…DA, back —
+  shodné s naší sadou). Soubory nesou ~9 KB podpisu původu (C2PA) a jsou zjevně generované ze
+  šablony, proto se nepřebíraly jako 66 souborů, ale jako **generátor**
+  (`scripts/gen-cards.ts`, nahradil starý): z předlohy se četly vzorky každé hodnoty, sedmičky
+  ostatních barev a ruby, a generátor je skládá týmiž souřadnicemi, barvami a měřítky.
+  Obě sady v přehledu 8×4 odpovídají popisu návrhu.
+- **Barevná:** celá karta v barvě barvy (červené #d6313a, zelené #2f8a4e, kule #e39a00, žaludy
+  #8a5530) — barva se pozná i z nejužšího proužku ve vějíři; bílé znaky, figury jako bílé pole
+  s velkým písmenem (K s korunou, Q se znakem nad písmenem, J pod ním), modrý rub „M".
+  **Lidová:** krémový papír, Georgia, dvouhlavé figury s dělicí linkou a kosočtvercem, vínový rub.
+- **Indexy J / Q / K / A** místo českých: karty nemají žádný text v jazyce, takže zmizely jazykové
+  varianty `modern-en/-de/-fr` i jejich testy.
+- **Nastavení:** vzor `history | barevna | lidova`; uložené `modern` se převádí na `barevna`
+  (`parsePattern`). **Rub** má každá moderní sada svůj; historická (bez vlastního rubu) si půjčuje
+  lidový.
+- `suitArt.ts` kreslí už jen ikonky barev v popiscích; `SUIT_IDENT` a `FIGURE_EMBLEM` (sloužily
+  jen starému generátoru) odstraněny.
+
+**Testy:** verify — soubory v `cards/modern-*` se znak po znaku shodují s tím, co generátor vyrobí
+teď (a nic navíc v adresáři), indexy J/Q/K/A v rohu, sedmy čtyř barev se liší, převod `modern` →
+`barevna`, každá cesta ke kartě i rubu, kterou UI složí, existuje. Smoke — uložené `modern` se
+načte jako barevná, přepnutí na lidovou / historickou / barevnou přepne ruku i ruby a uloží se.
+Negativní kontroly: ručně pozměněná karta („nesedí s gen-cards.ts") a převod bez `modern`.
+

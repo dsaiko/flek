@@ -1636,6 +1636,54 @@ if (!trumpBackInHand) {
 }
 
 /*
+ * Vzor karet (§49): historické skeny a dvě moderní sady. Přepnutí v nastavení
+ * musí přepnout karty v ruce i ruby soupeřů, a uložené „modern" z doby, kdy
+ * byla moderní sada jediná, se načte jako barevná.
+ */
+{
+  const pb = await chromium.launch();
+  const ctx = await pb.newContext({ viewport: { width: 1400, height: 900 } });
+  const pg = await ctx.newPage();
+  pg.on('dialog', (d) => void d.accept());
+  const fail = async (msg: string): Promise<never> => {
+    console.error(`CHYBA: vzor karet — ${msg}`);
+    await pb.close();
+    await browser.close();
+    process.exit(1);
+  };
+  await pg.goto(url);
+  await pg.evaluate(([match, settings]) => {
+    localStorage.setItem('flek.match.v1', match);
+    localStorage.setItem('flek.settings.v1', settings);
+  }, [mobileSave('voleny', 10, 'tricks'), JSON.stringify({ variant: 'voleny', sounds: false, pattern: 'modern' })]);
+  await pg.reload();
+  await pg.locator('#hand .card-btn img').first().waitFor({ timeout: 15000 });
+  const srcs = async (): Promise<{ hand: string; back: string; select: string }> => pg.evaluate(`({
+    hand: document.querySelector('#hand .card-btn img').getAttribute('src'),
+    back: document.querySelector('.opp-row .backs img').getAttribute('src'),
+    select: document.getElementById('set-pattern').value,
+  })`);
+  let s1 = await srcs();
+  if (s1.select !== 'barevna' || !s1.hand.includes('/modern-barevna/') || !s1.back.includes('/modern-barevna/back.svg')) {
+    await fail(`uložené „modern" se nenačetlo jako barevná (${JSON.stringify(s1)})`);
+  }
+  for (const [value, handDir, backDir] of [['lidova', '/modern-lidova/', '/modern-lidova/'], ['history', '/history/', '/modern-lidova/'], ['barevna', '/modern-barevna/', '/modern-barevna/']] as const) {
+    await pg.click('#btn-settings');
+    await pg.selectOption('#set-pattern', value);
+    await pg.click('#settings-close');
+    await pg.waitForTimeout(150);
+    s1 = await srcs();
+    if (!s1.hand.includes(handDir) || !s1.back.includes(`${backDir}back.svg`)) {
+      await fail(`po volbě „${value}" ukazuje ruka ${s1.hand} a rub ${s1.back}`);
+    }
+  }
+  const saved = await pg.evaluate(`JSON.parse(localStorage.getItem('flek.settings.v1')).pattern`);
+  if (saved !== 'barevna') await fail(`nastavení si vzor neuložilo (${String(saved)})`);
+  await pb.close();
+  console.log('Vzor karet: barevná, lidová i historická přepnou ruku i ruby; staré „modern" = barevná');
+}
+
+/*
  * Telefon jako aplikace (§48): nahoře jen ☰ a ⚙, „Nová hra", nápověda, jazyky
  * a celá obrazovka se na telefonu stěhují do spodního menu — a po přechodu
  * na širokou obrazovku zpátky do lišty. Stěhování (ne kopie) je podstatné:

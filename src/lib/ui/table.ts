@@ -349,7 +349,7 @@ export class TableUI {
       this.root.classList.add('animating');
       trickEl.innerHTML = '';
       const img = document.createElement('img');
-      img.src = mine ? cardSrc(flipped, this.opts.pattern()) : backSrc();
+      img.src = mine ? cardSrc(flipped, this.opts.pattern()) : backSrc(this.opts.pattern());
       img.alt = mine ? cardName(flipped) : '';
       // vlastní třída, ne `pos-me`: ta míří nad ruku, kde je v tu chvíli
       // akční lišta s tlačítkem „Z lidu" — karta ho překrývala
@@ -529,7 +529,7 @@ export class TableUI {
         img.alt = '';
         return img;
       });
-      for (const img of imgs) setSrc(img, backSrc());
+      for (const img of imgs) setSrc(img, backSrc(this.opts.pattern()));
       setReveal(backs, imgs, animate);
       // soupeř sebral talon: dva ruby navíc se zjeví, místo aby naskočily
       if (!animate && !this.reducedMotion() && had > 0 && n > had) fadeIn(imgs.slice(had));
@@ -615,7 +615,7 @@ export class TableUI {
     }
     const img = box.querySelector('img');
     if (img !== null) {
-      setSrc(img, card !== null ? cardSrc(card, this.opts.pattern()) : backSrc());
+      setSrc(img, card !== null ? cardSrc(card, this.opts.pattern()) : backSrc(this.opts.pattern()));
       img.alt = card !== null ? cardName(card) : '';
     }
     const label = box.querySelector('.trump-label');
@@ -646,7 +646,7 @@ export class TableUI {
         return img;
       });
       imgs.forEach((img, i) => {
-        setSrc(img, backSrc());
+        setSrc(img, backSrc(this.opts.pattern()));
         // ledabylý hospodský pakl: deterministické natočení po štychu
         img.style.transform = `rotate(${((i * 47) % 24) - 12}deg) translate(${(i % 3) * 3}px, ${(i % 2) * 2}px)`;
       });
@@ -720,7 +720,7 @@ export class TableUI {
     const imgs = syncChildren(el, INTRO_LAYOUT.length, () => document.createElement('img'));
     imgs.forEach((img, i) => {
       const spot = INTRO_LAYOUT[i];
-      setSrc(img, spot.back === true ? backSrc() : cardSrc(cards[i], this.opts.pattern()));
+      setSrc(img, spot.back === true ? backSrc(this.opts.pattern()) : cardSrc(cards[i], this.opts.pattern()));
       img.alt = '';
       img.style.setProperty('--x', `${spot.x}%`);
       img.style.setProperty('--y', `${spot.y}%`);
@@ -986,7 +986,7 @@ export class TableUI {
       // hover/selected zdvih řeší CSS na <img>, aby se nepřepisovaly)
       const off = i - (n - 1) / 2;
       btn.style.transform = `rotate(${(off * 3).toFixed(1)}deg) translateY(${(off * off * 1.4).toFixed(1)}px)`;
-      setSrc(img, c === null ? backSrc() : cardSrc(c, this.opts.pattern()));
+      setSrc(img, c === null ? backSrc(this.opts.pattern()) : cardSrc(c, this.opts.pattern()));
       img.alt = c === null ? '' : cardName(c);
     });
     setReveal(handEl, buttons, animate);

@@ -10,7 +10,7 @@ import { createWorkerDriver } from '../lib/match/workerDriver';
 import { initialState } from '../lib/rules/engine';
 import { defaultConfig, parseSazbyPreset } from '../lib/rules/sazby';
 import { nextSeat, type GameState, type Variant } from '../lib/rules/types';
-import type { Pattern } from '../lib/ui/cardAssets';
+import { parsePattern, type Pattern } from '../lib/ui/cardAssets';
 import { createSounds } from '../lib/ui/sounds';
 import type { TalkSet } from '../lib/ui/tableTalk';
 import { currentLang, t } from '../lib/ui/i18n';
@@ -50,7 +50,7 @@ function loadSettings(): Settings {
       variant: p.variant === 'voleny' || p.variant === 'licitovany' ? p.variant : DEFAULT_SETTINGS.variant,
       difficulty: p.difficulty === 'easy' || p.difficulty === 'normal' || p.difficulty === 'hard'
         ? p.difficulty : DEFAULT_SETTINGS.difficulty,
-      pattern: p.pattern === 'modern' || p.pattern === 'history' ? p.pattern : DEFAULT_SETTINGS.pattern,
+      pattern: parsePattern(p.pattern, DEFAULT_SETTINGS.pattern),
       talk: p.talk === 'slusna' || p.talk === 'hospodska' || p.talk === 'vulgarni' || p.talk === 'off'
         ? p.talk : DEFAULT_SETTINGS.talk,
       sounds: typeof p.sounds === 'boolean' ? p.sounds : DEFAULT_SETTINGS.sounds,
@@ -470,7 +470,7 @@ function updateControlLabels(): void {
       if (label) opt.textContent = label;
     }
   };
-  set(patternSel, { modern: t('modern'), history: t('history') });
+  set(patternSel, { history: t('history'), barevna: t('patternBarevna'), lidova: t('patternLidova') });
   updateNewButton(); // popisek tlačítka je jazykový taky
   syncLangFlag();
   set(talkSel, { slusna: t('talkPolite'), hospodska: t('talkPub'), vulgarni: t('talkVulgar'), off: t('talkOff') });
