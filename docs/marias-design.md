@@ -2622,22 +2622,32 @@ Před rozesláním testerům: tlačítko **Nahlásit chybu** (ikona brouka v li�
 telefonu v menu pod ☰) otevře panel s polem pro popis. „Odeslat e-mailem" je odkaz `mailto:` na
 **flek@saiko.cz**; „Zkopírovat" dá totéž do schránky pro zařízení bez poštovního klienta.
 
-**Co odchází:** popis, pod čarou verze, čas, user agent, velikost okna, telefon / z plochy, jazyk,
-varianta, vzor karet, IQ, fáze a číslo hry — a **záznam** `FLEK1:…`: sav (`{ v, state }`, týž tvar
-jako v localStorage) s historií oříznutou na aktuální hru, deflate + base64url (~1,2 kB, ať se vejde
-do `mailto:`). Jméno hráče v e-mailu není (`GameState` jména nenese, `reportBody` je nedostává).
+**Co odchází:** popis, pod čarou (anglicky, stejné v každém jazyce) verze, místní čas s pásmem,
+user agent, okno, telefon / z plochy, jazyk, varianta, vzor karet, IQ, fáze a číslo hry — a **záznam
+hry**: čitelný JSON **bez češtiny** (`flek-record-1`: `variant`, `rates`, `dealer`, `hand`, `ledger`
+před rozdáním, `moves`, `legend`). Engine je deterministický, takže stačí seed rozdání a tahy
+v symbolech: `# 1234567` rozdání, `0 * KH` trumf (`?` z lidu), `1 ^ 107H` příhoz (`-` pas, `H`
+červená), `0 >> 7A 8A` odhoz, `0 = H 7 100` hlášení, `1 ~ ok` / `<<` / `betl` převzetí, `1 x2 7`
+flek, `1 vs 7` proti, `1 ok` dobrá, `0 --> KH +` zahraná karta s hláškou, `0 xx` vzdání. Řádky do
+~70 znaků, ať je poštovní klient nezalomí. Jméno hráče v e-mailu není.
 
-**Zpátky:** `pbpaste | npx tsx scripts/report.ts` (celý e-mail přes stdin; argumentem jen samotný
-`FLEK1:…`) vypíše sav k vložení do
-localStorage (`flek.match.v1`); po obnovení stránky hra naváže přesně tam, kde byl tester. Záznam
-musí projít týmiž kontrolami jako načtení hry — `validateSave` se kvůli tomu vytáhl z `loadMatch`.
+*Původně* to byl zkomprimovaný sav v base64 (`FLEK1:…`). Uživatel: *„takhle to vypadá bůhvíco
+z telefonu posíláme"* a *„nemůže tam být nic česky"* — proto text a symboly; přehrání tahů navíc
+každý tah znovu ověří pravidly, což sav nedělal.
 
-**Testy:** verify — záznam tam a zpátky ve voleném i licitovaném (třetí rozehraná hra, historie od
-rozdání, z vráceného stavu jdou tytéž tahy), délka pod 1600 znaků, useknutý záznam a stav
-s chybějící kartou se odmítnou, tělo e-mailu a jeho zakódování beze ztráty. Smoke — z lišty
-(1400×900) i z menu (390×844): odkaz míří na flek@saiko.cz, nese popis, neobsahuje jméno hráče
-a záznam z něj vrátí přesně uložený stav. Negativní kontrola: bez `validateSave` při dekódování
-test podvrhu spadne.
+**Zpátky:** `pbpaste | npx tsx scripts/report.ts` (nebo cesta k souboru s e-mailem; text jako
+argument se odmítne kvůli vložení příkazu do shellu) přehraje záznam od rozdání a vypíše sav
+k vložení do localStorage (`flek.match.v1`). Výsledek musí projít `validateSave` jako načtení hry.
+Předchozí výsledky zápasu (`handResults`) záznam nenese.
+
+**Testy:** verify — 24 náhodných zápasů po třech hrách (obě varianty): každý tah text → tah beze
+ztráty a jen ASCII, musí se potkat všechny druhy tahů (z lidu, červený příhoz, trumf v deklaraci,
+všechna převzetí, flek, proti, hláška, vzdání); záznam se přehraje na týž stav v každé čtvrté
+pozici i po zúčtování; řádky ≤ 76 znaků; neplatný záznam se odmítne s DŮVODEM (formát, konto,
+nelegální tah, neznámý symbol, neznámá karta); skript přes stdin i ze souboru, text jako argument
+odmítne. Smoke — z lišty i z menu: odkaz na flek@saiko.cz, popis, žádné jméno, záznam je ASCII JSON
+a přehraje se na uložený stav. Negativní kontroly: ztracená hláška v zápisu tahu, konto po zúčtování
+bez odečtení výsledku.
 
 **Pozor:** starší Outlook na Windows ořezává `mailto:` kolem 2000 znaků — tam je jistější
 „Zkopírovat".

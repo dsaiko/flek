@@ -265,29 +265,32 @@ document.addEventListener('keydown', (ev) => {
 });
 /*
  * Hlášení chyby (§51): popis od hráče + verze, zařízení a záznam rozehrané
- * hry (`report.ts`) do e-mailu na flek@saiko.cz. Odkaz `mailto:` se skládá
- * dopředu (komprese je asynchronní a klik ji nesmí čekat) a obnovuje se
- * s každou úpravou popisu. „Zkopírovat" je pro zařízení bez poštovního klienta.
+ * hry (`report.ts`, čitelný JSON se seznamem tahů) do e-mailu na flek@saiko.cz.
+ * Odkaz `mailto:` se skládá dopředu a obnovuje s každou úpravou popisu, takže
+ * klik ani „Zkopírovat" na nic nečekají. „Zkopírovat" je pro zařízení bez
+ * poštovního klienta.
  */
 const reportFloat = $<HTMLElement>('report-float');
 const reportText = $<HTMLTextAreaElement>('report-text');
 const reportSend = $<HTMLAnchorElement>('report-send');
 let reportSubject = '';
 let reportFull = '';
-let reportSeq = 0;
-async function refreshReport(): Promise<void> {
-  const seq = (reportSeq += 1);
+function refreshReport(): void {
   const state = controller.state;
   const version = (document.querySelector('.help-version')?.textContent ?? '').replace(/^Flek!\s*v?/, '');
-  const record = await encodeReport(state).catch(() => '(záznam se nepodařilo vytvořit)');
-  if (seq !== reportSeq) return; // mezitím přišla novější úprava
-  reportSubject = `Flek! ${version} — chyba`;
+  let record: string;
+  try {
+    record = encodeReport(state);
+  } catch {
+    record = '(record unavailable)'; // popis ať odejde i tak
+  }
+  reportSubject = `Flek! ${version} bug report`;
   reportFull = reportBody(reportText.value, {
     appVersion: version,
     when: localStamp(new Date()),
     userAgent: navigator.userAgent,
     viewport: `${innerWidth}×${innerHeight} @${devicePixelRatio}x`,
-    flags: `telefon: ${phoneMq.matches ? 'ano' : 'ne'} · z plochy: ${standalone ? 'ano' : 'ne'}`,
+    flags: `phone: ${phoneMq.matches ? 'yes' : 'no'} | home screen: ${standalone ? 'yes' : 'no'}`,
     lang: currentLang(),
     variant: settings.variant,
     pattern: settings.pattern,
@@ -305,13 +308,13 @@ const openReport = (open: boolean): void => {
   if (open) {
     openSettings(false);
     openHelp(false);
-    void refreshReport();
+    refreshReport();
     reportText.focus();
   }
 };
 $('btn-report').addEventListener('click', () => openReport(reportFloat.hidden === true));
 $('report-cancel').addEventListener('click', () => openReport(false));
-reportText.addEventListener('input', () => { void refreshReport(); });
+reportText.addEventListener('input', refreshReport);
 /*
  * Zápis do schránky HNED v obsluze kliku, bez čekání na kompresi: Safari
  * (a každý prohlížeč na iPhonu) ho povolí jen během zpracování gesta, a po
