@@ -2593,3 +2593,25 @@ teď (a nic navíc v adresáři), indexy J/Q/K/A v rohu, sedmy čtyř barev se l
 načte jako barevná, přepnutí na lidovou / historickou / barevnou přepne ruku i ruby a uloží se.
 Negativní kontroly: ručně pozměněná karta („nesedí s gen-cards.ts") a převod bez `modern`.
 
+
+## 50. Náhled odkazu (2026-09-26)
+
+Před rozesláním testerům: stránka neměla značky Open Graph, takže WhatsApp nebo Messenger ukázaly
+jen holou adresu. `Layout.astro` má teď `og:*` a `twitter:card` (`summary_large_image`); crawlery
+JavaScript nespouštějí, takže značky jsou česky (výchozí jazyk stránky) a EN/DE/FR se ohlásí jako
+`og:locale:alternate`. Adresy jsou absolutní z `site` v `astro.config`.
+
+Obrázek `public/og-image.jpg` (1200×630, ~50 kB) vyrábí `make capture` spolu se snímkem pro README:
+úvod v rozložení telefonu na šířku (§48 — poměr 1,9 : 1 sedí na formát náhledu), česky, bez lišty
+s ikonami, deterministicky (pevný seed a pevné dekorační karty). Okno 960×500 × 1,25 a dorovnání
+na 630 px ořezem; skript sám ověří, že telefonní rozložení opravdu naskočilo.
+
+**Smoke:** čte syrové HTML ze serveru (ne DOM — tak ho vidí crawler): `og:title`, `og:description`,
+`og:url`, `og:site_name`, absolutní `og:image`, rozměry 1200×630, `summary_large_image`; obrázek je
+JPEG 1200×630 a pod 300 kB. Negativní kontrola: bez `og:image` smoke spadne.
+
+**Při tom:** smoke dvakrát po sobě shodila kontrola „‚přemýšlím' nevisí během animace". Příčina:
+rozdávání stůl nejdřív vykreslí (`renderNow` naplánuje „Momentíček…" za 700 ms) a teprve pak ~1,5 s
+animuje — když AI nestihla táhnout do 700 ms, hláška naskočila uprostřed rozdávání. Záleželo na
+rychlosti AI, proto jen občas. Časovač teď při `#table.animating` počká (po 200 ms zkouší znovu).
+Deterministický test na to není (závisí na délce rozmýšlení workeru); hlídá to dál ta smoke kontrola.

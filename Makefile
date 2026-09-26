@@ -24,7 +24,7 @@ help:
 	@echo "  make cards              — přegenerování SVG sad karet (modern, -en, -de, -fr)"
 	@echo "  make assets             — příprava public/ (karty, WebP historické sady, ikony na plochu)"
 	@echo "  make smoke              — browser testy (Playwright: Chromium + WebKit)"
-	@echo "  make capture            — snímek úvodní obrazovky pro README"
+	@echo "  make capture            — snímek úvodu pro README a obrázek náhledu odkazu"
 	@echo "  make all                — verify + build + smoke"
 	@echo ""
 	@echo "  make deploy             — build, upload na S3, invalidace CloudFront, úklid starých souborů"

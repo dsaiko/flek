@@ -1,5 +1,6 @@
 /**
- * capture.ts — snímek úvodní obrazovky pro README (`make capture`)
+ * capture.ts — snímek úvodní obrazovky pro README a obrázek náhledu odkazu
+ * (`make capture`)
  *
  * Obrázek v README musí jít kdykoli přegenerovat, jinak po první změně designu
  * ukazuje něco, co v aplikaci není. Scéna je proto deterministická: pevný seed
@@ -10,6 +11,7 @@
 
 import { chromium } from 'playwright';
 import { join } from 'node:path';
+import sharp from 'sharp';
 
 // anglicky: obrázek jde do anglického README
 const url = process.argv[2] ?? 'http://127.0.0.1:8083/?seed=1993&lang=en';
@@ -48,6 +50,36 @@ if (frame === null) {
   process.exit(1);
 }
 await page.screenshot({ path: out, clip: frame, type: 'jpeg', quality: 90 });
-await browser.close();
-
 console.log(`OK: úvodní obrazovka → ${out} (${Math.round(frame.width)}×${Math.round(frame.height)} px)`);
+
+/*
+ * Náhled odkazu (Open Graph, `public/og-image.jpg`): co ukáže WhatsApp,
+ * Messenger nebo Slack, když někdo pošle adresu. 1200×630 je poměr 1,9 : 1 —
+ * tvar úvodu na telefonu na šířku (§48: vlevo vějíř a titulek, vpravo varianty
+ * a „Rozdat"). To rozložení platí jen do výšky 500 px, proto okno 960×500
+ * s hustotou 1,25 (1200×625) a dorovnání na 1200×630 ořezem po stranách.
+ * Česky: hru si budou posílat hlavně Češi a crawlery JavaScript nespouštějí,
+ * takže náhled má jeden jazyk tak jako tak. Lišta s ikonami se schová —
+ * v náhledu nejde na nic kliknout.
+ */
+const og = await browser.newPage({ viewport: { width: 960, height: 500 }, deviceScaleFactor: 1.25 });
+await og.addInitScript({
+  content: 'Math.random = (function () { let s = 42; return function () { s = (s * 1103515245 + 12345) % 2147483648; return s / 2147483648; }; })();',
+});
+const ogUrl = new URL(url);
+ogUrl.searchParams.set('lang', 'cs');
+await og.goto(ogUrl.toString());
+await og.waitForSelector('#intro-panel', { state: 'visible', timeout: 10000 });
+await og.addStyleTag({ content: '.game-controls { display: none !important; }' });
+await og.waitForTimeout(1200);
+const ogOut = process.argv[4] ?? join('public', 'og-image.jpg');
+// telefonní rozložení opravdu naskočilo? (jinak by v náhledu byl desktopový rám s bílým okolím)
+if (!(await og.evaluate(`matchMedia('(max-height: 500px) and (orientation: landscape)').matches`))) {
+  console.error('CHYBA: náhled odkazu nevznikl v rozložení telefonu na šířku');
+  await browser.close();
+  process.exit(1);
+}
+const shot = await og.screenshot({ type: 'png' });
+await sharp(shot).resize(1200, 630, { fit: 'cover' }).jpeg({ quality: 85, mozjpeg: true }).toFile(ogOut);
+await browser.close();
+console.log(`OK: náhled odkazu → ${ogOut} (1200×630 px)`);

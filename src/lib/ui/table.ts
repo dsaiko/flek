@@ -875,16 +875,26 @@ export class TableUI {
     const seat = seatOnTurn(v);
     if (seat === null || seat === this.opts.humanSeat) return;
     const at = state.history.length;
-    this.thinkTimer = setTimeout(() => {
+    const fire = (): void => {
       this.thinkTimer = null;
       // stav se mezitím pohnul (nebo hlášky zhasly) → hláška už je zastaralá
       if (this.prevState === null || this.prevState.history.length !== at) return;
       if (this.talkSet === 'off') return;
+      /*
+       * Rozdávání stůl nejdřív vykreslí (tady se naplánuje hláška) a TEPRVE
+       * PAK animuje ~1,5 s. Když AI nestihla táhnout do 700 ms, „Momentíček…"
+       * naskočil uprostřed rozdávání. Dokud se animuje, hláška počká.
+       */
+      if (this.root.classList.contains('animating')) {
+        this.thinkTimer = setTimeout(fire, 200);
+        return;
+      }
       // vybíráme až TEĎ, ať se do „nedávno padlo" nezapisují hlášky, co se neukázaly
       const line = this.pickTalk('thinking', [seat, state.handNo, at]);
       if (line === null) return;
       this.showBubble(seat, esc(line), 'thinking');
-    }, 700);
+    };
+    this.thinkTimer = setTimeout(fire, 700);
   }
 
   /** Sundá „Momentíček…", pokud zrovna visí (nebo čeká ve frontě). */
