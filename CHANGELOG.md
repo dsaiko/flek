@@ -4,6 +4,14 @@ Poznámky k vydání. Sekci pro daný tag z tohohle souboru vytáhne CI a použi
 jako text releasu na GitHubu (`.github/workflows/release.yml`) — nadpis sekce se
 stane názvem vydání. Nová verze = **přidat sekci sem** a až pak tagovat.
 
+## v0.0.23 — místo pro trumf a počítadlo pádů
+
+- Na telefonu je při volbě trumfu vpravo na stole čárkované místo **„TRUMF ?"** — tam, kam
+  pak trumfová karta přijde.
+- Když ve hře něco spadne, dozvíme se to i bez hlášení: chyba se anonymně započítá (jen druh
+  chyby a místo v kódu, žádné jméno ani stav hry).
+- Bublina „přemýšlím" u soupeře (třeba „Tak co s tím") už nevisí nad dohraným štychem.
+
 ## v0.0.22 — čitelné hlášení chyby
 
 Záznam hry v hlášení chyby je teď čitelný text místo zakódované změti: seed rozdání a seznam
