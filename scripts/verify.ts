@@ -1094,6 +1094,17 @@ const KULE = 2 as const;
 
   // ── i17: obnova po selhání AI (nelegální tah / pád driveru / mrtvý fallback)
   {
+    // každé selhání AI musí dojít i do počítadla pádů (§52), jinak se o něm
+    // z ostrého provozu nedozvíme — hra se přece zotaví a nikdo nic nenahlásí
+    const { installCrashCounter } = await import('../src/lib/ui/crashes');
+    const crashKinds = (): string[] => {
+      const kinds: string[] = [];
+      installCrashCounter({
+        addEventListener: () => {},
+        goatcounter: { count: (e: { path: string }) => kinds.push(e.path.split('/')[1]) },
+      } as never, 'test');
+      return kinds;
+    };
     const mkCtrl = (
       driver: { think: (r: never) => Promise<never>; cancel: () => void },
       fallbackPolicy?: () => never,
@@ -1109,6 +1120,7 @@ const KULE = 2 as const;
       think: async () => ({ action: { type: 'good', seat: 1 }, stats: { iterations: 0, elapsedMs: 0, evaluations: [] } }),
       cancel: () => {},
     };
+    const kindsA = crashKinds();
     const cA = mkCtrl(badDriver as never);
     cA.dealNext();
     for (let i = 0; i < 400 && cA.state.handResults.length === 0; i += 1) {
@@ -1121,10 +1133,12 @@ const KULE = 2 as const;
       }
     }
     assert.equal(cA.state.handResults.length, 1, 'hra se s nelegálními tahy AI musí dotáhnout přes fallback');
+    assert.deepEqual([...new Set(kindsA)], ['ai-illegal'], `nelegální tah AI do počítadla pádů (${kindsA})`);
     cA.stop();
 
     // (b) driver padá (odmítne) → totéž
     const throwingDriver = { think: async () => { throw new Error('worker mrtvý'); }, cancel: () => {} };
+    const kindsB = crashKinds();
     const cB = mkCtrl(throwingDriver as never);
     cB.dealNext();
     for (let i = 0; i < 400 && cB.state.handResults.length === 0; i += 1) {
@@ -1137,10 +1151,12 @@ const KULE = 2 as const;
       }
     }
     assert.equal(cB.state.handResults.length, 1, 'hra se po pádu driveru musí dotáhnout přes fallback');
+    assert.deepEqual([...new Set(kindsB)], ['ai-worker'], `pád driveru do počítadla pádů (${kindsB})`);
     cB.stop();
 
     // (c) selže i záložní politika → smyčka se zastaví, NEcyklí (strop)
     let fallbackCalls = 0;
+    const kindsC = crashKinds();
     const cC = mkCtrl(throwingDriver as never, (() => {
       fallbackCalls += 1;
       throw new Error('fallback mrtvý');
@@ -1156,7 +1172,9 @@ const KULE = 2 as const;
     await nap(200);
     assert.ok(fallbackCalls > 0, 'záložní politika se nezavolala');
     assert.ok(fallbackCalls <= 4, `smyčka se zacyklila (${fallbackCalls} volání)`);
+    assert.deepEqual([...new Set(kindsC)].sort(), ['ai-fallback', 'ai-stuck', 'ai-worker'], `mrtvý fallback a strop do počítadla pádů (${kindsC})`);
     cC.stop();
+    crashKinds(); // dál už nic z verify do téhle jímky nepatří
     console.log(`PASS regrese i17 — obnova AI: nelegální tah, pád driveru, strop (${fallbackCalls} pokusů)`);
   }
 
@@ -3374,7 +3392,23 @@ const KULE = 2 as const;
     assert.deepEqual(painted, ['x'], 'po `clear()` nesmí doskočit nic z minulého zápasu');
     assert.equal(timers.size, 0, 'a nesmí zůstat viset časovač');
 
-    console.log('PASS bubliny — čekající „Momentíček…" se ruší tahem, nezrušený se dokreslí');
+    // během animace (`holdThinking`) se „Momentíček…" nekreslí — ani hned, ani
+    // z fronty, když animace začala, až když čekal; běžná hláška ano
+    clock = START; timers.clear(); painted.length = 0;
+    let animating = false;
+    const q5 = new BubbleQueue(MIN, fake, () => animating);
+    q5.request(1, 'talk', () => { painted.push('talk1'); q5.painted(1); });
+    q5.request(1, 'thinking', () => { painted.push('think-queued'); q5.painted(1); });
+    animating = true;
+    advance(MIN * 2);
+    q5.request(2, 'thinking', () => painted.push('think-now'));
+    q5.request(0, 'talk', () => painted.push('talk0'));
+    assert.deepEqual(painted, ['talk1', 'talk0'], '„Momentíček…" se během animace nesmí vykreslit');
+    animating = false;
+    q5.request(2, 'thinking', () => painted.push('think-after'));
+    assert.deepEqual(painted.at(-1), 'think-after', 'po animaci se „Momentíček…" zase kreslí');
+
+    console.log('PASS bubliny — čekající „Momentíček…" se ruší tahem, nezrušený se dokreslí, během animace se nekreslí');
   }
 
   // ── vějíř v betlu/durchu: desítka patří pod spodka, ne vedle esa ────────
@@ -3577,6 +3611,40 @@ const KULE = 2 as const;
     // statistika nesmí shodit hru, ani když GoatCounter sám vyhodí výjimku
     const throwing = new CrashCounter(() => () => { throw new Error('gc down'); }, '0.0.23');
     throwing.report('window', new Error('E'));
+    // …ani když je divná sama vyhozená hodnota: report() se volá z obnovy po chybě
+    const odd = new CrashCounter(() => () => {}, '0.0.23');
+    odd.report('render', Object.create(null));
+    odd.report('render', { toString() { throw new Error('toString'); } });
+    const getter = new Error('x');
+    Object.defineProperty(getter, 'stack', { get() { throw new Error('stack'); } });
+    odd.report('render', getter);
+
+    // místo ze zásobníku (chyby zachycené v kódu nemají `where`): jen soubor,
+    // řádek a sloupec — ne adresa s dotazem, ve formátu Chromia i WebKitu
+    const withStack = (stack: string): Error => Object.assign(new TypeError('x is undefined'), { stack });
+    const chromeTitle = crashEvent('render', withStack(
+      'TypeError: x is undefined\n    at renderNow (https://flek.saiko.cz/_astro/index.BfX1.js?seed=123456#hrac@example.com:12:7)\n    at https://flek.saiko.cz/_astro/other.js:1:1',
+    ), '0.0.23').title;
+    assert.equal(chromeTitle, 'Flek! 0.0.23 @ index.BfX1.js:12:7', `zásobník Chromia: ${chromeTitle}`);
+    const webkitTitle = crashEvent('render', withStack('renderNow@https://flek.saiko.cz/_astro/index.BfX1.js?v=9:40:3\n'), '0.0.23').title;
+    assert.equal(webkitTitle, 'Flek! 0.0.23 @ index.BfX1.js:40:3', `zásobník WebKitu: ${webkitTitle}`);
+    assert.equal(crashEvent('render', withStack('TypeError: x\n    at <anonymous>:1:5'), '0.0.23').title, 'Flek! 0.0.23', 'bez adresy v zásobníku žádné místo');
+
+    // GoatCounter se načítá asynchronně: fronta se pošle, až bude — bez dalšího
+    // hlášení, jen časovačem — a po 15 marných pokusech se to vzdá
+    const napC = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+    const late: string[] = [];
+    let lateReady = false;
+    const lateCounter = new CrashCounter(() => (lateReady ? (e) => late.push(e.path) : null), '0.0.23', 5, 5);
+    lateCounter.report('window', new Error('early'));
+    lateReady = true;
+    await napC(40);
+    assert.deepEqual(late, ['error/window/Error: early'], 'chyba z doby před načtením GoatCounteru odejde časovačem');
+    let asked = 0;
+    const never = new CrashCounter(() => { asked += 1; return null; }, '0.0.23', 5, 2);
+    never.report('window', new Error('lost'));
+    await napC(250);
+    assert.equal(asked, 16, `jeden pokus hned a 15 po časovači, pak konec (bylo ${asked})`);
     console.log('PASS §52 — počítadlo pádů: bez osobních údajů, jednou za chybu, strop a fronta do načtení GoatCounteru');
   }
 

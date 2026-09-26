@@ -84,14 +84,25 @@ export class BubbleQueue {
   private readonly shownAt = new Map<Seat, number>();
   private queuedThinking: Seat | null = null;
 
+  /**
+   * `holdThinking`: „Momentíček…" se teď nekreslí (stůl animuje dohraný štych
+   * nebo rozdávání, takže nikdo nepřemýšlí). Hlídá se až ve chvíli kreslení —
+   * i tehdy, když hláška čekala ve frontě a animace mezitím začala; smoke ji
+   * tak dvakrát chytil. Další překreslení ji po animaci naplánuje znovu,
+   * pokud AI pořád počítá.
+   */
   constructor(private readonly minMs: number, private readonly clock: BubbleClock = {
     now: () => Date.now(),
     setTimeout: (fn, ms) => setTimeout(fn, ms),
     clearTimeout: (timer) => clearTimeout(timer),
-  }) {}
+  }, private readonly holdThinking: () => boolean = () => false) {}
 
   /** Hláška u sedadla: buď hned, nebo až doječte ta předchozí. */
   request(seat: Seat, kind: 'talk' | 'thinking', paint: () => void): void {
+    const draw = (): void => {
+      if (kind === 'thinking' && this.holdThinking()) return;
+      paint();
+    };
     const waiting = this.pending.get(seat);
     if (waiting !== undefined) this.clock.clearTimeout(waiting);
     // ve frontě čeká vždy jen poslední hláška — tahle tam případné „Momentíček…"
@@ -103,12 +114,12 @@ export class BubbleQueue {
       this.pending.set(seat, this.clock.setTimeout(() => {
         this.pending.delete(seat);
         if (this.queuedThinking === seat) this.queuedThinking = null;
-        paint();
+        draw();
       }, this.minMs - since));
       return;
     }
     this.pending.delete(seat);
-    paint();
+    draw();
   }
 
   /** Bublina naskočila — od téhle chvíle běží její čtecí čas. */
@@ -183,7 +194,7 @@ export class TableUI {
   /** U koho bublina „přemýšlím" právě visí (aby šla sundat, až tah přijde). */
   private thinkShown: Seat | null = null;
   /** Kdy se která hláška smí vykreslit (i rušení čekajícího „Momentíčku"). */
-  private readonly bubbles = new BubbleQueue(MIN_BUBBLE_MS);
+  private readonly bubbles = new BubbleQueue(MIN_BUBBLE_MS, undefined, () => this.root.classList.contains('animating'));
   /** Karty na úvodní obrazovce — vybrané jednou, ať při překreslení nepřeskakují. */
   private introCards: Card[] | null = null;
   /** Pohled pro delegovaný klik na kartu (tlačítka se recyklují, ne převěšují). */
@@ -854,14 +865,6 @@ export class TableUI {
   }
 
   private paintBubble(seat: Seat, html: string, kind: 'talk' | 'thinking'): void {
-    /*
-     * „Přemýšlím" nikdy během animace: ta začíná, až táhli všichni, takže
-     * v tu chvíli nikdo nepřemýšlí. Hlídá se tady, kde se bublina kreslí —
-     * cest, kudy sem může dojít (časovač, fronta bublin, přerušená animace),
-     * je víc a smoke ji dvakrát chytil i po opravě jedné z nich. Další
-     * překreslení ji po animaci naplánuje znovu, pokud AI pořád počítá.
-     */
-    if (kind === 'thinking' && this.root.classList.contains('animating')) return;
     this.thinkShown = kind === 'thinking' ? seat : this.thinkShown === seat ? null : this.thinkShown;
     const el = this.bubbleEl(seat);
     el.innerHTML = html;

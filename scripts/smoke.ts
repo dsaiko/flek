@@ -1816,6 +1816,16 @@ if (!trumpBackInHand) {
   const cb = await chromium.launch();
   const ctx = await cb.newContext({ viewport: { width: 1400, height: 900 } });
   await ctx.route('https://gc.zgo.at/**', (r) => r.abort());
+  // chyba ze skutečného souboru se skutečnou adresou (s dotazem), ať titulek
+  // nese místo v kódu, jako v ostrém provozu
+  await ctx.route('**/smoke-pad.js*', (r) => r.fulfill({
+    contentType: 'text/javascript',
+    body: [
+      "setTimeout(() => { throw new Error('smoke-pad https://flek.saiko.cz/?seed=123456 hrac@example.com'); }, 0);",
+      "setTimeout(() => { throw new Error('smoke-pad https://flek.saiko.cz/?seed=123456 hrac@example.com'); }, 0);",
+      "setTimeout(() => { Promise.reject(new Error('smoke-promise')); }, 0);",
+    ].join('\n'),
+  }));
   await ctx.addInitScript({ content: 'window.__gc = []; window.goatcounter = { count: (e) => window.__gc.push(e) };' });
   const pg = await ctx.newPage();
   const fail = async (msg: string): Promise<never> => {
@@ -1826,18 +1836,19 @@ if (!trumpBackInHand) {
   };
   await pg.goto(url);
   await pg.waitForSelector('#intro-panel', { state: 'visible' });
-  await pg.evaluate(`setTimeout(() => { throw new Error('smoke-pad https://flek.saiko.cz/?seed=123456 hrac@example.com'); }, 0)`);
-  await pg.evaluate(`setTimeout(() => { throw new Error('smoke-pad https://flek.saiko.cz/?seed=123456 hrac@example.com'); }, 0)`);
-  await pg.evaluate(`Promise.reject(new Error('smoke-promise'))`).catch(() => {});
-  await pg.evaluate(`setTimeout(() => { Promise.reject(new Error('smoke-promise')); }, 0)`);
+  await pg.addScriptTag({ url: '/smoke-pad.js?seed=123456&who=hrac@example.com' });
   await pg.waitForTimeout(300);
   const events = await pg.evaluate('window.__gc') as { path: string; title: string; event: boolean }[];
   const win = events.filter((e) => e.path.startsWith('error/window/'));
   if (win.length !== 1) await fail(`chyba v okně: čekal jsem jednu událost, přišlo ${win.length} (${JSON.stringify(events)})`);
   const e = win[0];
-  if (!e.event || !e.path.includes('smoke-pad') || /https?:|@|123456/.test(e.path + e.title)) await fail(`událost nese adresu nebo osobní údaj: ${JSON.stringify(e)}`);
-  if (!/^Flek! \S+/.test(e.title)) await fail(`titulek bez verze: ${e.title}`);
-  if (!events.some((x) => x.path.startsWith('error/promise/') && x.path.includes('smoke-promise'))) await fail('odmítnutý promise se nezapočítal');
+  // cesta bez adres a čísel; titulek je přesně „Flek! <verze> @ soubor:řádek:sloupec"
+  const titled = /^Flek! \d+\.\d+\.\d+ @ smoke-pad\.js:\d+:\d+$/;
+  if (!e.event || !e.path.includes('smoke-pad') || /https?:|@|123456/.test(e.path)) await fail(`událost nese adresu nebo osobní údaj: ${JSON.stringify(e)}`);
+  if (!titled.test(e.title)) await fail(`titulek chyby v okně nemá verzi a místo bez adresy: ${e.title}`);
+  const pr = events.find((x) => x.path.startsWith('error/promise/') && x.path.includes('smoke-promise'));
+  if (!pr) await fail(`odmítnutý promise se nezapočítal (${JSON.stringify(events)})`);
+  else if (!titled.test(pr.title)) await fail(`titulek promisu nemá místo ze zásobníku bez adresy: ${pr.title}`);
   await cb.close();
   console.log('Počítadlo pádů: chyba i odmítnutý promise jdou do GoatCounteru jednou, bez adres a osobních údajů');
 }
