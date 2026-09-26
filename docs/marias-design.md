@@ -2703,8 +2703,8 @@ Kde to číst: v GoatCounteru na flek.goatcounter.com → přepínač *Events* (
 **Bublina „přemýšlím" během animace:** smoke ji znovu chytil po dohraném štychu (v0.0.20 opravila
 jen rozdávání). Cest, kudy se k vykreslení bubliny dojde, je víc (časovač, fronta bublin,
 překreslení z jiného místa uprostřed animace), proto se teď hlídá přímo tam, kde se kreslí:
-`paintBubble` s druhem `thinking` během `#table.animating` nic nenakreslí a začátek animace štychu
-visící bublinu schová. Pokud AI po animaci pořád počítá, další překreslení bublinu naplánuje znovu.
+`BubbleQueue` s druhem `thinking` během `#table.animating` nic nenakreslí (ani hlášku, která
+čekala ve frontě) a začátek animace štychu visící bublinu schová. Pokud AI po animaci pořád počítá, další překreslení bublinu naplánuje znovu.
 
 **Testy:** verify — `cleanMessage` (URL, e-mail, dlouhé číslo, prázdná zpráva, délka),
 `codeLocation`, `crashEvent`, `CrashCounter`: fronta, než je GoatCounter načtený, jedna událost
@@ -2712,3 +2712,21 @@ za stejnou chybu, strop 5, výjimka z GoatCounteru se nepropustí. Smoke — `co
 init skript, gc.zgo.at zablokovaný: dvakrát stejná chyba v okně dá jednu událost bez URL, e-mailu
 a číslic, s titulkem `Flek! …`; odmítnutý promise dá svou. Negativní kontrola: počítadlo
 nezapnuté → „čekal jsem jednu událost, přišlo 0".
+
+### Fixpoint review PR #27, první kolo (2026-09-27)
+
+Tři recenzenti × čtyři čočky, 18 nálezů; soudce 12 zamítl, 6 zůstalo otevřených — všech 6 opraveno:
+
+| # | nález | oprava |
+|---|---|---|
+| i11 (high) | `stackLocation` (místo ze zásobníku u chyb zachycených v kódu) nic netestovalo — návrat celé adresy s dotazem by prošel | verify: zásobník Chromia i WebKitu s adresou, dotazem a `#`, titulek jen `soubor:řádek:sloupec`; bez adresy žádné místo |
+| i16 | smoke zakazoval `@` v celé události, ale titulek `Flek! <verze> @ místo` ho nese — test procházel jen proto, že chyba z `page.evaluate` žádné místo neměla | chyba i promise ze skutečného souboru `/smoke-pad.js?seed=…&who=…@…`; cesta bez adres, titulek přesně `Flek! x.y.z @ smoke-pad.js:ř:s` |
+| i5 | opakování po 2 s a vzdání po 30 s nic netestovalo (verify frontu vyprázdnilo dalším hlášením, smoke měl `count` hned) | interval je parametr (`retryMs`), strop 15 pokusů; verify: fronta odejde jen časovačem, po 15 pokusech konec |
+| i13 | hlášení selhání AI (`ai-worker`, `ai-illegal`, `ai-fallback`, `ai-stuck`) nic neověřovalo | scénáře i17 mají jímku a ověří druhy |
+| i1 | `report()` mohlo samo vyhodit (objekt bez prototypu, házející `toString`/`stack`) — a volá se z obnovy renderu a AI | celé tělo v try/catch; verify s třemi podivnými hodnotami |
+| i9 | hlídání bubliny během animace hlídala jen náhodná smyčka ve smoke | hlídání přesunuto do `BubbleQueue` (`holdThinking`) a testováno s falešnými hodinami, i pro hlášku čekající ve frontě |
+
+Negativní kontroly: bez try/catch, zásobník s celou adresou, časovač neposílá, dvojnásobný strop,
+chybějící `ai-worker` / `ai-stuck`, fronta bez hlídání animace, `codeLocation` s dotazem (smoke) —
+každá spadne. Zamítnuto soudcem (s odůvodněním v `.fixpoint/20260927-003329`): emoji na hraně
+80 znaků, obrys vidět už během rozdávání (jako výzva a tlačítka), vzdání po 30 s je záměr, a duplicity.

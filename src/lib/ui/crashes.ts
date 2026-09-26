@@ -20,6 +20,9 @@ export interface CrashEvent {
 
 type Count = (e: CrashEvent) => void;
 
+/** Kolikrát se po `retryMs` zkusí, jestli už je GoatCounter načtený. */
+const MAX_TRIES = 15;
+
 /** Zpráva chyby bez čehokoli, co by mohlo nést osobní údaj. */
 export function cleanMessage(raw: string): string {
   return raw
@@ -59,23 +62,31 @@ export class CrashCounter {
   private readonly sent = new Set<string>();
   private readonly queue: CrashEvent[] = [];
   private timer: ReturnType<typeof setTimeout> | null = null;
-  private waited = 0;
+  private tries = 0;
 
   constructor(
     private readonly count: () => Count | null,
     private readonly version: string,
     private readonly max = 5,
+    private readonly retryMs = 2000,
   ) {}
 
+  /**
+   * Volá se z obnovy po chybě (render, AI), takže nesmí vyhodit nic: podivná
+   * vyhozená hodnota (objekt bez prototypu, `toString`, který sám hází) by
+   * jinak shodila právě tu obnovu, kvůli které tu počítadlo je.
+   */
   report(kind: string, err: unknown, where = ''): void {
-    const ev = crashEvent(kind, err, this.version, where);
-    if (this.sent.has(ev.path) || this.sent.size >= this.max) return;
-    this.sent.add(ev.path);
-    this.queue.push(ev);
-    this.flush();
+    try {
+      const ev = crashEvent(kind, err, this.version, where);
+      if (this.sent.has(ev.path) || this.sent.size >= this.max) return;
+      this.sent.add(ev.path);
+      this.queue.push(ev);
+      this.flush();
+    } catch { /* statistika nesmí shodit hru */ }
   }
 
-  /** Pošle frontu, jakmile je GoatCounter načtený; zkouší ~30 s, pak to vzdá. */
+  /** Pošle frontu, jakmile je GoatCounter načtený; zkouší 15× po `retryMs` (~30 s), pak to vzdá. */
   private flush(): void {
     const count = this.count();
     if (count !== null) {
@@ -84,12 +95,12 @@ export class CrashCounter {
       }
       return;
     }
-    if (this.timer !== null || this.waited >= 30_000) return;
+    if (this.timer !== null || this.tries >= MAX_TRIES) return;
     this.timer = setTimeout(() => {
       this.timer = null;
-      this.waited += 2000;
+      this.tries += 1;
       this.flush();
-    }, 2000);
+    }, this.retryMs);
   }
 }
 
