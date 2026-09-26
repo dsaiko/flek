@@ -3547,6 +3547,70 @@ const KULE = 2 as const;
     console.log('PASS review 2026-09-25 — sav, ze kterého nejde hrát, se odmítne');
   }
 
+  // ── §51: hlášení chyby — záznam hry tam a zpátky ─────────────────────────
+  {
+    const { encodeReport, decodeReport, reportBody, reportMailto, trimToHand, REPORT_ADDRESS } =
+      await import('../src/lib/match/report');
+    const { playPolicy, decideAuction } = await import('../src/lib/ai/heuristics');
+    const { Random: RandomR } = await import('../src/lib/random');
+    const rng = new RandomR(5);
+    let longest = 0;
+    for (const variant of ['voleny', 'licitovany'] as const) {
+      // dvě odehrané hry a třetí rozehraná: záznam nese jen tu třetí
+      type StR = ReturnType<typeof initialState>;
+      const playOut = (from: StR, stopMidHand: boolean): StR => {
+        let x = from;
+        for (let guard = 0; guard < 200 && x.phase.name !== 'scored'; guard += 1) {
+          if (stopMidHand && x.phase.name === 'tricks' && x.phase.trickNo === 4) break;
+          const seat = ([0, 1, 2] as const).find((q) => legalActions(view(x, q)).length > 0);
+          if (seat === undefined) break;
+          const v = view(x, seat);
+          x = apply(x, v.phase.name === 'tricks' ? playPolicy(v, rng) : decideAuction(v, 'normal', rng));
+        }
+        return x;
+      };
+      let st = playOut(apply(initialState(defaultConfig(variant), 2), { type: 'deal', seed: 31 }), false);
+      st = playOut(apply(st, { type: 'deal', seed: 40 }), false);
+      // třetí hra: seed, se kterým se opravdu hraje (dobrá hra se nedohrává)
+      const done = st;
+      for (let seed = 50; seed < 90; seed += 1) {
+        st = playOut(apply(done, { type: 'deal', seed }), true);
+        if (st.phase.name === 'tricks') break;
+      }
+      assert.ok(st.handResults.length >= 2 && st.phase.name !== 'scored', 'fixtura: rozehraná třetí hra');
+      const blob = await encodeReport(st);
+      longest = Math.max(longest, blob.length);
+      const back = await decodeReport(`popis…\nZáznam: ${blob}\n`);
+      assert.deepEqual(back.state, trimToHand(st), `${variant}: záznam musí vrátit týž stav (s historií od rozdání)`);
+      assert.equal(back.state.history[0].type, 'deal', 'historie začíná rozdáním aktuální hry');
+      // z vráceného stavu jde hrát dál — tester i já vidíme totéž
+      assert.deepEqual(legalActions(view(back.state, 0)), legalActions(view(st, 0)), 'z vráceného stavu jdou tytéž tahy');
+    }
+    // do odkazu mailto: se musí vejít (klienti zvládají kolem 2000 znaků spolehlivě)
+    assert.ok(longest < 1600, `záznam má ${longest} znaků — mailto by se mohl uříznout`);
+    // podvrh nebo useknutý záznam se odmítne, ne „zopakuje"
+    await assert.rejects(decodeReport('FLEK1:AAAA'), 'useknutý záznam');
+    await assert.rejects(decodeReport('bez záznamu'), 'text bez FLEK1:');
+    const dealt = trimToHand(apply(initialState(defaultConfig('voleny'), 2), { type: 'deal', seed: 3 }));
+    // karta chybí v ruce: všech 32 karet už nesedí
+    const bad = JSON.stringify({ v: 3, state: { ...dealt, hands: [dealt.hands[0].slice(1), dealt.hands[1], dealt.hands[2]] } });
+    const packed = new Uint8Array(await new Response(new Blob([new TextEncoder().encode(bad)]).stream().pipeThrough(new CompressionStream('deflate-raw'))).arrayBuffer());
+    const badBlob = 'FLEK1:' + btoa(String.fromCharCode(...packed)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    await assert.rejects(decodeReport(badBlob), 'stav s chybějícími kartami musí záznam odmítnout');
+    // e-mail: popis nahoře, údaje pod čarou; žádné jméno (reportBody ho ani nedostane)
+    const body = reportBody('  Karta zmizela  ', {
+      appVersion: '0.0.21', when: '2026-09-26 12:00', userAgent: 'UA', viewport: '390×844 @3x', flags: 'telefon: ano',
+      lang: 'cs', variant: 'voleny', pattern: 'history', difficulty: 'normal', phase: 'tricks', handNo: 3, record: 'FLEK1:abc',
+    });
+    assert.ok(body.startsWith('Karta zmizela\n'), 'popis je první a oříznutý');
+    assert.match(body, /Záznam: FLEK1:abc$/, 'záznam je na konci');
+    assert.equal(reportBody('', { ...{ appVersion: '', when: '', userAgent: '', viewport: '', flags: '', lang: '', variant: '', pattern: '', difficulty: '', phase: '', handNo: 0, record: '' } }).split('\n')[0], '(bez popisu)');
+    const mail = reportMailto('Flek! 0.0.21 — chyba', body);
+    assert.ok(mail.startsWith(`mailto:${REPORT_ADDRESS}?subject=`), 'adresa flek@saiko.cz');
+    assert.equal(decodeURIComponent(mail.split('&body=')[1]), body, 'tělo se do odkazu zakóduje beze ztráty (diakritika, nové řádky)');
+    console.log(`PASS §51 — hlášení chyby: záznam tam a zpět (${longest} znaků), podvrh odmítnut, e-mail bez jména`);
+  }
+
   // ── i4/i5/i24: sav — nemožné převzetí, zlomkový trumf, platné módy ─────
   {
     const store = new Map<string, string>();

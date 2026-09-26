@@ -353,16 +353,28 @@ function playable(st: GameState): boolean {
   return true;
 }
 
+/**
+ * Ověří obálku savu `{ v, state }` stejně jako načtení z localStorage — tvar,
+ * verzi, karty a hratelnost. Sdílí ji i hlášení chyby (`report.ts`): záznam
+ * z e-mailu musí projít týmiž kontrolami, jinak by se chyba „zopakovala" nad
+ * stavem, který hra sama nikdy nepřijme. Vyhazuje výjimku u nekonzistence.
+ */
+export function validateSave(parsed: { v?: unknown; state?: unknown }): GameState | null {
+  // tvar napřed: `loadable` se ptá na jméno fáze a to musí být ověřené
+  if (!looksLikeGameState(parsed.state)) return null;
+  if (!loadable(parsed.v, parsed.state.phase.name)) return null;
+  assertValid(parsed.state); // semantická kontrola (karty, konto, talon)
+  if (!playable(parsed.state)) return null;
+  return parsed.state;
+}
+
 export function loadMatch(): GameState | null {
   try {
     const raw = localStorage.getItem(KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as { v?: number; state?: unknown };
-    // tvar napřed: `loadable` se ptá na jméno fáze a to musí být ověřené
-    if (!looksLikeGameState(parsed.state)) return null;
-    if (!loadable(parsed.v, parsed.state.phase.name)) return null;
-    assertValid(parsed.state); // semantická kontrola (karty, konto, talon)
-    if (!playable(parsed.state)) return null;
+    if (validateSave(parsed) === null) return null;
+    if (!looksLikeGameState(parsed.state)) return null; // (jen pro zúžení typu, validateSave to ověřil)
     /*
      * Přepsat na aktuální verzi, ať se migrace neopakuje při každém načtení —
      * ale jen když od načtení nikdo jiný nezapsal.

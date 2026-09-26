@@ -5,6 +5,7 @@
 import type { Difficulty } from '../lib/ai/heuristics';
 import { MatchController } from '../lib/match/controller';
 import { clearMatch, loadMatch, saveMatch } from '../lib/match/persist';
+import { REPORT_ADDRESS, encodeReport, reportBody, reportMailto } from '../lib/match/report';
 import { createSeedSequence, parseSeedParam } from '../lib/match/seedSequence';
 import { createWorkerDriver } from '../lib/match/workerDriver';
 import { initialState } from '../lib/rules/engine';
@@ -260,6 +261,70 @@ helpFloat.addEventListener('click', (ev) => {
 document.addEventListener('keydown', (ev) => {
   if (ev.key === 'Escape' && helpFloat.hidden !== true) openHelp(false);
 });
+/*
+ * Hlášení chyby (§51): popis od hráče + verze, zařízení a záznam rozehrané
+ * hry (`report.ts`) do e-mailu na flek@saiko.cz. Odkaz `mailto:` se skládá
+ * dopředu (komprese je asynchronní a klik ji nesmí čekat) a obnovuje se
+ * s každou úpravou popisu. „Zkopírovat" je pro zařízení bez poštovního klienta.
+ */
+const reportFloat = $<HTMLElement>('report-float');
+const reportText = $<HTMLTextAreaElement>('report-text');
+const reportSend = $<HTMLAnchorElement>('report-send');
+let reportSubject = '';
+let reportFull = '';
+let reportSeq = 0;
+async function refreshReport(): Promise<void> {
+  const seq = (reportSeq += 1);
+  const state = controller.state;
+  const version = (document.querySelector('.help-version')?.textContent ?? '').replace(/^Flek!\s*v?/, '');
+  const record = await encodeReport(state).catch(() => '(záznam se nepodařilo vytvořit)');
+  if (seq !== reportSeq) return; // mezitím přišla novější úprava
+  reportSubject = `Flek! ${version} — chyba`;
+  reportFull = reportBody(reportText.value, {
+    appVersion: version,
+    when: new Date().toISOString().replace('T', ' ').slice(0, 16),
+    userAgent: navigator.userAgent,
+    viewport: `${innerWidth}×${innerHeight} @${devicePixelRatio}x`,
+    flags: `telefon: ${phoneMq.matches ? 'ano' : 'ne'} · z plochy: ${standalone ? 'ano' : 'ne'}`,
+    lang: currentLang(),
+    variant: settings.variant,
+    pattern: settings.pattern,
+    difficulty: settings.difficulty,
+    phase: state.phase.name,
+    handNo: state.handNo,
+    record,
+  });
+  reportSend.href = reportMailto(reportSubject, reportFull);
+}
+const openReport = (open: boolean): void => {
+  reportFloat.hidden = !open;
+  $('report-copied').hidden = true;
+  if (open) {
+    openSettings(false);
+    openHelp(false);
+    void refreshReport();
+    reportText.focus();
+  }
+};
+$('btn-report').addEventListener('click', () => openReport(reportFloat.hidden === true));
+$('report-cancel').addEventListener('click', () => openReport(false));
+reportText.addEventListener('input', () => { void refreshReport(); });
+$('report-copy').addEventListener('click', async () => {
+  await refreshReport();
+  try {
+    await navigator.clipboard.writeText(`${REPORT_ADDRESS}\n${reportSubject}\n\n${reportFull}`);
+    $('report-copied').hidden = false;
+  } catch {
+    /* schránka nedostupná (http, zákaz) — zbývá e-mail */
+  }
+});
+reportFloat.addEventListener('click', (ev) => {
+  if (ev.target === reportFloat) openReport(false);
+});
+document.addEventListener('keydown', (ev) => {
+  if (ev.key === 'Escape' && reportFloat.hidden !== true) openReport(false);
+});
+
 $('settings-close').addEventListener('click', () => openSettings(false));
 settingsFloat.addEventListener('click', (ev) => {
   if (ev.target === settingsFloat) openSettings(false); // klik mimo panel zavírá
@@ -402,7 +467,7 @@ const menuSheet = $<HTMLElement>('menu-sheet');
 const sheetBody = $('menu-sheet-body');
 const sheetLangs = $('menu-sheet-langs');
 const movable: { el: HTMLElement; home: HTMLElement; before: Node | null; into: HTMLElement }[] = [
-  ['btn-new', sheetBody], ['btn-help', sheetBody], ['btn-fullscreen', sheetBody], ['lang-list', sheetLangs],
+  ['btn-new', sheetBody], ['btn-help', sheetBody], ['btn-report', sheetBody], ['btn-fullscreen', sheetBody], ['lang-list', sheetLangs],
 ].map(([id, into]) => {
   const el = $<HTMLElement>(id as string);
   return { el, home: el.parentElement as HTMLElement, before: el.nextSibling, into: into as HTMLElement };
@@ -484,6 +549,7 @@ function updateControlLabels(): void {
   };
   name('btn-menu', t('menu'));
   name('btn-help', t('help'));
+  name('btn-report', t('reportBug'));
   name('btn-settings', t('settings'));
   name('btn-fullscreen', t('fullscreen'));
   name('btn-lang', t('language'));
