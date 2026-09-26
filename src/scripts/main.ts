@@ -16,6 +16,10 @@ import { createSounds } from '../lib/ui/sounds';
 import type { TalkSet } from '../lib/ui/tableTalk';
 import { currentLang, t } from '../lib/ui/i18n';
 import { TableUI } from '../lib/ui/table';
+import { installCrashCounter, reportCrash } from '../lib/ui/crashes';
+
+// počítadlo pádů co nejdřív — i chyba při startu hry se má započítat (§52)
+installCrashCounter(window, (document.querySelector('.help-version')?.textContent ?? '').replace(/^Flek!\s*v?/, ''));
 
 // ── nastavení ────────────────────────────────────────────────────────────────
 
@@ -132,7 +136,7 @@ const table = new TableUI($('table'), {
   sounds,
 }, {
   onAction: (action) => {
-    try { controller.dispatch(action); } catch (e) { console.error(e); }
+    try { controller.dispatch(action); } catch (e) { console.error(e); reportCrash('action', e); }
   },
   onDeal: () => controller.dealNext(),
   onClaim: () => void controller.claimRest(),
@@ -433,6 +437,7 @@ newBtn.addEventListener('click', () => {
       controller.dispatch({ type: 'concede', seat: 0 });
     } catch (e) {
       console.error(e);
+      reportCrash('concede', e);
     }
   }, true);
 });

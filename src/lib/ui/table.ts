@@ -20,6 +20,7 @@ import { playChoice } from './playChoice';
 import { silentSounds, type Sounds } from './sounds';
 import { tableTalk, talkFires, type TalkSet, type TalkSituation } from './tableTalk';
 import { esc, replayHtml, settlementHtml, type HtmlDeps } from './resultHtml';
+import { reportCrash } from './crashes';
 
 export { esc };
 
@@ -285,6 +286,7 @@ export class TableUI {
           if (!handled) this.renderNow(state);
         } catch (e) {
           console.error(e);
+          reportCrash('render', e);
           if (gen === this.gen) this.renderNow(state); // ještě jeden pokus bez animací
         }
       })
@@ -292,6 +294,7 @@ export class TableUI {
       // nikdy nespustilo a tabule by zamrzla natrvalo
       .catch((e) => {
         console.error('render selhal:', e);
+        reportCrash('render-chain', e);
       });
   }
 
@@ -347,6 +350,7 @@ export class TableUI {
       const mine = a.seat === this.opts.humanSeat;
       const trickEl = $(this.root, '#trick');
       this.root.classList.add('animating');
+      $(this.root, '#trump-slot').hidden = true; // na jeho místě se teď otáčí karta z lidu
       trickEl.innerHTML = '';
       const img = document.createElement('img');
       img.src = mine ? cardSrc(flipped, this.opts.pattern()) : backSrc(this.opts.pattern());
@@ -403,6 +407,8 @@ export class TableUI {
     this.renderPiles(v);
     this.renderMelds(state, v);
     this.renderTrumpAside(v);
+    // místo pro trumf (jen telefon, CSS): když hráč právě volí
+    $(this.root, '#trump-slot').hidden = !(phase.name === 'choose-trump' && seatOnTurn(v) === this.opts.humanSeat);
     this.renderActions(v, legal);
     this.renderStatus(v, legal);
     this.renderIntro(v);
@@ -461,6 +467,7 @@ export class TableUI {
   ): Promise<void> {
     const trickEl = $(this.root, '#trick');
     this.root.classList.add('animating');
+    this.hideThinkingBubble(); // ať visí odkudkoli, během dohraného štychu nepatří
 
     // vykresli kompletní štych se zvýrazněným vítězem (karty recykluj — dvě
     // z nich už na stole leží a nové elementy by probliknuly, viz setSrc)
@@ -847,6 +854,14 @@ export class TableUI {
   }
 
   private paintBubble(seat: Seat, html: string, kind: 'talk' | 'thinking'): void {
+    /*
+     * „Přemýšlím" nikdy během animace: ta začíná, až táhli všichni, takže
+     * v tu chvíli nikdo nepřemýšlí. Hlídá se tady, kde se bublina kreslí —
+     * cest, kudy sem může dojít (časovač, fronta bublin, přerušená animace),
+     * je víc a smoke ji dvakrát chytil i po opravě jedné z nich. Další
+     * překreslení ji po animaci naplánuje znovu, pokud AI pořád počítá.
+     */
+    if (kind === 'thinking' && this.root.classList.contains('animating')) return;
     this.thinkShown = kind === 'thinking' ? seat : this.thinkShown === seat ? null : this.thinkShown;
     const el = this.bubbleEl(seat);
     el.innerHTML = html;
