@@ -4,6 +4,13 @@ Poznámky k vydání. Sekci pro daný tag z tohohle souboru vytáhne CI a použi
 jako text releasu na GitHubu (`.github/workflows/release.yml`) — nadpis sekce se
 stane názvem vydání. Nová verze = **přidat sekci sem** a až pak tagovat.
 
+## v0.0.20 — náhled odkazu
+
+- Když pošleš odkaz na Flek! ve WhatsAppu, Messengeru nebo Slacku, místo holé adresy se ukáže
+  karta s obrázkem hry, názvem a popisem.
+- Bublina „přemýšlím" u soupeře (třeba „Tak co s tím") se občas objevila už během rozdávání.
+  Teď počká, až se rozdá.
+
 ## v0.0.19 — nové karty
 
 Dosavadní moderní karty jsou pryč. Místo nich jsou v nastavení (**⚙ → Vzor karet**) dvě nové sady:

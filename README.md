@@ -13,7 +13,7 @@ whole thing is a static page with no backend (the only request that leaves the
 page is a GoatCounter hit counter, allowed by name in a strict CSP).
 
 Live site: **[flek.saiko.cz](https://flek.saiko.cz)** · current version
-**0.0.19**, see [`CHANGELOG.md`](CHANGELOG.md) and the
+**0.0.20**, see [`CHANGELOG.md`](CHANGELOG.md) and the
 [releases](https://github.com/dsaiko/flek/releases)
 
 ![The opening screen: pick between the chosen and the auction variant](docs/screenshot-intro.jpg)
@@ -264,7 +264,7 @@ ISMCTS ve Web Workeru a celé je to statická stránka bez backendu.
 
 Věnováno mému otci, **Josefu Saikovi**, který miloval matematiku.
 
-Živý web: **[flek.saiko.cz](https://flek.saiko.cz)** · verze **0.0.19**
+Živý web: **[flek.saiko.cz](https://flek.saiko.cz)** · verze **0.0.20**
 ([změny](CHANGELOG.md))
 
 Hra mluví česky, anglicky, německy a francouzsky, konto se přenáší mezi hrami
