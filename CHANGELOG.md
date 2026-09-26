@@ -4,6 +4,13 @@ Poznámky k vydání. Sekci pro daný tag z tohohle souboru vytáhne CI a použi
 jako text releasu na GitHubu (`.github/workflows/release.yml`) — nadpis sekce se
 stane názvem vydání. Nová verze = **přidat sekci sem** a až pak tagovat.
 
+## v0.0.21 — nahlásit chybu
+
+Narazíš-li na chybu, klepni na **brouka** v liště (na telefonu v menu pod ☰) a popiš, co se stalo.
+**Odeslat e-mailem** připraví zprávu na flek@saiko.cz: k popisu se přidá verze, zařízení a záznam
+rozehrané hry, ze kterého jde chyba přesně zopakovat. Jméno ani nic dalšího se neposílá. Bez
+poštovního programu použij **Zkopírovat** a vlož to do zprávy jinudy.
+
 ## v0.0.20 — náhled odkazu
 
 - Když pošleš odkaz na Flek! ve WhatsAppu, Messengeru nebo Slacku, místo holé adresy se ukáže
