@@ -2730,3 +2730,21 @@ Negativní kontroly: bez try/catch, zásobník s celou adresou, časovač nepos�
 chybějící `ai-worker` / `ai-stuck`, fronta bez hlídání animace, `codeLocation` s dotazem (smoke) —
 každá spadne. Zamítnuto soudcem (s odůvodněním v `.fixpoint/20260927-003329`): emoji na hraně
 80 znaků, obrys vidět už během rozdávání (jako výzva a tlačítka), vzdání po 30 s je záměr, a duplicity.
+
+## 53. Poznámky ve vyúčtování v jazyce stolu (2026-09-28)
+
+Při focení obrázku pro LinkedIn (anglické UI) ukázalo vyúčtování „Game won (dobrá — nehrálo
+se)". Engine píše poznámky ke komponentám česky (`zabitá sedma`, `kilo 120`, `tiché kilo 110`,
+`kilo nedohráno (80)`, `tichá sedma`, `zabitá tichá sedma`, `dobrá — nehrálo se`, `flek bez re —
+nehrálo se`, `vyrovnáno — nehrálo se`, `vzdáno`) a `settlementHtml` je vkládal holé ve všech jazycích.
+
+Poznámka zůstává v enginu česky: je v savu i v archivu výsledků, takže změna formátu by znamenala
+migraci. Překládá se až při zobrazení: `noteText` v `i18n.ts` rozpozná přesný tvar, jaký engine
+skládá, a vrátí ho v jazyce stolu (`Record<Lang, …>`, pátý jazyk neprojde kompilací). Neznámá
+poznámka (třeba ze starší verze) projde beze změny.
+
+**Testy:** verify: každý tvar se v EN/DE/FR přeloží a neobsahuje češtinu, v CS zůstane beze změny.
+Náhodné hry (120, obě varianty, občas vzdání) ověří, že engine píše přesně ty tvary, které překlad
+zná, a anglické vyúčtování je bez češtiny. Negativní kontroly: vyúčtování bez překladu, chybějící
+překlad „vzdáno", změněný tvar „kilo nedohráno" v enginu. **Nová poznámka v enginu = přidat ji do
+seznamu v testu i do `NOTES`.**

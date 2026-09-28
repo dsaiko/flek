@@ -248,6 +248,54 @@ export function fmtMoney(units: number): string {
 }
 
 /**
+ * Poznámka ke komponentě vyúčtování („zabitá sedma", „kilo 120"…) v jazyce stolu.
+ *
+ * Engine ji píše česky a tak zůstává i v savu a v archivu výsledků, takže se
+ * překládá až tady, podle přesného tvaru, který engine skládá (scoring.ts,
+ * engine.ts). Dřív šla do vyúčtování holá — Angličan četl „Game won (dobrá —
+ * nehrálo se)". Neznámá poznámka projde beze změny; `Record<Lang, …>` hlídá,
+ * že pátý jazyk nezůstane bez překladu.
+ */
+const NOTES: { re: RegExp; text: Record<Lang, (n: string) => string> }[] = [
+  { re: /^kilo (\d+)$/, text: { cs: (n) => `kilo ${n}`, en: (n) => `${n} points`, de: (n) => `${n} Punkte`, fr: (n) => `${n} points` } },
+  {
+    re: /^kilo nedohráno \((\d+)\)$/,
+    text: { cs: (n) => `kilo nedohráno (${n})`, en: (n) => `not reached, ${n} points`, de: (n) => `nicht erreicht, ${n} Punkte`, fr: (n) => `non atteint, ${n} points` },
+  },
+  {
+    re: /^tiché kilo (\d+)$/,
+    text: { cs: (n) => `tiché kilo ${n}`, en: (n) => `silent hundred, ${n} points`, de: (n) => `stilles Hundert, ${n} Punkte`, fr: (n) => `cent silencieux, ${n} points` },
+  },
+  { re: /^tichá sedma$/, text: { cs: () => 'tichá sedma', en: () => 'silent seven', de: () => 'stille Sieben', fr: () => 'sept silencieux' } },
+  { re: /^zabitá sedma$/, text: { cs: () => 'zabitá sedma', en: () => 'seven killed', de: () => 'Sieben geschlagen', fr: () => 'sept battu' } },
+  {
+    re: /^zabitá tichá sedma$/,
+    text: { cs: () => 'zabitá tichá sedma', en: () => 'silent seven killed', de: () => 'stille Sieben geschlagen', fr: () => 'sept silencieux battu' },
+  },
+  {
+    re: /^dobrá — nehrálo se$/,
+    text: { cs: () => 'dobrá — nehrálo se', en: () => '"good", not played', de: () => '„gut“, nicht gespielt', fr: () => '« bien », non jouée' },
+  },
+  {
+    re: /^flek bez re — nehrálo se$/,
+    text: { cs: () => 'flek bez re — nehrálo se', en: () => 'flek without re, not played', de: () => 'Kontra ohne Re, nicht gespielt', fr: () => 'contre sans re, non jouée' },
+  },
+  {
+    re: /^vyrovnáno — nehrálo se$/,
+    text: { cs: () => 'vyrovnáno — nehrálo se', en: () => 'cancelled out, not played', de: () => 'ausgeglichen, nicht gespielt', fr: () => 'annulé, non jouée' },
+  },
+  { re: /^vzdáno$/, text: { cs: () => 'vzdáno', en: () => 'conceded', de: () => 'aufgegeben', fr: () => 'abandonnée' } },
+];
+
+export function noteText(note: string): string {
+  for (const { re, text } of NOTES) {
+    const m = re.exec(note);
+    if (m) return text[currentLang()](m[1] ?? '');
+  }
+  return note;
+}
+
+/**
  * Varování při odhozu půlky hlášky do talonu — FLEKova formulace.
  *
  * `Record<Lang, …>`, ne řetězec kaskády `if`ů: pátý jazyk pak neprojde

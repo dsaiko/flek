@@ -11,7 +11,7 @@ import { type Card } from '../cards';
 import { trickWinner } from '../rules/tricks';
 import type { GameState, HandResult, PlayerView, Seat } from '../rules/types';
 import { cardName, cardSrc, suitIcon, type Pattern } from './cardAssets';
-import { compLabel, currentLang, fmtMoney, t } from './i18n';
+import { compLabel, currentLang, fmtMoney, noteText, t } from './i18n';
 
 /** Escapování textu do innerHTML — obnovený stav z localStorage je nedůvěryhodný. */
 export function esc(x: unknown): string {
@@ -53,7 +53,7 @@ export function settlementHtml(r: HandResult, v: PlayerView, deps: HtmlDeps): st
       let label = esc(compLabel(comp.target, won));
       if (comp.silent) label += ` (${esc(t('silentWord'))})`;
       if (comp.flekMultiplier > 1) label += `, ${esc(Math.log2(comp.flekMultiplier))}× ${esc(flekWord)}`;
-      if (comp.note) label += ` <em>(${esc(comp.note)})</em>`;
+      if (comp.note) label += ` <em>(${esc(noteText(comp.note))})</em>`;
       return `<tr><td>${label}:</td><td class="money">${esc(fmtMoney(comp.amount))}</td></tr>`;
     })
     .join('');
