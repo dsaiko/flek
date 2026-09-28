@@ -4464,6 +4464,78 @@ console.log('PASS IQ — přepnutí obtížnosti platí hned a nezahodí rozehra
 console.log('PASS karty — názvy barev a hodnot ve všech čtyřech jazycích');
 
 
+// ── poznámky ve vyúčtování v jazyce stolu ────────────────────────────────────
+/*
+ * Engine píše poznámky ke komponentám česky („zabitá sedma", „kilo 120") a do
+ * vyúčtování šly holé, takže je Angličan, Němec i Francouz četl česky. Seznam
+ * níž kryje každý tvar ze scoring.ts a engine.ts; náhodné hry ověří, že engine
+ * opravdu píše přesně ty tvary, které překlad zná (potkají „kilo nedohráno",
+ * „vzdáno" a „zabitou sedmu"; tiché se náhodnou hrou skoro nepotkají, ty kryje
+ * seznam). Nová poznámka v enginu = přidat ji do seznamu i do `NOTES`.
+ */
+{
+  let lang = 'cs';
+  const g = globalThis as { document?: unknown };
+  const hadDocument = 'document' in g;
+  g.document = { documentElement: { classList: { contains: (c: string) => c === `lang-${lang}` } } };
+  const { noteText } = await import('../src/lib/ui/i18n');
+  const { settlementHtml } = await import('../src/lib/ui/resultHtml');
+  const { initialState, apply } = await import('../src/lib/rules/engine');
+  const { legalActions } = await import('../src/lib/rules/legal');
+  const { view } = await import('../src/lib/rules/view');
+  const { defaultConfig } = await import('../src/lib/rules/sazby');
+  const { Random } = await import('../src/lib/random');
+  // písmena, která mají jen v češtině (é/á mají i francouzština a němčina), a slova z poznámek
+  const CZECH = /[čďěňřšťůý]|(?<!\p{L})(kilo|sedma|nehrálo|vzdáno|dobrá|tichá|tiché|zabitá|vyrovnáno|nedohráno)(?!\p{L})/iu;
+  const translated = (note: string): void => {
+    for (const l of ['en', 'de', 'fr']) {
+      lang = l;
+      const out = noteText(note);
+      assert.ok(out !== note && !CZECH.test(out), `${l}: poznámka „${note}" zůstala česky („${out}")`);
+    }
+    lang = 'cs';
+    assert.equal(noteText(note), note, `cs: poznámka „${note}" se nemá měnit`);
+  };
+  // každý tvar ze scoring.ts a engine.ts
+  for (const note of ['kilo 120', 'kilo nedohráno (80)', 'tiché kilo 110', 'tichá sedma', 'zabitá sedma', 'zabitá tichá sedma',
+    'dobrá — nehrálo se', 'flek bez re — nehrálo se', 'vyrovnáno — nehrálo se', 'vzdáno']) translated(note);
+  lang = 'en';
+  assert.equal(noteText('kilo 120'), '120 points');
+  assert.equal(noteText('něco ze starší verze'), 'něco ze starší verze', 'neznámá poznámka projde beze změny');
+
+  // co engine opravdu napíše: náhodné hry v obou variantách, občas vzdání
+  const rng = new Random(77);
+  const notes = new Set<string>();
+  let lastResult: unknown = null;
+  let lastView: unknown = null;
+  for (const variant of ['voleny', 'licitovany'] as const) {
+    for (let game = 0; game < 60; game += 1) {
+      let st = apply(initialState(defaultConfig(variant), (game % 3) as 0 | 1 | 2), { type: 'deal', seed: 5000 + game });
+      for (let step = 0; step < 200 && st.phase.name !== 'scored'; step += 1) {
+        const seat = ([0, 1, 2] as const).find((q) => legalActions(view(st, q)).length > 0);
+        if (seat === undefined) break;
+        const acts = legalActions(view(st, seat));
+        st = apply(st, game % 10 === 3 && step === 8 ? { type: 'concede', seat } : acts[Math.floor(rng.next() * acts.length)]);
+      }
+      for (const r of st.handResults) {
+        for (const c of r.components) {
+          if (c.note) { notes.add(c.note); lastResult = r; lastView = view(st, 0); }
+        }
+      }
+    }
+  }
+  assert.ok(notes.size >= 4, `náhodné hry mají potkat aspoň čtyři druhy poznámek (${[...notes].join(', ')})`);
+  for (const note of notes) translated(note);
+
+  // a do vyúčtování jde přeložená
+  lang = 'en';
+  const html = settlementHtml(lastResult as never, lastView as never, { humanSeat: 0, nameOf: () => 'Frank', pattern: () => 'barevna' as const });
+  assert.ok(!CZECH.test(html.replace(/<[^>]*>/g, '')), `anglické vyúčtování obsahuje češtinu: ${html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ')}`);
+  if (!hadDocument) delete g.document;
+  console.log(`PASS vyúčtování — poznámky ve všech jazycích (${notes.size} různých z náhodných her)`);
+}
+
+
 // ── vzdání hry (house rule §5.5.2) ───────────────────────────────────────────
 /*
  * Vzdání je jediná akce, která obchází `legalActions`, a platí se u ní ručně
