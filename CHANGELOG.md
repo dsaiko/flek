@@ -4,6 +4,11 @@ Poznámky k vydání. Sekci pro daný tag z tohohle souboru vytáhne CI a použi
 jako text releasu na GitHubu (`.github/workflows/release.yml`) — nadpis sekce se
 stane názvem vydání. Nová verze = **přidat sekci sem** a až pak tagovat.
 
+## v0.0.24 — vyúčtování v jazyce stolu
+
+Poznámky ve vyúčtování (třeba „zabitá sedma", „kilo 120" nebo „dobrá — nehrálo se") byly česky
+i v angličtině, němčině a francouzštině. Teď jsou v jazyce, který máš nastavený.
+
 ## v0.0.23 — místo pro trumf a počítadlo pádů
 
 - Na telefonu je při volbě trumfu vpravo na stole čárkované místo **„TRUMF ?"** — tam, kam
